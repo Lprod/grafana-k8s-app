@@ -14,6 +14,12 @@ export interface InfoCardRow {
   fieldName: string;
   unit?: string;
   decimals?: number;
+  // If set, the value is rendered as a link. Plain <a href> navigation gets
+  // intercepted by Grafana's app shell for SPA routing, which can drop query
+  // params when the destination page has its own same-named scene variable
+  // (see ClusterOverviewLinks in clustersApp.tsx) - so this navigates via
+  // window.location instead of href to force a real page load.
+  href?: string;
 }
 
 interface InfoCardState extends SceneObjectState {
@@ -44,6 +50,19 @@ function infoCardStyles(theme: GrafanaTheme2) {
       fontSize: theme.typography.body.fontSize,
       color: theme.colors.text.primary,
       marginTop: theme.spacing(0.25),
+    }),
+    valueLink: css({
+      fontSize: theme.typography.body.fontSize,
+      color: theme.colors.text.link,
+      marginTop: theme.spacing(0.25),
+      cursor: 'pointer',
+      background: 'none',
+      border: 'none',
+      padding: 0,
+      textAlign: 'left',
+      '&:hover': {
+        textDecoration: 'underline',
+      },
     }),
   };
 }
@@ -76,7 +95,13 @@ function InfoCardRenderer({ model }: SceneComponentProps<InfoCard>) {
         return (
           <div className={styles.row} key={row.label}>
             <div className={styles.label}>{row.label}</div>
-            <div className={styles.value}>{value}</div>
+            {row.href ? (
+              <button className={styles.valueLink} onClick={() => window.location.assign(row.href!)}>
+                {value}
+              </button>
+            ) : (
+              <div className={styles.value}>{value}</div>
+            )}
           </div>
         );
       })}

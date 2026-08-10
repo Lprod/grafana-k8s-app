@@ -77,3 +77,91 @@ export const clusterMemoryOptimizationQueries = {
 export function substituteCluster(expr: string, clusterRegex: string): string {
   return expr.replaceAll('$cluster', clusterRegex);
 }
+
+// "Nodes" table on the Overview tab: same shape as clusterTableQueries but
+// grouped by (cluster, node) instead of just (cluster), and additionally
+// filtered by the "$nodes" dashboard variable. "$cluster" is substituted by
+// callers via substituteCluster(); "$nodes" is left as-is for Grafana's own
+// variable interpolation (see NODES_VARIABLE_NAME).
+export const clusterNodeTableQueries = {
+  info: `last_over_time(
+    max by (asserts_env, asserts_site, cluster, node, provider_id) (
+      kube_node_info{cluster=~"$cluster", node=~"$nodes"}
+    )
+  [$__range:])`,
+  cpu_usage_avg: `avg_over_time(sum by (cluster, node) (
+    label_replace(
+      1 - max by (cluster, instance, cpu, core) (rate(node_cpu_seconds_total{cluster=~"$cluster", mode="idle", instance=~"$nodes"}[$__rate_interval]))
+    , "node", "$1", "instance", "([^:]+).*")
+  )[$__range:$__rate_interval])`,
+  cpu_usage_avg_percent: `avg_over_time(sum by (cluster, node) (
+    label_replace(
+      1 - max by (cluster, instance, cpu, core) (rate(node_cpu_seconds_total{cluster=~"$cluster", mode="idle", instance=~"$nodes"}[$__rate_interval]))
+    , "node", "$1", "instance", "([^:]+).*")
+  )[$__range:$__rate_interval]) / sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster=~"$cluster", resource="cpu", node=~"$nodes"}))`,
+  cpu_usage_max: `max_over_time(sum by (cluster, node) (
+    label_replace(
+      1 - max by (cluster, instance, cpu, core) (rate(node_cpu_seconds_total{cluster=~"$cluster", mode="idle", instance=~"$nodes"}[$__rate_interval]))
+    , "node", "$1", "instance", "([^:]+).*")
+  )[$__range:$__rate_interval])`,
+  cpu_usage_max_percent: `max_over_time(sum by (cluster, node) (
+    label_replace(
+      1 - max by (cluster, instance, cpu, core) (rate(node_cpu_seconds_total{cluster=~"$cluster", mode="idle", instance=~"$nodes"}[$__rate_interval]))
+    , "node", "$1", "instance", "([^:]+).*")
+  )[$__range:$__rate_interval]) / sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster=~"$cluster", resource="cpu", node=~"$nodes"}))`,
+  mem_usage_avg: `avg_over_time(sum by (cluster, node) (
+    sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster=~"$cluster", resource="memory", node=~"$nodes"}))
+    - on (cluster, node) group_left
+    max by (cluster, node) (
+      label_replace(
+        windows_memory_available_bytes{cluster=~"$cluster", instance=~"$nodes"}
+        OR
+        node_memory_MemAvailable_bytes{cluster=~"$cluster", instance=~"$nodes"}
+      , "node", "$1", "instance", "([^:]+).*")
+    )
+  )[$__range:1m])`,
+  mem_usage_avg_percent: `avg_over_time(sum by (cluster, node) (
+    sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster=~"$cluster", resource="memory", node=~"$nodes"}))
+    - on (cluster, node) group_left
+    max by (cluster, node) (
+      label_replace(
+        windows_memory_available_bytes{cluster=~"$cluster", instance=~"$nodes"}
+        OR
+        node_memory_MemAvailable_bytes{cluster=~"$cluster", instance=~"$nodes"}
+      , "node", "$1", "instance", "([^:]+).*")
+    )
+  )[$__range:1m]) / sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster=~"$cluster", resource="memory", node=~"$nodes"}))`,
+  mem_usage_max: `max_over_time(sum by (cluster, node) (
+    sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster=~"$cluster", resource="memory", node=~"$nodes"}))
+    - on (cluster, node) group_left
+    max by (cluster, node) (
+      label_replace(
+        windows_memory_available_bytes{cluster=~"$cluster", instance=~"$nodes"}
+        OR
+        node_memory_MemAvailable_bytes{cluster=~"$cluster", instance=~"$nodes"}
+      , "node", "$1", "instance", "([^:]+).*")
+    )
+  )[$__range:1m])`,
+  mem_usage_max_percent: `max_over_time(sum by (cluster, node) (
+    sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster=~"$cluster", resource="memory", node=~"$nodes"}))
+    - on (cluster, node) group_left
+    max by (cluster, node) (
+      label_replace(
+        windows_memory_available_bytes{cluster=~"$cluster", instance=~"$nodes"}
+        OR
+        node_memory_MemAvailable_bytes{cluster=~"$cluster", instance=~"$nodes"}
+      , "node", "$1", "instance", "([^:]+).*")
+    )
+  )[$__range:1m]) / sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster=~"$cluster", resource="memory", node=~"$nodes"}))`,
+};
+
+export type ClusterNodeTableQueryKey = keyof typeof clusterNodeTableQueries;
+
+export function buildNodeTableTargets(clusterRegex: string) {
+  return (Object.keys(clusterNodeTableQueries) as ClusterNodeTableQueryKey[]).map((key) => ({
+    refId: key,
+    expr: substituteCluster(clusterNodeTableQueries[key], clusterRegex),
+    format: 'table' as const,
+    instant: true,
+  }));
+}

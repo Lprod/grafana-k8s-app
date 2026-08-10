@@ -20,14 +20,18 @@ export const PERCENT_FIELD_NAMES = [
   'Value #mem_usage_max_percent',
 ];
 
+// Usage tiers reflect a cost/capacity-planning read, not a plain "more is
+// worse" scale: under 60% is flagged orange (paying for idle capacity),
+// 60-90% is the healthy "green" range, and over 90% is red (at risk of
+// hitting the ceiling).
 export function usageTierFromFraction(fraction: number | null | undefined): UsageTier {
   if (fraction === null || fraction === undefined || Number.isNaN(fraction)) {
     return 'unknown';
   }
-  if (fraction >= 0.8) {
+  if (fraction >= 0.9) {
     return 'high';
   }
-  if (fraction >= 0.5) {
+  if (fraction >= 0.6) {
     return 'med';
   }
   return 'low';
@@ -44,9 +48,9 @@ export function usageColorFromTier(theme: ReturnType<typeof useTheme2>, tier: Us
     case 'high':
       return theme.visualization.getColorByName('red');
     case 'med':
-      return theme.visualization.getColorByName('yellow');
-    case 'low':
       return theme.visualization.getColorByName('green');
+    case 'low':
+      return theme.visualization.getColorByName('orange');
     default:
       return theme.visualization.getColorByName('grey');
   }

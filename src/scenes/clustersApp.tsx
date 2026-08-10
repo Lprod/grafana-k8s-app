@@ -20,12 +20,13 @@ import {
   VariableValueControl,
 } from '@grafana/scenes';
 import { FieldColorModeId } from '@grafana/data';
-import { LegendDisplayMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
+import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { Badge, Button, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../constants';
 import { clusterTableQueries } from '../queries/clusterQueries';
 import {
   buildClusterHealthQuery,
+  buildNodeTableTargets,
   clusterCapacityQueries,
   ClusterCapacityQueryKey,
   clusterCpuOptimizationQueries,
@@ -36,26 +37,31 @@ import { buildClusterTableTargets, withClusterFilter } from './queryHelpers';
 import { ClusterHealthBanner, InfoCard } from './clusterOverviewCards';
 import {
   CLUSTER_VARIABLE_NAME,
+  createNodesFilterVariable,
+  NAMESPACE_VARIABLE_NAME,
+  NODES_VARIABLE_NAME,
   THANOS_VARIABLE_NAME,
   createClusterFilterVariable,
+  createNamespaceFilterVariable,
   createThanosDatasourceVariable,
 } from '../variables/datasourceVariables';
 import { getResourceSimulatorPage } from '../pages/ResourceSimulator/resourceSimulatorPage';
 import { getNamespacesPage } from '../pages/Namespaces/namespacesPage';
 import { getWorkloadsPage } from '../pages/Workloads/workloadsPage';
+import { getNodesPage } from '../pages/Nodes/nodesPage';
 import { getComingSoonScene } from './comingSoon';
 import { UsageIcon, linkedValueCell, usageColorFromTier } from './tableCells';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
-// green < 50%, yellow 50-80%, red > 80% of capacity used.
+// orange < 60% (underused), green 60-90% (healthy), red > 90% (near capacity).
 const usageThresholds = {
   mode: ThresholdsMode.Absolute,
   steps: [
-    { color: 'green', value: -Infinity },
-    { color: 'yellow', value: 0.5 },
-    { color: 'red', value: 0.8 },
+    { color: 'orange', value: -Infinity },
+    { color: 'green', value: 0.6 },
+    { color: 'red', value: 0.9 },
   ],
 };
 
@@ -129,20 +135,26 @@ function getClustersListScene() {
       b
         .matchFieldsWithName('cluster')
         .overrideDisplayName('Cluster')
+        .overrideCustomFieldConfig('align', 'left')
         .overrideLinks([{ title: 'View cluster', url: `${CLUSTERS_URL}/\${__value.text}\${__url.params}` }])
         .matchFieldsWithName('Value #info')
         .overrideDisplayName('Nodes')
         .overrideUnit('none')
-        .overrideCustomFieldConfig('align', 'center')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          { title: 'View nodes', url: `${PLUGIN_BASE_URL}/${ROUTES.Nodes}?var-${CLUSTER_VARIABLE_NAME}=\${__data.fields.cluster}` },
+        ])
         .matchFieldsWithName('Value #alerts')
         .overrideDisplayName('Alerts')
         .overrideUnit('none')
         .overrideThresholds(alertsThresholds)
+        .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
         .matchFieldsWithName('Value #cpu_usage_avg')
         .overrideDisplayName('CPU Avg')
         .overrideUnit('cores')
         .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
           cellComponent: linkedValueCell('Value #cpu_usage_avg_percent'),
@@ -151,11 +163,13 @@ function getClustersListScene() {
         .overrideDisplayName('CPU Avg %')
         .overrideUnit('percentunit')
         .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
         .matchFieldsWithName('Value #cpu_usage_max')
         .overrideDisplayName('CPU Max')
         .overrideUnit('cores')
         .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
           cellComponent: linkedValueCell('Value #cpu_usage_max_percent'),
@@ -164,10 +178,12 @@ function getClustersListScene() {
         .overrideDisplayName('CPU Max %')
         .overrideUnit('percentunit')
         .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
         .matchFieldsWithName('Value #mem_usage_avg')
         .overrideDisplayName('Mem Avg')
         .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
           cellComponent: linkedValueCell('Value #mem_usage_avg_percent'),
@@ -176,10 +192,12 @@ function getClustersListScene() {
         .overrideDisplayName('Mem Avg %')
         .overrideUnit('percentunit')
         .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
         .matchFieldsWithName('Value #mem_usage_max')
         .overrideDisplayName('Mem Max')
         .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
           cellComponent: linkedValueCell('Value #mem_usage_max_percent'),
@@ -188,6 +206,7 @@ function getClustersListScene() {
         .overrideDisplayName('Mem Max %')
         .overrideUnit('percentunit')
         .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
     )
     .build();
@@ -289,7 +308,11 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
     $data: infoRunner,
     rows: [
       { label: 'cluster name:', fieldName: 'cluster' },
-      { label: 'nodes count:', fieldName: 'Value' },
+      {
+        label: 'nodes count:',
+        fieldName: 'Value',
+        href: `${PLUGIN_BASE_URL}/${ROUTES.Nodes}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}`,
+      },
       { label: 'provider:', fieldName: 'provider_id' },
     ],
   });
@@ -361,7 +384,107 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .build();
 
+  const nodesRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: buildNodeTableTargets(clusterRegex),
+  });
+
+  const nodesData = new SceneDataTransformer({
+    $data: nodesRunner,
+    transformations: [
+      { id: 'joinByField', options: { byField: 'node', mode: 'outer' } },
+      {
+        id: 'organize',
+        options: {
+          excludeByName: { Time: true, asserts_env: true, asserts_site: true, cluster: true, provider_id: true, 'Value #info': true },
+          indexByName: {
+            node: 0,
+            'Value #cpu_usage_avg': 1,
+            'Value #cpu_usage_avg_percent': 2,
+            'Value #cpu_usage_max': 3,
+            'Value #cpu_usage_max_percent': 4,
+            'Value #mem_usage_avg': 5,
+            'Value #mem_usage_avg_percent': 6,
+            'Value #mem_usage_max': 7,
+            'Value #mem_usage_max_percent': 8,
+          },
+          renameByName: {},
+        },
+      },
+    ],
+  });
+
+  const nodesTable = PanelBuilders.table()
+    .setTitle('Nodes')
+    .setData(nodesData)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('node')
+        .overrideDisplayName('Node')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #cpu_usage_avg')
+        .overrideDisplayName('CPU Avg')
+        .overrideUnit('cores')
+        .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: linkedValueCell('Value #cpu_usage_avg_percent'),
+        } as any)
+        .matchFieldsWithName('Value #cpu_usage_avg_percent')
+        .overrideDisplayName('CPU Avg %')
+        .overrideUnit('percentunit')
+        .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+        .matchFieldsWithName('Value #cpu_usage_max')
+        .overrideDisplayName('CPU Max')
+        .overrideUnit('cores')
+        .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: linkedValueCell('Value #cpu_usage_max_percent'),
+        } as any)
+        .matchFieldsWithName('Value #cpu_usage_max_percent')
+        .overrideDisplayName('CPU Max %')
+        .overrideUnit('percentunit')
+        .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+        .matchFieldsWithName('Value #mem_usage_avg')
+        .overrideDisplayName('Mem Avg')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: linkedValueCell('Value #mem_usage_avg_percent'),
+        } as any)
+        .matchFieldsWithName('Value #mem_usage_avg_percent')
+        .overrideDisplayName('Mem Avg %')
+        .overrideUnit('percentunit')
+        .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+        .matchFieldsWithName('Value #mem_usage_max')
+        .overrideDisplayName('Mem Max')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: linkedValueCell('Value #mem_usage_max_percent'),
+        } as any)
+        .matchFieldsWithName('Value #mem_usage_max_percent')
+        .overrideDisplayName('Mem Max %')
+        .overrideUnit('percentunit')
+        .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+    )
+    .build();
+
   return new EmbeddedScene({
+    $variables: new SceneVariableSet({ variables: [createNodesFilterVariable(clusterRegex)] }),
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -369,11 +492,11 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
           ySizing: 'content',
           body: new SceneReactObject({ reactNode: <ClusterOverviewLinks cluster={cluster} /> }),
         }),
-        new SceneFlexItem({ ySizing: 'content', body: healthBanner }),
         new SceneFlexItem({
           ySizing: 'content',
           body: new SceneReactObject({ reactNode: <SectionHeading title="Cluster information" /> }),
         }),
+        new SceneFlexItem({ ySizing: 'content', body: healthBanner }),
         new SceneFlexLayout({
           direction: 'row',
           ySizing: 'content',
@@ -393,9 +516,49 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
             new SceneFlexItem({ height: 400, body: memoryOptimizationPanel }),
           ],
         }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Nodes" /> }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({
+              width: 220,
+              ySizing: 'content',
+              body: new VariableValueControl({ variableName: NODES_VARIABLE_NAME }),
+            }),
+            new SceneFlexItem({ body: new SceneControlsSpacer() }),
+            new SceneFlexItem({
+              xSizing: 'content',
+              ySizing: 'content',
+              body: new SceneReactObject({ reactNode: <ResourceUsageLegend /> }),
+            }),
+          ],
+        }),
+        new SceneFlexItem({ height: 400, body: nodesTable }),
       ],
     }),
   });
+}
+
+// Small colored KPI tile for a 0-1 ratio, using the same orange/green/red
+// thresholds as the CPU/Mem % columns in the cluster tables.
+function buildEfficiencyStatPanel(title: string, expr: string) {
+  // A range query (not instant) is needed so the sparkline has history to draw.
+  const runner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [{ refId: 'ratio', expr }],
+  });
+  return PanelBuilders.stat()
+    .setTitle(title)
+    .setUnit('percentunit')
+    .setThresholds(usageThresholds)
+    .setOption('colorMode', BigValueColorMode.Value)
+    .setOption('graphMode', BigValueGraphMode.Area)
+    .setData(runner)
+    .build();
 }
 
 function getClusterCpuScene(clusterRegex: string) {
@@ -410,10 +573,53 @@ function getClusterCpuScene(clusterRegex: string) {
     ],
   });
 
+  const requestsCapacityPanel = buildEfficiencyStatPanel(
+    'Efficiency: Requests/Capacity (p95)',
+    `sum(max by (cluster, namespace) (namespace_cpu:kube_pod_container_resource_requests:sum{cluster="${clusterRegex}", namespace=~".+"})) / sum(max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="cpu", node=~".*"}))`
+  );
+
+  const usageCapacityPanel = buildEfficiencyStatPanel(
+    'Efficiency: Usage/Capacity (p95)',
+    `sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~".+", node=~".*"}) / sum(max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="cpu", node=~".*"}))`
+  );
+
+  const usageRequestsPanel = buildEfficiencyStatPanel(
+    'Efficiency: Usage/Requests (p95)',
+    `sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~".+", node=~".*"}) / sum(max by (cluster, namespace) (namespace_cpu:kube_pod_container_resource_requests:sum{cluster="${clusterRegex}", namespace=~".+"}))`
+  );
+
   return new EmbeddedScene({
+    $variables: new SceneVariableSet({
+      variables: [createNodesFilterVariable(clusterRegex), createNamespaceFilterVariable({ clusterRegex })],
+    }),
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({
+              width: 220,
+              ySizing: 'content',
+              body: new VariableValueControl({ variableName: NODES_VARIABLE_NAME }),
+            }),
+            new SceneFlexItem({
+              width: 220,
+              ySizing: 'content',
+              body: new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
+            }),
+            new SceneFlexItem({ body: new SceneControlsSpacer() }),
+          ],
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          children: [
+            new SceneFlexItem({ height: 120, body: requestsCapacityPanel }),
+            new SceneFlexItem({ height: 120, body: usageCapacityPanel }),
+            new SceneFlexItem({ height: 120, body: usageRequestsPanel }),
+          ],
+        }),
         new SceneFlexItem({ height: 300, body: PanelBuilders.timeseries().setTitle('CPU usage').setUnit('cores').setData(cpuTimeSeries).build() }),
       ],
     }),
@@ -557,7 +763,7 @@ const clustersPage = new SceneAppPage({
 
 export function getClustersSceneApp() {
   return new SceneApp({
-    pages: [clustersPage, getResourceSimulatorPage(), getNamespacesPage(), getWorkloadsPage()],
+    pages: [clustersPage, getResourceSimulatorPage(), getNamespacesPage(), getWorkloadsPage(), getNodesPage()],
     urlSyncOptions: { updateUrlOnInit: true, createBrowserHistorySteps: true },
   });
 }

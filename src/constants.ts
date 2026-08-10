@@ -7,6 +7,7 @@ export enum ROUTES {
   ResourceSimulator = 'resource-simulator',
   Namespaces = 'namespaces',
   Workloads = 'workloads',
+  Nodes = 'nodes',
 }
 
 // Fall back to our demo stack's datasource UIDs until an admin sets real

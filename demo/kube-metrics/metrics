@@ -44,6 +44,11 @@ namespace_memory:kube_pod_container_resource_limits:sum{cluster="demo-cluster-gc
 namespace_memory:kube_pod_container_resource_requests:sum{cluster="demo-cluster-aws",namespace="default"} 8589934592
 namespace_memory:kube_pod_container_resource_requests:sum{cluster="demo-cluster-gce",namespace="default"} 10737418240
 
+# HELP node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate Recording rule: summed CPU usage rate per namespace/node (demo data).
+# TYPE node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate gauge
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-1"} 3
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1"} 4
+
 # HELP ALERTS Firing/pending alert instances (demo data).
 # TYPE ALERTS gauge
 ALERTS{alertname="KubeNodeNotReady",alertstate="firing",cluster="demo-cluster-aws",severity="warning",node="demo-cluster-aws-node-2"} 1
