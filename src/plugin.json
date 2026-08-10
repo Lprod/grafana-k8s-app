@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "app",
+  "name": "Kubernetes",
+  "id": "debeka-k8s-app",
+  "info": {
+    "keywords": ["app"],
+    "description": "Observability for Kubernetes",
+    "author": {
+      "name": "Debeka"
+    },
+    "logos": {
+      "small": "img/kubernetes.png",
+      "large": "img/kubernetes.png"
+    },
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "includes": [
+    {
+      "type": "page",
+      "name": "Clusters",
+      "path": "/a/%PLUGIN_ID%/clusters",
+      "addToNav": true
+    },
+    {
+      "type": "page",
+      "name": "Resource Simulator",
+      "path": "/a/%PLUGIN_ID%/resource-simulator",
+      "addToNav": true
+    },
+    {
+      "type": "page",
+      "icon": "cog",
+      "name": "Configuration",
+      "path": "/plugins/%PLUGIN_ID%",
+      "role": "Admin",
+      "addToNav": true
+    }
+  ],
+  "dependencies": {
+    "grafanaDependency": ">=12.3.0",
+    "plugins": []
+  }
+}

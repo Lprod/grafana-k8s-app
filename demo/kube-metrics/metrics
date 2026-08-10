@@ -1,0 +1,25 @@
+# HELP kube_node_info Information about a cluster node.
+# TYPE kube_node_info gauge
+kube_node_info{cluster="demo-cluster-aws",node="demo-cluster-aws-node-1",provider_id="aws:///eu-central-1a/i-0000001",container_runtime_version="containerd://1.7.0",internal_ip="10.10.0.1",kernel_version="5.15.0",kubelet_version="v1.29.0",os_image="Ubuntu 22.04.4 LTS",pod_cidr="10.244.0.0/24",system_uuid="00000000-0000-0000-0000-000000000001"} 1
+kube_node_info{cluster="demo-cluster-aws",node="demo-cluster-aws-node-2",provider_id="aws:///eu-central-1a/i-0000002",container_runtime_version="containerd://1.7.0",internal_ip="10.10.0.2",kernel_version="5.15.0",kubelet_version="v1.29.0",os_image="Ubuntu 22.04.4 LTS",pod_cidr="10.244.1.0/24",system_uuid="00000000-0000-0000-0000-000000000002"} 1
+kube_node_info{cluster="demo-cluster-aws",node="demo-cluster-aws-node-3",provider_id="aws:///eu-central-1b/i-0000003",container_runtime_version="containerd://1.7.0",internal_ip="10.10.0.3",kernel_version="5.15.0",kubelet_version="v1.29.0",os_image="Ubuntu 22.04.4 LTS",pod_cidr="10.244.2.0/24",system_uuid="00000000-0000-0000-0000-000000000003"} 1
+kube_node_info{cluster="demo-cluster-gce",node="demo-cluster-gce-node-1",provider_id="gce://demo-project/europe-west3-a/gke-node-1",container_runtime_version="containerd://1.7.0",internal_ip="10.20.0.1",kernel_version="5.15.0",kubelet_version="v1.29.0",os_image="Container-Optimized OS",pod_cidr="10.245.0.0/24",system_uuid="00000000-0000-0000-0000-000000000004"} 1
+kube_node_info{cluster="demo-cluster-gce",node="demo-cluster-gce-node-2",provider_id="gce://demo-project/europe-west3-a/gke-node-2",container_runtime_version="containerd://1.7.0",internal_ip="10.20.0.2",kernel_version="5.15.0",kubelet_version="v1.29.0",os_image="Container-Optimized OS",pod_cidr="10.245.1.0/24",system_uuid="00000000-0000-0000-0000-000000000005"} 1
+
+# HELP kube_node_status_capacity The capacity of a resource of a node.
+# TYPE kube_node_status_capacity gauge
+kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-1",resource="cpu"} 4
+kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-2",resource="cpu"} 4
+kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-3",resource="cpu"} 4
+kube_node_status_capacity{cluster="demo-cluster-gce",node="demo-cluster-gce-node-1",resource="cpu"} 8
+kube_node_status_capacity{cluster="demo-cluster-gce",node="demo-cluster-gce-node-2",resource="cpu"} 8
+kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-1",resource="memory"} 17179869184
+kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-2",resource="memory"} 17179869184
+kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-3",resource="memory"} 17179869184
+kube_node_status_capacity{cluster="demo-cluster-gce",node="demo-cluster-gce-node-1",resource="memory"} 34359738368
+kube_node_status_capacity{cluster="demo-cluster-gce",node="demo-cluster-gce-node-2",resource="memory"} 34359738368
+
+# HELP ALERTS Firing/pending alert instances (demo data).
+# TYPE ALERTS gauge
+ALERTS{alertname="KubeNodeNotReady",alertstate="firing",cluster="demo-cluster-aws",severity="warning",node="demo-cluster-aws-node-2"} 1
+ALERTS{alertname="CPUThrottlingHigh",alertstate="firing",cluster="demo-cluster-aws",severity="warning",node="demo-cluster-aws-node-1"} 1

@@ -1,0 +1,72 @@
+name: debeka-k8s-app-demo
+
+networks:
+  demo:
+    name: debeka-k8s-app-demo
+
+services:
+  prometheus:
+    image: docker.io/prom/prometheus:v3.0.1
+    container_name: prometheus
+    networks: [demo]
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./demo/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  node-exporter-aws:
+    image: docker.io/prom/node-exporter:v1.8.2
+    container_name: node-exporter-aws
+    networks: [demo]
+
+  node-exporter-gce:
+    image: docker.io/prom/node-exporter:v1.8.2
+    container_name: node-exporter-gce
+    networks: [demo]
+
+  kube-metrics-demo:
+    image: docker.io/library/nginx:1.27-alpine
+    container_name: kube-metrics-demo
+    networks: [demo]
+    volumes:
+      - ./demo/kube-metrics/metrics:/usr/share/nginx/html/metrics:ro
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: elasticsearch
+    networks: [demo]
+    ports:
+      - '9200:9200'
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: 'false'
+      ES_JAVA_OPTS: '-Xms512m -Xmx512m'
+
+  elasticsearch-seed:
+    image: docker.io/library/python:3.13-alpine
+    networks: [demo]
+    depends_on: [elasticsearch]
+    restart: 'no'
+    volumes:
+      - ./demo/seed:/seed:ro
+    environment:
+      ES_URL: http://elasticsearch:9200
+    entrypoint: ['python3', '/seed/elasticsearch_seed.py']
+
+  rqlite:
+    image: docker.io/rqlite/rqlite:8.36.3
+    container_name: rqlite
+    networks: [demo]
+    ports:
+      - '4001:4001'
+
+  rqlite-seed:
+    image: docker.io/library/python:3.13-alpine
+    networks: [demo]
+    depends_on: [rqlite]
+    restart: 'no'
+    volumes:
+      - ./demo/seed:/seed:ro
+    environment:
+      RQLITE_URL: http://rqlite:4001
+    entrypoint: ['python3', '/seed/rqlite_seed.py']

@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: node-exporter-aws
+    static_configs:
+      - targets: ['node-exporter-aws:9100']
+    metric_relabel_configs:
+      - target_label: cluster
+        replacement: demo-cluster-aws
+      - target_label: instance
+        replacement: demo-cluster-aws-node-1
+
+  - job_name: node-exporter-gce
+    static_configs:
+      - targets: ['node-exporter-gce:9100']
+    metric_relabel_configs:
+      - target_label: cluster
+        replacement: demo-cluster-gce
+      - target_label: instance
+        replacement: demo-cluster-gce-node-1
+
+  - job_name: kube-metrics-demo
+    fallback_scrape_protocol: PrometheusText0.0.4
+    static_configs:
+      - targets: ['kube-metrics-demo:80']

@@ -1,0 +1,27 @@
+apiVersion: 1
+
+datasources:
+  - name: Thanos (Demo)
+    type: prometheus
+    uid: thanos-demo
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+
+  - name: Elastic (Demo)
+    type: elasticsearch
+    uid: elastic-demo
+    access: proxy
+    url: http://elasticsearch:9200
+    database: demo-logs-*
+    jsonData:
+      timeField: '@timestamp'
+      esVersion: '8.0.0'
+
+  - name: RQLite (Demo)
+    type: g42-rqlite-datasource
+    uid: rqlite-demo
+    access: proxy
+    url: http://rqlite:4001
