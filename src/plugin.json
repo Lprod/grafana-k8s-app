@@ -32,6 +32,18 @@
     },
     {
       "type": "page",
+      "name": "Namespaces",
+      "path": "/a/%PLUGIN_ID%/namespaces",
+      "addToNav": true
+    },
+    {
+      "type": "page",
+      "name": "Workloads",
+      "path": "/a/%PLUGIN_ID%/workloads",
+      "addToNav": true
+    },
+    {
+      "type": "page",
       "icon": "cog",
       "name": "Configuration",
       "path": "/plugins/%PLUGIN_ID%",

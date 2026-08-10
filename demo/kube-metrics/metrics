@@ -18,8 +18,84 @@ kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node
 kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-3",resource="memory"} 17179869184
 kube_node_status_capacity{cluster="demo-cluster-gce",node="demo-cluster-gce-node-1",resource="memory"} 34359738368
 kube_node_status_capacity{cluster="demo-cluster-gce",node="demo-cluster-gce-node-2",resource="memory"} 34359738368
+kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-1",resource="ephemeral_storage"} 107374182400
+kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-2",resource="ephemeral_storage"} 107374182400
+kube_node_status_capacity{cluster="demo-cluster-aws",node="demo-cluster-aws-node-3",resource="ephemeral_storage"} 107374182400
+kube_node_status_capacity{cluster="demo-cluster-gce",node="demo-cluster-gce-node-1",resource="ephemeral_storage"} 214748364800
+kube_node_status_capacity{cluster="demo-cluster-gce",node="demo-cluster-gce-node-2",resource="ephemeral_storage"} 214748364800
+
+# HELP namespace_cpu:kube_pod_container_resource_limits:sum Recording rule: summed CPU limits per namespace (demo data).
+# TYPE namespace_cpu:kube_pod_container_resource_limits:sum gauge
+namespace_cpu:kube_pod_container_resource_limits:sum{cluster="demo-cluster-aws",namespace="default"} 6
+namespace_cpu:kube_pod_container_resource_limits:sum{cluster="demo-cluster-gce",namespace="default"} 8
+
+# HELP namespace_cpu:kube_pod_container_resource_requests:sum Recording rule: summed CPU requests per namespace (demo data).
+# TYPE namespace_cpu:kube_pod_container_resource_requests:sum gauge
+namespace_cpu:kube_pod_container_resource_requests:sum{cluster="demo-cluster-aws",namespace="default"} 4
+namespace_cpu:kube_pod_container_resource_requests:sum{cluster="demo-cluster-gce",namespace="default"} 5
+
+# HELP namespace_memory:kube_pod_container_resource_limits:sum Recording rule: summed memory limits per namespace (demo data).
+# TYPE namespace_memory:kube_pod_container_resource_limits:sum gauge
+namespace_memory:kube_pod_container_resource_limits:sum{cluster="demo-cluster-aws",namespace="default"} 12884901888
+namespace_memory:kube_pod_container_resource_limits:sum{cluster="demo-cluster-gce",namespace="default"} 17179869184
+
+# HELP namespace_memory:kube_pod_container_resource_requests:sum Recording rule: summed memory requests per namespace (demo data).
+# TYPE namespace_memory:kube_pod_container_resource_requests:sum gauge
+namespace_memory:kube_pod_container_resource_requests:sum{cluster="demo-cluster-aws",namespace="default"} 8589934592
+namespace_memory:kube_pod_container_resource_requests:sum{cluster="demo-cluster-gce",namespace="default"} 10737418240
 
 # HELP ALERTS Firing/pending alert instances (demo data).
 # TYPE ALERTS gauge
 ALERTS{alertname="KubeNodeNotReady",alertstate="firing",cluster="demo-cluster-aws",severity="warning",node="demo-cluster-aws-node-2"} 1
 ALERTS{alertname="CPUThrottlingHigh",alertstate="firing",cluster="demo-cluster-aws",severity="warning",node="demo-cluster-aws-node-1"} 1
+
+# Cluster Health demo data: two synthetic CronJobs ("infra-check" and
+# "user-check") run in namespace "cluster-tests" and are labeled via
+# kube_cronjob_labels with label_category "infra"/"user-impact". demo-cluster-aws's
+# infra-check has failed (-> yellow/degraded, no user impact); demo-cluster-gce
+# is fully healthy. The Cluster Health query joins/groups on "cluster" but
+# filters on "$cluster" via "k8s_cluster_name" (see clusterOverviewQueries.ts),
+# so both labels are carried here, matching the real environment.
+# HELP kube_job_status_start_time StartTime represents time when the job was acknowledged by the Job Manager.
+# TYPE kube_job_status_start_time gauge
+kube_job_status_start_time{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29160480"} 1749556800
+kube_job_status_start_time{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29160480"} 1749556800
+kube_job_status_start_time{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29160480"} 1749556800
+kube_job_status_start_time{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="user-check-29160480"} 1749556800
+
+# HELP kube_job_owner Information about the Job's owner.
+# TYPE kube_job_owner gauge
+kube_job_owner{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29160480",owner_kind="CronJob",owner_name="infra-check"} 1
+kube_job_owner{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29160480",owner_kind="CronJob",owner_name="user-check"} 1
+kube_job_owner{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29160480",owner_kind="CronJob",owner_name="infra-check"} 1
+kube_job_owner{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="user-check-29160480",owner_kind="CronJob",owner_name="user-check"} 1
+
+# HELP kube_job_status_active The number of actively running pods for the job.
+# TYPE kube_job_status_active gauge
+kube_job_status_active{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29160480"} 0
+kube_job_status_active{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29160480"} 0
+kube_job_status_active{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29160480"} 0
+kube_job_status_active{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="user-check-29160480"} 0
+
+# HELP kube_job_status_failed The number of pods which reached Phase Failed.
+# TYPE kube_job_status_failed gauge
+kube_job_status_failed{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29160480",reason="BackoffLimitExceeded"} 1
+
+# HELP kube_cronjob_labels Kubernetes labels converted to Prometheus labels.
+# TYPE kube_cronjob_labels gauge
+kube_cronjob_labels{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",exported_namespace="cluster-tests",cronjob="infra-check",label_category="infra"} 1
+kube_cronjob_labels{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",exported_namespace="cluster-tests",cronjob="user-check",label_category="user-impact"} 1
+kube_cronjob_labels{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",exported_namespace="cluster-tests",cronjob="infra-check",label_category="infra"} 1
+kube_cronjob_labels{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",exported_namespace="cluster-tests",cronjob="user-check",label_category="user-impact"} 1
+
+# HELP kube_node_status_condition The condition of a cluster node. Every node
+# reports a status="false" row for "Ready" (0 when the node is Ready); the
+# Cluster Health query multiplies this branch by 0 and only uses it as a
+# "the cluster is reporting metrics" fallback so healthy clusters resolve to
+# 0 instead of no data.
+# TYPE kube_node_status_condition gauge
+kube_node_status_condition{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",node="demo-cluster-aws-node-1",condition="Ready",status="false"} 0
+kube_node_status_condition{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",node="demo-cluster-aws-node-2",condition="Ready",status="false"} 0
+kube_node_status_condition{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",node="demo-cluster-aws-node-3",condition="Ready",status="false"} 0
+kube_node_status_condition{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",node="demo-cluster-gce-node-1",condition="Ready",status="false"} 0
+kube_node_status_condition{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",node="demo-cluster-gce-node-2",condition="Ready",status="false"} 0

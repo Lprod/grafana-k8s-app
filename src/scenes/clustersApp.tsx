@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   EmbeddedScene,
+  FieldConfigOverridesBuilder,
   PanelBuilders,
   SceneApp,
   SceneAppPage,
@@ -18,11 +19,21 @@ import {
   SceneVariableSet,
   VariableValueControl,
 } from '@grafana/scenes';
-import { TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
-import { useTheme2 } from '@grafana/ui';
-import { PLUGIN_BASE_URL } from '../constants';
+import { FieldColorModeId } from '@grafana/data';
+import { LegendDisplayMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
+import { Badge, Button, useTheme2 } from '@grafana/ui';
+import { PLUGIN_BASE_URL, ROUTES } from '../constants';
 import { clusterTableQueries } from '../queries/clusterQueries';
+import {
+  buildClusterHealthQuery,
+  clusterCapacityQueries,
+  ClusterCapacityQueryKey,
+  clusterCpuOptimizationQueries,
+  clusterMemoryOptimizationQueries,
+  substituteCluster,
+} from '../queries/clusterOverviewQueries';
 import { buildClusterTableTargets, withClusterFilter } from './queryHelpers';
+import { ClusterHealthBanner, InfoCard } from './clusterOverviewCards';
 import {
   CLUSTER_VARIABLE_NAME,
   THANOS_VARIABLE_NAME,
@@ -30,6 +41,9 @@ import {
   createThanosDatasourceVariable,
 } from '../variables/datasourceVariables';
 import { getResourceSimulatorPage } from '../pages/ResourceSimulator/resourceSimulatorPage';
+import { getNamespacesPage } from '../pages/Namespaces/namespacesPage';
+import { getWorkloadsPage } from '../pages/Workloads/workloadsPage';
+import { getComingSoonScene } from './comingSoon';
 import { UsageIcon, linkedValueCell, usageColorFromTier } from './tableCells';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
@@ -205,9 +219,65 @@ function getClustersListScene() {
   });
 }
 
-function getClusterDetailScene(cluster: string) {
-  const clusterRegex = cluster.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function ClusterPageTitle({ title }: { title: string }) {
+  return (
+    <h1 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+      {title}
+      <Badge text="cluster" color="blue" />
+    </h1>
+  );
+}
 
+// The Namespaces/Workloads pages declare their own "cluster" scene variable.
+// Grafana's app shell intercepts clicks on internal <a href> links (even
+// LinkButton's) and client-side-navigates instead of doing a real page load,
+// which keeps this page's "cluster" variable mounted; the destination page's
+// own "cluster" variable then collides with it and silently gets renamed
+// ("var-cluster-2") in the URL, so the value we pass never reaches it. Using
+// a plain Button (no href, so nothing intercepts it) and navigating via
+// window.location forces a real page load, so the destination mounts fresh
+// and "var-cluster" binds to its own variable.
+function SectionHeading({ title }: { title: string }) {
+  const theme = useTheme2();
+  return <h3 style={{ ...theme.typography.h3, margin: 0 }}>{title}</h3>;
+}
+
+function ClusterOverviewLinks({ cluster }: { cluster: string }) {
+  const namespacesUrl = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}`;
+  const workloadsUrl = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}`;
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8 }}>
+      <Button onClick={() => window.location.assign(namespacesUrl)} variant="secondary" size="md">
+        See Namespaces
+      </Button>
+      <Button onClick={() => window.location.assign(workloadsUrl)} variant="secondary" size="md">
+        See Workloads
+      </Button>
+    </div>
+  );
+}
+
+// Shared series styling for the "Cluster optimization" CPU/Memory charts:
+// Capacity is the physical line (light purple, filled); Limits/Requests are
+// dashed red/orange; Usage is a solid blue line. Matched by refId (stable
+// across panels) rather than display name, since CPU/Memory use different
+// legend labels for the same four queries.
+function applyOptimizationSeriesOverrides(b: FieldConfigOverridesBuilder<any>) {
+  return b
+    .matchFieldsByQuery('capacity')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'rgb(202, 149, 229)' })
+    .overrideCustomFieldConfig('fillOpacity', 14)
+    .matchFieldsByQuery('limits')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'red' })
+    .overrideCustomFieldConfig('lineStyle', { fill: 'dash' })
+    .matchFieldsByQuery('requests')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'orange' })
+    .overrideCustomFieldConfig('lineStyle', { fill: 'dash' })
+    .matchFieldsByQuery('usage')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'blue' });
+}
+
+function getClusterOverviewScene(cluster: string, clusterRegex: string) {
   const infoRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
@@ -215,6 +285,120 @@ function getClusterDetailScene(cluster: string) {
     ],
   });
 
+  const infoCard = new InfoCard({
+    $data: infoRunner,
+    rows: [
+      { label: 'cluster name:', fieldName: 'cluster' },
+      { label: 'nodes count:', fieldName: 'Value' },
+      { label: 'provider:', fieldName: 'provider_id' },
+    ],
+  });
+
+  const capacityRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: (Object.keys(clusterCapacityQueries) as ClusterCapacityQueryKey[]).map((key) => ({
+      refId: key,
+      expr: withClusterFilter(clusterCapacityQueries[key], clusterRegex),
+      format: 'table' as const,
+      instant: true,
+    })),
+  });
+
+  const capacityData = new SceneDataTransformer({
+    $data: capacityRunner,
+    transformations: [{ id: 'joinByField', options: { byField: 'cluster', mode: 'outer' } }],
+  });
+
+  const capacityCard = new InfoCard({
+    $data: capacityData,
+    rows: [
+      { label: 'cpu:', fieldName: 'Value #cpu', unit: 'cores' },
+      { label: 'memory:', fieldName: 'Value #memory', unit: 'bytes' },
+      { label: 'disk size:', fieldName: 'Value #disk', unit: 'bytes' },
+    ],
+  });
+
+  const healthRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [{ refId: 'health', expr: buildClusterHealthQuery(clusterRegex), instant: true }],
+  });
+
+  const healthBanner = new ClusterHealthBanner({ $data: healthRunner });
+
+  const cpuOptimizationRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      { refId: 'capacity', expr: substituteCluster(clusterCpuOptimizationQueries.cpuCapacity, clusterRegex), legendFormat: 'Physical capacity of Cluster' },
+      { refId: 'limits', expr: substituteCluster(clusterCpuOptimizationQueries.cpuLimits, clusterRegex), legendFormat: 'Sum of container cpu limits' },
+      { refId: 'requests', expr: substituteCluster(clusterCpuOptimizationQueries.cpuRequests, clusterRegex), legendFormat: 'Sum of container cpu requests' },
+      { refId: 'usage', expr: substituteCluster(clusterCpuOptimizationQueries.cpuUsage, clusterRegex), legendFormat: 'Cluster cpu usage' },
+    ],
+  });
+
+  const cpuOptimizationPanel = PanelBuilders.timeseries()
+    .setTitle('Cluster CPU')
+    .setUnit('cores')
+    .setData(cpuOptimizationRunner)
+    .setOverrides(applyOptimizationSeriesOverrides)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    .build();
+
+  const memoryOptimizationRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      { refId: 'capacity', expr: substituteCluster(clusterMemoryOptimizationQueries.memCapacity, clusterRegex), legendFormat: 'Physical capacity of Cluster' },
+      { refId: 'limits', expr: substituteCluster(clusterMemoryOptimizationQueries.memLimits, clusterRegex), legendFormat: 'Sum of container memory limits' },
+      { refId: 'requests', expr: substituteCluster(clusterMemoryOptimizationQueries.memRequests, clusterRegex), legendFormat: 'Sum of container memory requests' },
+      { refId: 'usage', expr: substituteCluster(clusterMemoryOptimizationQueries.memUsage, clusterRegex), legendFormat: 'Cluster memory usage' },
+    ],
+  });
+
+  const memoryOptimizationPanel = PanelBuilders.timeseries()
+    .setTitle('Cluster Memory')
+    .setUnit('bytes')
+    .setData(memoryOptimizationRunner)
+    .setOverrides(applyOptimizationSeriesOverrides)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    .build();
+
+  return new EmbeddedScene({
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <ClusterOverviewLinks cluster={cluster} /> }),
+        }),
+        new SceneFlexItem({ ySizing: 'content', body: healthBanner }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Cluster information" /> }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ ySizing: 'content', body: infoCard }),
+            new SceneFlexItem({ ySizing: 'content', body: capacityCard }),
+          ],
+        }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Cluster optimization" /> }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          children: [
+            new SceneFlexItem({ height: 400, body: cpuOptimizationPanel }),
+            new SceneFlexItem({ height: 400, body: memoryOptimizationPanel }),
+          ],
+        }),
+      ],
+    }),
+  });
+}
+
+function getClusterCpuScene(clusterRegex: string) {
   const cpuTimeSeries = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
@@ -226,6 +410,17 @@ function getClusterDetailScene(cluster: string) {
     ],
   });
 
+  return new EmbeddedScene({
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexItem({ height: 300, body: PanelBuilders.timeseries().setTitle('CPU usage').setUnit('cores').setData(cpuTimeSeries).build() }),
+      ],
+    }),
+  });
+}
+
+function getClusterMemoryScene(clusterRegex: string) {
   const memTimeSeries = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
@@ -237,6 +432,17 @@ function getClusterDetailScene(cluster: string) {
     ],
   });
 
+  return new EmbeddedScene({
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexItem({ height: 300, body: PanelBuilders.timeseries().setTitle('Memory usage').setUnit('bytes').setData(memTimeSeries).build() }),
+      ],
+    }),
+  });
+}
+
+function getClusterAlertsScene(clusterRegex: string) {
   const alertsRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
@@ -261,47 +467,57 @@ function getClusterDetailScene(cluster: string) {
     ],
   });
 
-  const infoTable = new SceneDataTransformer({
-    $data: infoRunner,
-    transformations: [
-      {
-        id: 'organize',
-        options: {
-          excludeByName: { Time: true, asserts_env: true, asserts_site: true },
-          renameByName: { cluster: 'Cluster', provider_id: 'Provider', Value: 'Nodes' },
-        },
-      },
-    ],
-  });
-
   return new EmbeddedScene({
     body: new SceneFlexLayout({
       direction: 'column',
-      children: [
-        new SceneFlexItem({ height: 120, body: PanelBuilders.table().setTitle('Cluster information').setData(infoTable).build() }),
-        new SceneFlexLayout({
-          direction: 'row',
-          children: [
-            new SceneFlexItem({ height: 300, body: PanelBuilders.timeseries().setTitle('CPU usage').setUnit('cores').setData(cpuTimeSeries).build() }),
-            new SceneFlexItem({ height: 300, body: PanelBuilders.timeseries().setTitle('Memory usage').setUnit('bytes').setData(memTimeSeries).build() }),
-          ],
-        }),
-        new SceneFlexItem({ height: 300, body: PanelBuilders.table().setTitle('Firing alerts').setData(alertsTable).build() }),
-      ],
+      children: [new SceneFlexItem({ height: 300, body: PanelBuilders.table().setTitle('Firing alerts').setData(alertsTable).build() })],
     }),
   });
 }
 
+interface ClusterTabDef {
+  slug: string;
+  title: string;
+  getScene: () => EmbeddedScene;
+}
+
 function getClusterDetailPage(routeMatch: SceneRouteMatch<{ cluster: string }>, parent: SceneAppPageLike) {
   const cluster = decodeURIComponent(routeMatch.params.cluster);
+  const clusterRegex = cluster.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const baseUrl = `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`;
+
+  const tabDefs: ClusterTabDef[] = [
+    { slug: 'overview', title: 'Overview', getScene: () => getClusterOverviewScene(cluster, clusterRegex) },
+    { slug: 'cpu', title: 'CPU', getScene: () => getClusterCpuScene(clusterRegex) },
+    { slug: 'memory', title: 'Memory', getScene: () => getClusterMemoryScene(clusterRegex) },
+    {
+      slug: 'network-storage',
+      title: 'Network Storage',
+      getScene: () => getComingSoonScene('The network storage tab has not been built yet.'),
+    },
+    { slug: 'logs', title: 'Logs', getScene: () => getComingSoonScene('The logs tab has not been built yet.') },
+    { slug: 'events', title: 'Events', getScene: () => getComingSoonScene('The events tab has not been built yet.') },
+    { slug: 'alerts', title: 'Alerts', getScene: () => getClusterAlertsScene(clusterRegex) },
+  ];
+
+  const tabs = tabDefs.map(
+    (tab) =>
+      new SceneAppPage({
+        title: tab.title,
+        url: `${baseUrl}/${tab.slug}`,
+        routePath: tab.slug,
+        getScene: tab.getScene,
+      })
+  );
 
   return new SceneAppPage({
     title: cluster,
     titleImg: KUBERNETES_ICON,
-    url: `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`,
+    renderTitle: (title) => <ClusterPageTitle title={title} />,
+    url: baseUrl,
     routePath: `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`,
     getParentPage: () => parent,
-    getScene: () => getClusterDetailScene(cluster),
+    tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'utc' }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable()] }),
     controls: [
@@ -341,7 +557,7 @@ const clustersPage = new SceneAppPage({
 
 export function getClustersSceneApp() {
   return new SceneApp({
-    pages: [clustersPage, getResourceSimulatorPage()],
+    pages: [clustersPage, getResourceSimulatorPage(), getNamespacesPage(), getWorkloadsPage()],
     urlSyncOptions: { updateUrlOnInit: true, createBrowserHistorySteps: true },
   });
 }

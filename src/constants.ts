@@ -5,6 +5,8 @@ export const PLUGIN_BASE_URL = `/a/${pluginJson.id}`;
 export enum ROUTES {
   Clusters = 'clusters',
   ResourceSimulator = 'resource-simulator',
+  Namespaces = 'namespaces',
+  Workloads = 'workloads',
 }
 
 // Fall back to our demo stack's datasource UIDs until an admin sets real
