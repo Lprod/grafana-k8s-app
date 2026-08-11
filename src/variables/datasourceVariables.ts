@@ -10,6 +10,8 @@ export const CLUSTER_VARIABLE_NAME = 'cluster';
 export const NAMESPACE_VARIABLE_NAME = 'namespace';
 export const WORKLOAD_VARIABLE_NAME = 'workload';
 export const NODES_VARIABLE_NAME = 'nodes';
+export const SEVERITY_VARIABLE_NAME = 'severity';
+export const ALERTNAME_VARIABLE_NAME = 'alertname';
 
 export function createThanosDatasourceVariable() {
   return new DataSourceVariable({
@@ -85,6 +87,40 @@ export function createNodesFilterVariable(clusterRegex: string, options: { isMul
     query: {
       refId: 'nodesVariableQuery',
       query: `label_values(kube_node_info{cluster=~"${clusterRegex}"}, node)`,
+    },
+    isMulti,
+    includeAll: isMulti,
+    allValue: isMulti ? '.+' : undefined,
+    value: isMulti ? '$__all' : '',
+  });
+}
+
+export function createSeverityFilterVariable(options: { isMulti?: boolean } = {}) {
+  const isMulti = options.isMulti ?? true;
+  return new QueryVariable({
+    name: SEVERITY_VARIABLE_NAME,
+    label: 'Severity',
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    query: {
+      refId: 'severityVariableQuery',
+      query: `label_values(ALERTS{cluster=~"\${${CLUSTER_VARIABLE_NAME}:regex}"}, severity)`,
+    },
+    isMulti,
+    includeAll: isMulti,
+    allValue: isMulti ? '.+' : undefined,
+    value: isMulti ? '$__all' : '',
+  });
+}
+
+export function createAlertnameFilterVariable(options: { isMulti?: boolean } = {}) {
+  const isMulti = options.isMulti ?? true;
+  return new QueryVariable({
+    name: ALERTNAME_VARIABLE_NAME,
+    label: 'Alert name',
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    query: {
+      refId: 'alertnameVariableQuery',
+      query: `label_values(ALERTS{cluster=~"\${${CLUSTER_VARIABLE_NAME}:regex}"}, alertname)`,
     },
     isMulti,
     includeAll: isMulti,

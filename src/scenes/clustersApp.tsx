@@ -20,7 +20,15 @@ import {
   VariableValueControl,
 } from '@grafana/scenes';
 import { FieldColorModeId } from '@grafana/data';
-import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
+import {
+  BigValueColorMode,
+  BigValueGraphMode,
+  GraphThresholdsStyleMode,
+  LegendDisplayMode,
+  StackingMode,
+  TableCellDisplayMode,
+  ThresholdsMode,
+} from '@grafana/schema';
 import { Badge, Button, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../constants';
 import { clusterTableQueries } from '../queries/clusterQueries';
@@ -34,7 +42,7 @@ import {
   substituteCluster,
 } from '../queries/clusterOverviewQueries';
 import { buildClusterTableTargets, withClusterFilter } from './queryHelpers';
-import { ClusterHealthBanner, InfoCard } from './clusterOverviewCards';
+import { ClusterAlertsBadge, ClusterHealthBanner, InfoCard } from './clusterOverviewCards';
 import {
   CLUSTER_VARIABLE_NAME,
   createNodesFilterVariable,
@@ -49,7 +57,7 @@ import { getResourceSimulatorPage } from '../pages/ResourceSimulator/resourceSim
 import { getNamespacesPage } from '../pages/Namespaces/namespacesPage';
 import { getWorkloadsPage } from '../pages/Workloads/workloadsPage';
 import { getNodesPage } from '../pages/Nodes/nodesPage';
-import { getComingSoonScene } from './comingSoon';
+import { getAlertsPage } from '../pages/Alerts/alertsPage';
 import { UsageIcon, linkedValueCell, usageColorFromTier } from './tableCells';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
@@ -62,6 +70,15 @@ const usageThresholds = {
     { color: 'orange', value: -Infinity },
     { color: 'green', value: 0.6 },
     { color: 'red', value: 0.9 },
+  ],
+};
+
+const pvcCapacityThresholds = {
+  mode: ThresholdsMode.Absolute,
+  steps: [
+    { color: 'green', value: -Infinity },
+    { color: 'orange', value: 0.75 },
+    { color: 'red', value: 0.95 },
   ],
 };
 
@@ -150,6 +167,9 @@ function getClustersListScene() {
         .overrideThresholds(alertsThresholds)
         .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+        .overrideLinks([
+          { title: 'View alerts', url: `${PLUGIN_BASE_URL}/${ROUTES.Alerts}?var-${CLUSTER_VARIABLE_NAME}=\${__data.fields.cluster}` },
+        ])
         .matchFieldsWithName('Value #cpu_usage_avg')
         .overrideDisplayName('CPU Avg')
         .overrideUnit('cores')
@@ -348,6 +368,22 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
 
   const healthBanner = new ClusterHealthBanner({ $data: healthRunner });
 
+  const alertsBadgeRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'alerts',
+        expr: `count by (severity) (ALERTS{alertstate="firing", cluster="${clusterRegex}", alertname!~"ArgoCDSyncAlert"})`,
+        instant: true,
+      },
+    ],
+  });
+
+  const alertsBadge = new ClusterAlertsBadge({
+    $data: alertsBadgeRunner,
+    alertsUrl: `${PLUGIN_BASE_URL}/${ROUTES.Alerts}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}`,
+  });
+
   const cpuOptimizationRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
@@ -488,9 +524,18 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
-        new SceneFlexItem({
+        new SceneFlexLayout({
+          direction: 'row',
           ySizing: 'content',
-          body: new SceneReactObject({ reactNode: <ClusterOverviewLinks cluster={cluster} /> }),
+          children: [
+            new SceneFlexItem({
+              xSizing: 'content',
+              ySizing: 'content',
+              body: new SceneReactObject({ reactNode: <ClusterOverviewLinks cluster={cluster} /> }),
+            }),
+            new SceneFlexItem({ width: 220, ySizing: 'content', body: alertsBadge }),
+            new SceneFlexItem({ body: new SceneControlsSpacer() }),
+          ],
         }),
         new SceneFlexItem({
           ySizing: 'content',
@@ -501,8 +546,8 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
           direction: 'row',
           ySizing: 'content',
           children: [
-            new SceneFlexItem({ ySizing: 'content', body: infoCard }),
-            new SceneFlexItem({ ySizing: 'content', body: capacityCard }),
+            new SceneFlexItem({ ySizing: 'content', minWidth: 0, body: infoCard }),
+            new SceneFlexItem({ ySizing: 'content', minWidth: 0, body: capacityCard }),
           ],
         }),
         new SceneFlexItem({
@@ -562,16 +607,8 @@ function buildEfficiencyStatPanel(title: string, expr: string) {
 }
 
 function getClusterCpuScene(clusterRegex: string) {
-  const cpuTimeSeries = new SceneQueryRunner({
-    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [
-      {
-        refId: 'cpu',
-        expr: `sum by (cluster) (label_join(sum by (cluster, instance) (max by (cluster, instance, cpu, core) (1 - rate(node_cpu_seconds_total{cluster="${clusterRegex}", mode="idle"}[$__rate_interval]) >= 0)) or max by (cluster, instance) (rate(node_cpu_usage_seconds_total{cluster="${clusterRegex}"}[$__rate_interval]) >= 0), "node", ",", "instance"))`,
-        legendFormat: 'CPU usage (cores)',
-      },
-    ],
-  });
+  const namespaceRegex = `\${${NAMESPACE_VARIABLE_NAME}:regex}`;
+  const nodeRegex = `\${${NODES_VARIABLE_NAME}:regex}`;
 
   const requestsCapacityPanel = buildEfficiencyStatPanel(
     'Efficiency: Requests/Capacity (p95)',
@@ -588,6 +625,276 @@ function getClusterCpuScene(clusterRegex: string) {
     `sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~".+", node=~".*"}) / sum(max by (cluster, namespace) (namespace_cpu:kube_pod_container_resource_requests:sum{cluster="${clusterRegex}", namespace=~".+"}))`
   );
 
+  const namespaceUsageRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'usage',
+        expr: `sum by (cluster, namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"})`,
+        legendFormat: '{{namespace}}',
+      },
+    ],
+  });
+
+  const namespaceUsagePanel = PanelBuilders.timeseries()
+    .setTitle('Overview: Usage by Namespace (vCPU cores)')
+    .setUnit('cores')
+    .setData(namespaceUsageRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    .build();
+
+  const namespaceDistributionRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'distribution',
+        expr: `sum by (cluster, namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"}) / on (cluster) group_left() sum by (cluster) (max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="cpu", node=~".*"}))`,
+        legendFormat: '{{namespace}}',
+      },
+    ],
+  });
+
+  const namespaceDistributionPanel = PanelBuilders.timeseries()
+    .setTitle('Distribution: Namespace Usage/Cluster Capacity (%, stacked)')
+    .setUnit('percentunit')
+    .setData(namespaceDistributionRunner)
+    .setCustomFieldConfig('stacking', { mode: StackingMode.Normal })
+    .setCustomFieldConfig('lineWidth', 2)
+    .setCustomFieldConfig('fillOpacity', 60)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    .build();
+
+  const namespaceAlignmentRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'alignment',
+        expr: `sum by (namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"}) / on (namespace) sum by (namespace) (namespace_cpu:kube_pod_container_resource_requests:sum{cluster="${clusterRegex}", namespace=~"${namespaceRegex}"})`,
+        legendFormat: '{{namespace}}',
+      },
+    ],
+  });
+
+  const namespaceAlignmentPanel = PanelBuilders.timeseries()
+    .setTitle('Alignment: Namespace Usage/Requests (%)')
+    .setUnit('percentunit')
+    .setData(namespaceAlignmentRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    .build();
+
+  const namespacesTableRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'active',
+        expr: `max by (cluster, namespace) (kube_namespace_status_phase{phase="Active", cluster="${clusterRegex}", namespace=~"${namespaceRegex}"} == 1)`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'cpu_usage',
+        expr: `quantile_over_time(0.95, sum by (cluster, namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"})[$__range:2m])`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'cpu_usage_requests',
+        expr: `quantile_over_time(0.95, sum by (cluster, namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"})[$__range:2m]) / quantile_over_time(0.95, sum by (cluster, namespace) (namespace_cpu:kube_pod_container_resource_requests:sum{cluster="${clusterRegex}", namespace=~".+"})[$__range:2m])`,
+        format: 'table',
+        instant: true,
+      },
+    ],
+  });
+
+  const namespacesTableData = new SceneDataTransformer({
+    $data: namespacesTableRunner,
+    transformations: [
+      { id: 'joinByField', options: { byField: 'namespace', mode: 'inner' } },
+      {
+        id: 'organize',
+        options: {
+          excludeByName: { Time: true, cluster: true, 'Value #active': true },
+          indexByName: { namespace: 0, 'Value #cpu_usage': 1, 'Value #cpu_usage_requests': 2 },
+          renameByName: {},
+        },
+      },
+    ],
+  });
+
+  const namespacesTable = PanelBuilders.table()
+    .setTitle('Namespaces')
+    .setData(namespacesTableData)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('namespace')
+        .overrideDisplayName('Namespace')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #cpu_usage')
+        .overrideDisplayName('CPU Usage (p95)')
+        .overrideUnit('cores')
+        .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #cpu_usage_requests')
+        .overrideDisplayName('Usage/Requests (p95)')
+        .overrideUnit('percentunit')
+        .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+    )
+    .build();
+
+  const nodeOverviewRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'capacity',
+        expr: `sum(max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="cpu", node=~"${nodeRegex}"}))`,
+        legendFormat: 'Physical capacity of cluster',
+      },
+      {
+        refId: 'limits',
+        expr: `sum(max by (cluster, namespace) (namespace_cpu:kube_pod_container_resource_limits:sum{cluster="${clusterRegex}", namespace=~".+"}))`,
+        legendFormat: 'Sum of container cpu limits',
+      },
+      {
+        refId: 'requests',
+        expr: `sum(max by (cluster, namespace) (namespace_cpu:kube_pod_container_resource_requests:sum{cluster="${clusterRegex}", namespace=~".+"}))`,
+        legendFormat: 'Sum of container cpu requests',
+      },
+      {
+        refId: 'usage',
+        expr: `sum(1 - max by (cluster, instance, cpu, core) (rate(node_cpu_seconds_total{cluster=~"${clusterRegex}", mode=~"idle"}[$__rate_interval])) >= 0)`,
+        legendFormat: 'Sum of container cpu usage',
+      },
+    ],
+  });
+
+  const nodeOverviewPanel = PanelBuilders.timeseries()
+    .setTitle('Overview: Usage (vCPU cores)')
+    .setUnit('cores')
+    .setData(nodeOverviewRunner)
+    .setOverrides(applyOptimizationSeriesOverrides)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    .build();
+
+  const nodeDistributionRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'distribution',
+        expr: `sum by (cluster, node) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~".+", node=~"${nodeRegex}"}) / on (cluster) group_left() sum by (cluster) (max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="cpu", node=~"${nodeRegex}"}))`,
+        legendFormat: '{{node}}',
+      },
+    ],
+  });
+
+  const nodeDistributionPanel = PanelBuilders.timeseries()
+    .setTitle('Distribution: Node Usage/Cluster Capacity (%, stacked)')
+    .setUnit('percentunit')
+    .setMin(0)
+    .setMax(1)
+    .setThresholds(usageThresholds)
+    .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
+    .setData(nodeDistributionRunner)
+    .setCustomFieldConfig('stacking', { mode: StackingMode.Normal })
+    .build();
+
+  const nodeEfficiencyRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'efficiency',
+        expr: `sum by (cluster, node) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~".+", node=~"${nodeRegex}"}) / on (cluster, node) group_left() sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="cpu", node=~"${nodeRegex}"}))`,
+        legendFormat: '{{node}}',
+      },
+    ],
+  });
+
+  const nodeEfficiencyPanel = PanelBuilders.timeseries()
+    .setTitle('Efficiency: Node Usage/node Capacity (%)')
+    .setUnit('percentunit')
+    .setMin(0)
+    .setMax(1)
+    .setThresholds(usageThresholds)
+    .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
+    .setData(nodeEfficiencyRunner)
+    .build();
+
+  const nodesTableRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'info',
+        expr: `max by (cluster, node, os_image) (kube_node_info{cluster="${clusterRegex}", node=~"${nodeRegex}"})`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'capacity',
+        expr: `last_over_time((max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="cpu", node=~"${nodeRegex}"}))[$__range:1m])`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'usage',
+        expr: `quantile_over_time(0.95, sum by (cluster, node) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~".+", node=~"${nodeRegex}"})[$__range:1m])`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'usage_capacity',
+        expr: `quantile_over_time(0.95, sum by (cluster, node) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="${clusterRegex}", namespace=~".+", node=~"${nodeRegex}"})[$__range:1m]) / quantile_over_time(0.95, sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="cpu", node=~"${nodeRegex}"}))[$__range:1m])`,
+        format: 'table',
+        instant: true,
+      },
+    ],
+  });
+
+  const nodesTableData = new SceneDataTransformer({
+    $data: nodesTableRunner,
+    transformations: [
+      { id: 'joinByField', options: { byField: 'node', mode: 'inner' } },
+      {
+        id: 'organize',
+        options: {
+          excludeByName: { Time: true, cluster: true, 'Value #info': true },
+          indexByName: { node: 0, os_image: 1, 'Value #capacity': 2, 'Value #usage': 3, 'Value #usage_capacity': 4 },
+          renameByName: {},
+        },
+      },
+    ],
+  });
+
+  const nodesTable = PanelBuilders.table()
+    .setTitle('Nodes')
+    .setData(nodesTableData)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('node')
+        .overrideDisplayName('Nodes')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('os_image')
+        .overrideDisplayName('OS')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #capacity')
+        .overrideDisplayName('Capacity (vCPU)')
+        .overrideUnit('cores')
+        .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #usage')
+        .overrideDisplayName('Usage (P95)')
+        .overrideUnit('cores')
+        .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #usage_capacity')
+        .overrideDisplayName('Usage/Capacity (P95, %)')
+        .overrideUnit('percentunit')
+        .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+    )
+    .build();
+
   return new EmbeddedScene({
     $variables: new SceneVariableSet({
       variables: [createNodesFilterVariable(clusterRegex), createNamespaceFilterVariable({ clusterRegex })],
@@ -599,84 +906,780 @@ function getClusterCpuScene(clusterRegex: string) {
           direction: 'row',
           ySizing: 'content',
           children: [
-            new SceneFlexItem({
-              width: 220,
-              ySizing: 'content',
-              body: new VariableValueControl({ variableName: NODES_VARIABLE_NAME }),
-            }),
-            new SceneFlexItem({
-              width: 220,
-              ySizing: 'content',
-              body: new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
-            }),
-            new SceneFlexItem({ body: new SceneControlsSpacer() }),
-          ],
-        }),
-        new SceneFlexLayout({
-          direction: 'row',
-          children: [
             new SceneFlexItem({ height: 120, body: requestsCapacityPanel }),
             new SceneFlexItem({ height: 120, body: usageCapacityPanel }),
             new SceneFlexItem({ height: 120, body: usageRequestsPanel }),
           ],
         }),
-        new SceneFlexItem({ height: 300, body: PanelBuilders.timeseries().setTitle('CPU usage').setUnit('cores').setData(cpuTimeSeries).build() }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="by Namespace" /> }),
+        }),
+        new SceneFlexItem({
+          width: 220,
+          ySizing: 'content',
+          body: new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: namespaceUsagePanel }),
+            new SceneFlexItem({ height: 300, body: namespaceDistributionPanel }),
+            new SceneFlexItem({ height: 300, body: namespaceAlignmentPanel }),
+          ],
+        }),
+        new SceneFlexItem({ height: 400, body: namespacesTable }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="by node" /> }),
+        }),
+        new SceneFlexItem({
+          width: 220,
+          ySizing: 'content',
+          body: new VariableValueControl({ variableName: NODES_VARIABLE_NAME }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: nodeOverviewPanel }),
+            new SceneFlexItem({ height: 300, body: nodeDistributionPanel }),
+            new SceneFlexItem({ height: 300, body: nodeEfficiencyPanel }),
+          ],
+        }),
+        new SceneFlexItem({ height: 400, body: nodesTable }),
       ],
     }),
   });
 }
 
 function getClusterMemoryScene(clusterRegex: string) {
-  const memTimeSeries = new SceneQueryRunner({
+  const namespaceRegex = `\${${NAMESPACE_VARIABLE_NAME}:regex}`;
+  const nodeRegex = `\${${NODES_VARIABLE_NAME}:regex}`;
+
+  const requestsCapacityPanel = buildEfficiencyStatPanel(
+    'Efficiency: Requests/Capacity (p95)',
+    `sum(max by (cluster, namespace) (namespace_memory:kube_pod_container_resource_requests:sum{cluster=~"${clusterRegex}", namespace=~".+"})) / sum(max by (cluster, node) (kube_node_status_capacity{cluster=~"${clusterRegex}", resource=~"memory", node=~".*"}))`
+  );
+
+  const usageCapacityPanel = buildEfficiencyStatPanel(
+    'Efficiency: Usage/Capacity (p95)',
+    `sum(node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~".+", node=~".*"}) / sum(max by (cluster, node) (kube_node_status_capacity{cluster=~"${clusterRegex}", resource=~"memory", node=~".*"}))`
+  );
+
+  const usageRequestsPanel = buildEfficiencyStatPanel(
+    'Efficiency: Usage/Requests (p95)',
+    `sum(node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~".+"}) / sum(max by (cluster, namespace) (namespace_memory:kube_pod_container_resource_requests:sum{cluster=~"${clusterRegex}", namespace=~".+"}))`
+  );
+
+  const namespaceUsageRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
       {
-        refId: 'mem',
-        expr: `sum by (cluster) (label_join(max by (cluster, instance) (node_memory_Active_file_bytes{cluster="${clusterRegex}"}) + on (cluster, instance) group_left() max by (cluster, instance) (node_memory_AnonPages_bytes{cluster="${clusterRegex}"}) or max by (cluster, instance) (node_memory_working_set_bytes{cluster="${clusterRegex}"}), "node", ",", "instance"))`,
-        legendFormat: 'Memory usage (bytes)',
+        refId: 'usage',
+        expr: `sum by (cluster, namespace) (node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"})`,
+        legendFormat: '{{namespace}}',
       },
     ],
   });
 
-  return new EmbeddedScene({
-    body: new SceneFlexLayout({
-      direction: 'column',
-      children: [
-        new SceneFlexItem({ height: 300, body: PanelBuilders.timeseries().setTitle('Memory usage').setUnit('bytes').setData(memTimeSeries).build() }),
-      ],
-    }),
-  });
-}
+  const namespaceUsagePanel = PanelBuilders.timeseries()
+    .setTitle('Overview: Usage by Namespace (memory bytes)')
+    .setUnit('bytes')
+    .setData(namespaceUsageRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    .build();
 
-function getClusterAlertsScene(clusterRegex: string) {
-  const alertsRunner = new SceneQueryRunner({
+  const namespaceDistributionRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
       {
-        refId: 'alerts',
-        expr: `(ALERTS{alertname=~"(Kube.*|CPUThrottlingHigh)", alertstate="firing", cluster="${clusterRegex}"} or GRAFANA_ALERTS{alertname=~"(Kube.*|CPUThrottlingHigh)", alertstate="firing", cluster="${clusterRegex}"})`,
+        refId: 'distribution',
+        expr: `sum by (cluster, namespace) (node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"}) / on (cluster) group_left() sum by (cluster) (max by (cluster, node) (kube_node_status_capacity{cluster=~"${clusterRegex}", resource=~"memory", node=~".*"}))`,
+        legendFormat: '{{namespace}}',
+      },
+    ],
+  });
+
+  const namespaceDistributionPanel = PanelBuilders.timeseries()
+    .setTitle('Distribution: Namespace Usage/Cluster Capacity (%, stacked)')
+    .setUnit('percentunit')
+    .setData(namespaceDistributionRunner)
+    .setCustomFieldConfig('stacking', { mode: StackingMode.Normal })
+    .setCustomFieldConfig('lineWidth', 2)
+    .setCustomFieldConfig('fillOpacity', 60)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    .build();
+
+  const namespaceAlignmentRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'alignment',
+        expr: `sum by (namespace, cluster) (node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"}) / on (namespace, cluster) sum by (namespace, cluster) (namespace_memory:kube_pod_container_resource_requests:sum{cluster=~"${clusterRegex}", namespace=~".+"})`,
+        legendFormat: '{{namespace}}',
+      },
+    ],
+  });
+
+  const namespaceAlignmentPanel = PanelBuilders.timeseries()
+    .setTitle('Alignment: Namespace Usage/Requests (%)')
+    .setUnit('percentunit')
+    .setData(namespaceAlignmentRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    .build();
+
+  const namespacesTableRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'active',
+        expr: `max by (cluster, namespace) (kube_namespace_status_phase{phase="Active", cluster="${clusterRegex}", namespace=~"${namespaceRegex}"} == 1)`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'mem_usage',
+        expr: `quantile_over_time(0.95, sum by (cluster, namespace) (node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"})[$__range:1m])`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'mem_usage_requests',
+        expr: `quantile_over_time(0.95, sum by (cluster, namespace) (node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~"${namespaceRegex}", node=~".*"})[$__range:1m]) / quantile_over_time(0.95, sum by (cluster, namespace) (namespace_memory:kube_pod_container_resource_requests:sum{cluster=~"${clusterRegex}", namespace=~"${namespaceRegex}"})[$__range:1m])`,
         format: 'table',
         instant: true,
       },
     ],
   });
 
-  const alertsTable = new SceneDataTransformer({
-    $data: alertsRunner,
+  const namespacesTableData = new SceneDataTransformer({
+    $data: namespacesTableRunner,
     transformations: [
+      { id: 'joinByField', options: { byField: 'namespace', mode: 'inner' } },
       {
         id: 'organize',
         options: {
-          excludeByName: { Time: true, Value: true, __name__: true, cluster: true },
+          excludeByName: { Time: true, cluster: true, 'Value #active': true },
+          indexByName: { namespace: 0, 'Value #mem_usage': 1, 'Value #mem_usage_requests': 2 },
+          renameByName: {},
         },
       },
     ],
   });
 
+  const namespacesTable = PanelBuilders.table()
+    .setTitle('Namespaces')
+    .setData(namespacesTableData)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('namespace')
+        .overrideDisplayName('Namespace')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #mem_usage')
+        .overrideDisplayName('Usage (P95)')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #mem_usage_requests')
+        .overrideDisplayName('Usage/Capacity (P95, %)')
+        .overrideUnit('percentunit')
+        .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+    )
+    .build();
+
+  const nodeOverviewRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'capacity',
+        expr: `sum(max by (cluster, node) (kube_node_status_capacity{cluster=~"${clusterRegex}", resource=~"memory", node=~".*"}))`,
+        legendFormat: 'Physical capacity of cluster',
+      },
+      {
+        refId: 'limits',
+        expr: `sum(max by (cluster, namespace) (namespace_memory:kube_pod_container_resource_limits:sum{cluster=~"${clusterRegex}", namespace=~".+"}))`,
+        legendFormat: 'Sum of container memory limits',
+      },
+      {
+        refId: 'requests',
+        expr: `sum(max by (cluster, namespace) (namespace_memory:kube_pod_container_resource_requests:sum{cluster=~"${clusterRegex}", namespace=~".+"}))`,
+        legendFormat: 'Sum of container memory requests',
+      },
+      {
+        refId: 'usage',
+        expr: `sum(node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~".+", node=~".*"})`,
+        legendFormat: 'Sum of container memory usage',
+      },
+    ],
+  });
+
+  const nodeOverviewPanel = PanelBuilders.timeseries()
+    .setTitle('Overview: Usage (memory bytes)')
+    .setUnit('bytes')
+    .setData(nodeOverviewRunner)
+    .setOverrides(applyOptimizationSeriesOverrides)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    .build();
+
+  const nodeDistributionRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'distribution',
+        expr: `sum by (cluster, node) (node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~".+", node=~".*"}) / on (cluster) group_left() sum by (cluster) (max by (cluster, node) (kube_node_status_capacity{cluster=~"${clusterRegex}", resource=~"memory", node=~".*"}))`,
+        legendFormat: '{{node}}',
+      },
+    ],
+  });
+
+  const nodeDistributionPanel = PanelBuilders.timeseries()
+    .setTitle('Distribution: Node Usage/Cluster Capacity (%, stacked)')
+    .setUnit('percentunit')
+    .setMin(0)
+    .setMax(1)
+    .setThresholds(usageThresholds)
+    .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
+    .setData(nodeDistributionRunner)
+    .setCustomFieldConfig('stacking', { mode: StackingMode.Normal })
+    .build();
+
+  const nodeEfficiencyRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'efficiency',
+        expr: `sum by (cluster, node) (node_namespace_pod_container:container_memory_working_set_bytes{cluster=~"${clusterRegex}", namespace=~".+", node=~".*"}) / on (cluster, node) group_left() sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster=~"${clusterRegex}", resource=~"memory", node=~".*"}))`,
+        legendFormat: '{{node}}',
+      },
+    ],
+  });
+
+  const nodeEfficiencyPanel = PanelBuilders.timeseries()
+    .setTitle('Efficiency: Node Usage/Node Capacity (%)')
+    .setUnit('percentunit')
+    .setMin(0)
+    .setMax(1)
+    .setThresholds(usageThresholds)
+    .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
+    .setData(nodeEfficiencyRunner)
+    .build();
+
+  const nodesTableRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'info',
+        expr: `max by (cluster, node, os_image) (kube_node_info{cluster="${clusterRegex}", node=~"${nodeRegex}"})`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'capacity',
+        expr: `last_over_time((max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="memory", node=~"${nodeRegex}"}))[$__range:1m])`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'usage',
+        expr: `quantile_over_time(0.95, sum by (cluster, node) (node_namespace_pod_container:container_memory_working_set_bytes{cluster="${clusterRegex}", namespace=~".+", node=~"${nodeRegex}"})[$__range:1m])`,
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'usage_capacity',
+        expr: `quantile_over_time(0.95, sum by (cluster, node) (node_namespace_pod_container:container_memory_working_set_bytes{cluster="${clusterRegex}", namespace=~".+", node=~"${nodeRegex}"})[$__range:1m]) / quantile_over_time(0.95, sum by (cluster, node) (max by (cluster, node) (kube_node_status_capacity{cluster="${clusterRegex}", resource="memory", node=~"${nodeRegex}"}))[$__range:1m])`,
+        format: 'table',
+        instant: true,
+      },
+    ],
+  });
+
+  const nodesTableData = new SceneDataTransformer({
+    $data: nodesTableRunner,
+    transformations: [
+      { id: 'joinByField', options: { byField: 'node', mode: 'inner' } },
+      {
+        id: 'organize',
+        options: {
+          excludeByName: { Time: true, cluster: true, 'Value #info': true },
+          indexByName: { node: 0, os_image: 1, 'Value #capacity': 2, 'Value #usage': 3, 'Value #usage_capacity': 4 },
+          renameByName: {},
+        },
+      },
+    ],
+  });
+
+  const nodesTable = PanelBuilders.table()
+    .setTitle('Nodes')
+    .setData(nodesTableData)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('node')
+        .overrideDisplayName('Node')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('os_image')
+        .overrideDisplayName('OS')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #capacity')
+        .overrideDisplayName('Capacity (bytes)')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #usage')
+        .overrideDisplayName('Usage (P95)')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #usage_capacity')
+        .overrideDisplayName('Usage/Capacity (P95, %)')
+        .overrideUnit('percentunit')
+        .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+    )
+    .build();
+
+  return new EmbeddedScene({
+    $variables: new SceneVariableSet({
+      variables: [createNodesFilterVariable(clusterRegex), createNamespaceFilterVariable({ clusterRegex })],
+    }),
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 120, body: requestsCapacityPanel }),
+            new SceneFlexItem({ height: 120, body: usageCapacityPanel }),
+            new SceneFlexItem({ height: 120, body: usageRequestsPanel }),
+          ],
+        }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="by Namespace" /> }),
+        }),
+        new SceneFlexItem({
+          width: 220,
+          ySizing: 'content',
+          body: new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: namespaceUsagePanel }),
+            new SceneFlexItem({ height: 300, body: namespaceDistributionPanel }),
+            new SceneFlexItem({ height: 300, body: namespaceAlignmentPanel }),
+          ],
+        }),
+        new SceneFlexItem({ height: 400, body: namespacesTable }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="by node" /> }),
+        }),
+        new SceneFlexItem({
+          width: 220,
+          ySizing: 'content',
+          body: new VariableValueControl({ variableName: NODES_VARIABLE_NAME }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: nodeOverviewPanel }),
+            new SceneFlexItem({ height: 300, body: nodeDistributionPanel }),
+            new SceneFlexItem({ height: 300, body: nodeEfficiencyPanel }),
+          ],
+        }),
+        new SceneFlexItem({ height: 400, body: nodesTable }),
+      ],
+    }),
+  });
+}
+
+function getClusterNetworkScene(clusterRegex: string) {
+  const bandwidthRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'rx',
+        expr: `sum (max by (cluster, node, device) (label_replace(rate(node_network_receive_bytes_total{cluster=~"${clusterRegex}"}[$__rate_interval]), "node", "$1", "instance", "([^:]+).*")))`,
+        legendFormat: 'Receive',
+      },
+      {
+        refId: 'tx',
+        expr: `- sum (max by (cluster, node, device) (label_replace(rate(node_network_transmit_bytes_total{cluster="${clusterRegex}"}[$__rate_interval]), "node", "$1", "instance", "([^:]+).*")))`,
+        legendFormat: 'Transmit',
+      },
+    ],
+  });
+
+  const bandwidthPanel = PanelBuilders.timeseries().setTitle('Network Bandwidth').setUnit('Bps').setData(bandwidthRunner).build();
+
+  const saturationRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'rx',
+        expr: `sum (max by (cluster, node, device) (label_replace(rate(node_network_receive_drop_total{cluster="${clusterRegex}"}[$__rate_interval]), "node", "$1", "instance", "([^:]+).*")))`,
+        legendFormat: 'Receive',
+      },
+      {
+        refId: 'tx',
+        expr: `- sum (max by (cluster, node, device) (label_replace(rate(node_network_transmit_drop_total{cluster="${clusterRegex}"}[$__rate_interval]), "node", "$1", "instance", "([^:]+).*")))`,
+        legendFormat: 'Transmit',
+      },
+    ],
+  });
+
+  const saturationPanel = PanelBuilders.timeseries().setTitle('Network Saturation').setUnit('pps').setData(saturationRunner).build();
+
+  const saturationByNodeRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'rx',
+        expr: `sum by (cluster, node) (max by (cluster, node, device) (label_replace(rate(node_network_receive_drop_total{cluster="${clusterRegex}"}[$__rate_interval]), "node", "$1", "instance", "([^:]+).*")))`,
+        legendFormat: '{{node}} Receive',
+      },
+      {
+        refId: 'tx',
+        expr: `- sum by (cluster, node) (max by (cluster, node, device) (label_replace(rate(node_network_transmit_drop_total{cluster="${clusterRegex}"}[$__rate_interval]), "node", "$1", "instance", "([^:]+).*")))`,
+        legendFormat: '{{node}} Transmit',
+      },
+    ],
+  });
+
+  const saturationByNodePanel = PanelBuilders.timeseries().setTitle('Network Saturation by node').setUnit('pps').setData(saturationByNodeRunner).build();
+
+  const bandwidthByNodeRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'rx',
+        expr: `sum by (cluster, node) (max by (cluster, node, device) (label_replace(rate(node_network_receive_bytes_total{cluster=~"${clusterRegex}"}[$__rate_interval]), "node", "$1", "instance", "([^:]+).*")))`,
+        legendFormat: '{{node}} Receive',
+      },
+      {
+        refId: 'tx',
+        expr: `- sum by (cluster, node) (max by (cluster, node, device) (label_replace(rate(node_network_transmit_bytes_total{cluster="${clusterRegex}"}[$__rate_interval]), "node", "$1", "instance", "([^:]+).*")))`,
+        legendFormat: '{{node}} Transmit',
+      },
+    ],
+  });
+
+  const bandwidthByNodePanel = PanelBuilders.timeseries().setTitle('Network Bandwidth by node').setUnit('Bps').setData(bandwidthByNodeRunner).build();
+
   return new EmbeddedScene({
     body: new SceneFlexLayout({
       direction: 'column',
-      children: [new SceneFlexItem({ height: 300, body: PanelBuilders.table().setTitle('Firing alerts').setData(alertsTable).build() })],
+      children: [
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: bandwidthPanel }),
+            new SceneFlexItem({ height: 300, body: saturationPanel }),
+          ],
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: saturationByNodePanel }),
+            new SceneFlexItem({ height: 300, body: bandwidthByNodePanel }),
+          ],
+        }),
+      ],
+    }),
+  });
+}
+
+const FS_DEVICE_REGEX = '(/dev.+)|mmcblk.p.+|nvme.+|rbd.+|sd.+|vd.+|xvd.+|dm-.+|dasd.+';
+
+function getClusterStorageScene(clusterRegex: string) {
+  const ephemeralUsageRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'usage',
+        expr: `container_fs_usage_bytes{k8s_cluster_name="${clusterRegex}", container!="POD"} / on(pod, container, k8s_namespace_name) group_left max by (pod, container, k8s_namespace_name) (kube_pod_container_resource_limits{k8s_cluster_name="${clusterRegex}", resource="ephemeral_storage"})`,
+        legendFormat: '{{k8s_namespace_name}}/{{pod}}/{{container}}',
+      },
+    ],
+  });
+
+  const ephemeralUsagePanel = PanelBuilders.timeseries().setTitle('Ephemeral Volume Usage').setUnit('percentunit').setData(ephemeralUsageRunner).build();
+
+  const pvcStorageClassRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'storageclass',
+        expr: `count by (storageclass) (max by (cluster, namespace, persistentvolumeclaim, storageclass) (kube_persistentvolumeclaim_info{cluster="${clusterRegex}", namespace!="", persistentvolumeclaim!="", storageclass!=""}))`,
+        legendFormat: '{{storageclass}}',
+      },
+    ],
+  });
+
+  const pvcStorageClassPanel = PanelBuilders.timeseries().setTitle('PVC Storage Class').setUnit('short').setData(pvcStorageClassRunner).build();
+
+  const pvcVolumeBytesRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'requests',
+        expr: `sum by (cluster) (max by (cluster, namespace, persistentvolumeclaim) (kube_persistentvolumeclaim_resource_requests_storage_bytes{cluster="${clusterRegex}", namespace!="", persistentvolumeclaim!=""}))`,
+        legendFormat: 'Requests',
+      },
+      {
+        refId: 'capacity',
+        expr: `sum by (cluster) (max by (cluster, namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes{cluster="${clusterRegex}", namespace!="", persistentvolumeclaim!=""}))`,
+        legendFormat: 'Capacity',
+      },
+      {
+        refId: 'used',
+        expr: `sum by (cluster) (max by (cluster, namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes{cluster="${clusterRegex}", namespace!="", persistentvolumeclaim!=""}))`,
+        legendFormat: 'Used',
+      },
+    ],
+  });
+
+  const pvcVolumeBytesPanel = PanelBuilders.timeseries()
+    .setTitle('PVC Volume Bytes')
+    .setUnit('bytes')
+    .setData(pvcVolumeBytesRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .build();
+
+  const pvcVolumeBytesByNamespaceRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'usage_pct',
+        expr: `avg by (cluster, namespace) (max by (cluster, namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes{cluster="${clusterRegex}"}) / on (cluster, namespace, persistentvolumeclaim) group_left() max by (cluster, namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes{cluster="${clusterRegex}"}))`,
+        legendFormat: '{{namespace}}',
+      },
+    ],
+  });
+
+  const pvcVolumeBytesByNamespacePanel = PanelBuilders.timeseries()
+    .setTitle('PVC Volume bytes by namespace (avg)')
+    .setUnit('percentunit')
+    .setMin(0)
+    .setMax(1)
+    .setThresholds(pvcCapacityThresholds)
+    .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
+    .setData(pvcVolumeBytesByNamespaceRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .build();
+
+  const pvcVolumeInodesRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'inodes',
+        expr: `sum by (cluster) (max by (cluster, namespace, persistentvolumeclaim) (kubelet_volume_stats_inodes{cluster="${clusterRegex}", namespace!="", persistentvolumeclaim!=""}))`,
+        legendFormat: 'Total',
+      },
+      {
+        refId: 'inodes_used',
+        expr: `sum by (cluster) (max by (cluster, namespace, persistentvolumeclaim) (kubelet_volume_stats_inodes_used{cluster="${clusterRegex}", namespace!="", persistentvolumeclaim!=""}))`,
+        legendFormat: 'Used',
+      },
+    ],
+  });
+
+  const pvcVolumeInodesPanel = PanelBuilders.timeseries()
+    .setTitle('PVC Volume inodes')
+    .setUnit('short')
+    .setData(pvcVolumeInodesRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .build();
+
+  const pvcVolumeInodesByNamespaceRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'inodes_used_pct',
+        expr: `avg by (cluster, namespace) (max by (cluster, namespace, persistentvolumeclaim) (kubelet_volume_stats_inodes_used{cluster="${clusterRegex}"}) / on (cluster, namespace, persistentvolumeclaim) group_left() max by (cluster, namespace, persistentvolumeclaim) (kubelet_volume_stats_inodes{cluster="${clusterRegex}"}))`,
+        legendFormat: '{{namespace}}',
+      },
+    ],
+  });
+
+  const pvcVolumeInodesByNamespacePanel = PanelBuilders.timeseries()
+    .setTitle('PVC Volume inodes by namespace (avg)')
+    .setUnit('percentunit')
+    .setMin(0)
+    .setMax(1)
+    .setThresholds(pvcCapacityThresholds)
+    .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
+    .setData(pvcVolumeInodesByNamespaceRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .build();
+
+  const pvcStatusRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'phase',
+        expr: `count by (cluster, phase) (max by (cluster, namespace, persistentvolumeclaim, phase) (kube_persistentvolumeclaim_status_phase{cluster="${clusterRegex}", namespace!="", persistentvolumeclaim!="", phase!=""} == 1))`,
+        legendFormat: '{{phase}}',
+      },
+    ],
+  });
+
+  const pvcStatusPanel = PanelBuilders.timeseries().setTitle('PVC Status').setUnit('short').setData(pvcStatusRunner).build();
+
+  const pvStatusRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'phase',
+        expr: `count by (cluster, phase) (max by (cluster, persistentvolume, phase) (kube_persistentvolume_status_phase{cluster="${clusterRegex}", persistentvolume!="", phase!=""} == 1))`,
+        legendFormat: '{{phase}}',
+      },
+    ],
+  });
+
+  const pvStatusPanel = PanelBuilders.timeseries().setTitle('PV Status').setUnit('short').setData(pvStatusRunner).build();
+
+  const throughputRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'reads',
+        expr: `sum(rate(container_fs_reads_bytes_total{cluster=~"${clusterRegex}", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))`,
+        legendFormat: 'Reads',
+      },
+      {
+        refId: 'writes',
+        expr: `-sum(rate(container_fs_writes_bytes_total{cluster=~"${clusterRegex}", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))`,
+        legendFormat: 'Writes',
+      },
+    ],
+  });
+
+  const throughputPanel = PanelBuilders.timeseries()
+    .setTitle('Throughput')
+    .setUnit('Bps')
+    .setData(throughputRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .build();
+
+  const throughputByNamespaceRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'reads',
+        expr: `sum by (namespace) (rate(container_fs_reads_bytes_total{cluster=~"${clusterRegex}", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))`,
+        legendFormat: '{{namespace}} Reads',
+      },
+      {
+        refId: 'writes',
+        expr: `-sum by (namespace) (rate(container_fs_writes_bytes_total{cluster=~"${clusterRegex}", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))`,
+        legendFormat: '{{namespace}} Writes',
+      },
+    ],
+  });
+
+  const throughputByNamespacePanel = PanelBuilders.timeseries()
+    .setTitle('Throughput by namespace')
+    .setUnit('Bps')
+    .setData(throughputByNamespaceRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .build();
+
+  const iopsRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'reads',
+        expr: `sum(rate(container_fs_reads_total{cluster=~"${clusterRegex}", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))`,
+        legendFormat: 'Reads',
+      },
+      {
+        refId: 'writes',
+        expr: `-sum(rate(container_fs_writes_total{cluster=~"${clusterRegex}", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))`,
+        legendFormat: 'Writes',
+      },
+    ],
+  });
+
+  const iopsPanel = PanelBuilders.timeseries()
+    .setTitle('IOPS')
+    .setUnit('iops')
+    .setData(iopsRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .build();
+
+  const iopsByNamespaceRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'reads',
+        expr: `sum by (namespace) (rate(container_fs_reads_total{cluster=~"${clusterRegex}", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))`,
+        legendFormat: '{{namespace}} Reads',
+      },
+      {
+        refId: 'writes',
+        expr: `-sum by (namespace) (rate(container_fs_writes_total{cluster=~"${clusterRegex}", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))`,
+        legendFormat: '{{namespace}} Writes',
+      },
+    ],
+  });
+
+  const iopsByNamespacePanel = PanelBuilders.timeseries()
+    .setTitle('IOPS by namespace')
+    .setUnit('iops')
+    .setData(iopsByNamespaceRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .build();
+
+  return new EmbeddedScene({
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexItem({ height: 300, body: ephemeralUsagePanel }),
+        new SceneFlexItem({ height: 300, body: pvcStorageClassPanel }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: pvcVolumeBytesPanel }),
+            new SceneFlexItem({ height: 300, body: pvcVolumeBytesByNamespacePanel }),
+          ],
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: pvcVolumeInodesPanel }),
+            new SceneFlexItem({ height: 300, body: pvcVolumeInodesByNamespacePanel }),
+          ],
+        }),
+        new SceneFlexItem({ height: 300, body: pvcStatusPanel }),
+        new SceneFlexItem({ height: 300, body: pvStatusPanel }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: throughputPanel }),
+            new SceneFlexItem({ height: 300, body: throughputByNamespacePanel }),
+          ],
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: iopsPanel }),
+            new SceneFlexItem({ height: 300, body: iopsByNamespacePanel }),
+          ],
+        }),
+      ],
     }),
   });
 }
@@ -696,14 +1699,8 @@ function getClusterDetailPage(routeMatch: SceneRouteMatch<{ cluster: string }>, 
     { slug: 'overview', title: 'Overview', getScene: () => getClusterOverviewScene(cluster, clusterRegex) },
     { slug: 'cpu', title: 'CPU', getScene: () => getClusterCpuScene(clusterRegex) },
     { slug: 'memory', title: 'Memory', getScene: () => getClusterMemoryScene(clusterRegex) },
-    {
-      slug: 'network-storage',
-      title: 'Network Storage',
-      getScene: () => getComingSoonScene('The network storage tab has not been built yet.'),
-    },
-    { slug: 'logs', title: 'Logs', getScene: () => getComingSoonScene('The logs tab has not been built yet.') },
-    { slug: 'events', title: 'Events', getScene: () => getComingSoonScene('The events tab has not been built yet.') },
-    { slug: 'alerts', title: 'Alerts', getScene: () => getClusterAlertsScene(clusterRegex) },
+    { slug: 'network', title: 'Network', getScene: () => getClusterNetworkScene(clusterRegex) },
+    { slug: 'storage', title: 'Storage', getScene: () => getClusterStorageScene(clusterRegex) },
   ];
 
   const tabs = tabDefs.map(
@@ -763,7 +1760,7 @@ const clustersPage = new SceneAppPage({
 
 export function getClustersSceneApp() {
   return new SceneApp({
-    pages: [clustersPage, getResourceSimulatorPage(), getNamespacesPage(), getWorkloadsPage(), getNodesPage()],
+    pages: [clustersPage, getResourceSimulatorPage(), getNamespacesPage(), getWorkloadsPage(), getNodesPage(), getAlertsPage()],
     urlSyncOptions: { updateUrlOnInit: true, createBrowserHistorySteps: true },
   });
 }

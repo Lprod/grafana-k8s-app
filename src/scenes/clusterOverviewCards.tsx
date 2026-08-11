@@ -1,7 +1,7 @@
 import React from 'react';
 import { getValueFormat, GrafanaTheme2 } from '@grafana/data';
 import { SceneComponentProps, SceneObjectBase, SceneObjectState, sceneGraph } from '@grafana/scenes';
-import { Alert, useStyles2 } from '@grafana/ui';
+import { Alert, Icon, useStyles2, useTheme2 } from '@grafana/ui';
 import { css } from '@emotion/css';
 import { formatDisplay } from './tableCells';
 
@@ -137,4 +137,76 @@ function ClusterHealthBannerRenderer({ model }: SceneComponentProps<ClusterHealt
     return <Alert severity="warning" title="Cluster is degraded (no user impact)" />;
   }
   return <Alert severity="error" title="Cluster is degraded (user impact)" />;
+}
+
+// Compact, clickable pill that sits next to the Cluster Health banner - it
+// needs the same "impossible to miss when something's wrong" coloring, but
+// a second full-width Alert banner underneath the health one would be too
+// much, so this stays a fixed-width badge instead.
+function alertsBadgeStyles(theme: GrafanaTheme2) {
+  return {
+    badge: css({
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing(1),
+      height: '100%',
+      minHeight: 40,
+      padding: theme.spacing(0, 2),
+      borderRadius: theme.shape.radius.default,
+      border: `1px solid transparent`,
+      fontSize: theme.typography.body.fontSize,
+      fontWeight: 500,
+      cursor: 'pointer',
+      whiteSpace: 'nowrap',
+    }),
+  };
+}
+
+interface ClusterAlertsBadgeState extends SceneObjectState {
+  alertsUrl: string;
+}
+
+export class ClusterAlertsBadge extends SceneObjectBase<ClusterAlertsBadgeState> {
+  static Component = ClusterAlertsBadgeRenderer;
+}
+
+function ClusterAlertsBadgeRenderer({ model }: SceneComponentProps<ClusterAlertsBadge>) {
+  const { alertsUrl } = model.useState();
+  const { data } = sceneGraph.getData(model).useState();
+  const styles = useStyles2(alertsBadgeStyles);
+  const theme = useTheme2();
+
+  let total = 0;
+  let hasCritical = false;
+  let hasWarning = false;
+  for (const frame of data?.series ?? []) {
+    const valueField = frame.fields.find((f) => f.type === 'number');
+    const count = valueField?.values[0];
+    if (typeof count !== 'number' || Number.isNaN(count)) {
+      continue;
+    }
+    total += count;
+    const severity = valueField?.labels?.severity;
+    if (severity === 'critical') {
+      hasCritical = true;
+    } else if (severity === 'warning') {
+      hasWarning = true;
+    }
+  }
+
+  const colorName = total === 0 ? 'green' : hasCritical ? 'red' : hasWarning ? 'orange' : 'blue';
+  const color = theme.visualization.getColorByName(colorName);
+  const label = total === 0 ? 'No firing alerts' : `${total} firing alert${total === 1 ? '' : 's'}`;
+
+  return (
+    <button
+      className={styles.badge}
+      style={{ color, borderColor: color, background: `${color}1A` }}
+      onClick={() => window.location.assign(alertsUrl)}
+    >
+      <Icon name={total === 0 ? 'check-circle' : 'exclamation-triangle'} />
+      {label}
+    </button>
+  );
 }

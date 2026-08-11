@@ -8,6 +8,7 @@ export enum ROUTES {
   Namespaces = 'namespaces',
   Workloads = 'workloads',
   Nodes = 'nodes',
+  Alerts = 'alerts',
 }
 
 // Fall back to our demo stack's datasource UIDs until an admin sets real

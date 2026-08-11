@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+
+- Clusters Drilldown CPU tab: added "by Namespace" and "by node" sections (3 timeseries panels + a table each), with p95/Last-value legend tables and dashed capacity threshold lines.
+- Rebuilt the Memory tab to match the CPU tab's structure (Efficiency stats, by-Namespace/by-node sections).
+- Added a Network tab (bandwidth/saturation, cluster-wide and by-node) and a Storage tab (ephemeral volume usage, PVC/PV bytes and inodes, PVC/PV status, throughput, IOPS), replacing the old combined "Network Storage" placeholder.
+- Removed the Logs, Events, and Alerts tabs from the cluster drilldown page.
+- Added a new top-level Alerts page: cluster/node/namespace/severity/alertname filters, firing-alert breakdowns by cluster/namespace/severity, and a table with an "Investigate" action per alert that opens Grafana Assistant with a root-cause-analysis prompt and the alert's context.
+- The Clusters table's Alerts column and a new "N firing alerts" badge on the Cluster Overview page now link to the Alerts page, pre-filtered to that cluster.
+
 ## 1.1.1
 
 - Clusters Drilldown Overview: moved the Cluster Health banner between "Cluster information" and the info cards; added a link from the "nodes count" value to the Nodes page.

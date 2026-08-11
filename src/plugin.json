@@ -50,6 +50,12 @@
     },
     {
       "type": "page",
+      "name": "Alerts",
+      "path": "/a/%PLUGIN_ID%/alerts",
+      "addToNav": true
+    },
+    {
+      "type": "page",
       "icon": "cog",
       "name": "Configuration",
       "path": "/plugins/%PLUGIN_ID%",
