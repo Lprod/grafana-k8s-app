@@ -80,10 +80,16 @@ function getNamespacesListScene() {
     queries: buildNamespacesListTargets(clusterRegex, namespaceRegex),
   });
 
+  // "merge" (not "joinByField"): every query keeps its original `by
+  // (cluster, namespace)` grouping (see namespaceQueries.ts), so merge
+  // matches rows by both fields and only needs *some* query to carry
+  // `cluster`/`namespace` for a given row - unlike joinByField-by-namespace,
+  // it doesn't leave the whole Cluster column hostage to one specific query
+  // (e.g. `info`) actually returning data.
   const transformedData = new SceneDataTransformer({
     $data: queryRunner,
     transformations: [
-      { id: 'joinByField', options: { byField: 'namespace', mode: 'outer' } },
+      { id: 'merge', options: {} },
       {
         id: 'organize',
         options: {
