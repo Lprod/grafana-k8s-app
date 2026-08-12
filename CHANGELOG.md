@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0
+
+- Added the Namespaces page: a table across all selected clusters (Cluster/Namespace/Workloads/Alerts/CPU Usage/Requests/Requests%/Mem Usage/Requests/Requests%/Limits/Limits%) with the same usage thresholds and colored-icon cells as the Clusters/Nodes tables. Cluster links to the Clusters Drilldown page; Workloads links to the (still stub) Workloads page; Alerts links to the Alerts page, both pre-filtered to that cluster and namespace.
+
 ## 1.3.0
 
 - Added the Nodes page: a table across all selected clusters (Cluster/Node/Alerts/CPU Avg/Avg%/Max/Max%/Mem Avg/Avg%/Max/Max%) with the same orange/green/red usage thresholds and colored-icon cells as the Clusters table. Cluster column links to the Clusters Drilldown page; Alerts column links to the Alerts page pre-filtered to that cluster and node.
