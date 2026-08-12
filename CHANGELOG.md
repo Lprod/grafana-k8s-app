@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.2
+
+- Clusters Drilldown Overview: fixed the "Cluster information" info cards rendering at uneven widths (a long cluster name could force the left card wider than the right one even though both were flex-equal) by giving both cards an explicit 50/50 width and wrapping long values instead of letting them force extra width.
+
 ## 1.2.1
 
 - Fixed cross-page variable propagation: navigating between top-level pages (Clusters, Namespaces, Workloads, Nodes, Alerts) with a cluster/namespace/node/severity/alertname filter always showed "All" on the destination page, regardless of navigation method (drilldown links, table links, or a hard reload).

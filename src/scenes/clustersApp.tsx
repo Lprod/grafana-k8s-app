@@ -546,8 +546,8 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
           direction: 'row',
           ySizing: 'content',
           children: [
-            new SceneFlexItem({ ySizing: 'content', minWidth: 0, body: infoCard }),
-            new SceneFlexItem({ ySizing: 'content', minWidth: 0, body: capacityCard }),
+            new SceneFlexItem({ width: '50%', ySizing: 'content', minWidth: 0, body: infoCard }),
+            new SceneFlexItem({ width: '50%', ySizing: 'content', minWidth: 0, body: capacityCard }),
           ],
         }),
         new SceneFlexItem({

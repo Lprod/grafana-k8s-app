@@ -50,6 +50,7 @@ function infoCardStyles(theme: GrafanaTheme2) {
       fontSize: theme.typography.body.fontSize,
       color: theme.colors.text.primary,
       marginTop: theme.spacing(0.25),
+      wordBreak: 'break-word',
     }),
     valueLink: css({
       fontSize: theme.typography.body.fontSize,
@@ -60,6 +61,7 @@ function infoCardStyles(theme: GrafanaTheme2) {
       border: 'none',
       padding: 0,
       textAlign: 'left',
+      wordBreak: 'break-word',
       '&:hover': {
         textDecoration: 'underline',
       },
