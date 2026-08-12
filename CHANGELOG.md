@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- Fixed cross-page variable propagation: navigating between top-level pages (Clusters, Namespaces, Workloads, Nodes, Alerts) with a cluster/namespace/node/severity/alertname filter always showed "All" on the destination page, regardless of navigation method (drilldown links, table links, or a hard reload).
+- Fixed a related regression where a filter value could "leak" back into a page you never explicitly filtered (e.g. returning to the Clusters list after visiting a cluster-filtered Alerts page could incorrectly show only one cluster).
+
 ## 1.2.0
 
 - Clusters Drilldown CPU tab: added "by Namespace" and "by node" sections (3 timeseries panels + a table each), with p95/Last-value legend tables and dashed capacity threshold lines.

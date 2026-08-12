@@ -1749,7 +1749,7 @@ const clustersPage = new SceneAppPage({
     new SceneTimePicker({}),
     new SceneRefreshPicker({ refresh: '1m' }),
   ],
-  preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${CLUSTER_VARIABLE_NAME}`],
+  preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   drilldowns: [
     {
       routePath: `/:cluster/*`,

@@ -13,6 +13,43 @@ export const NODES_VARIABLE_NAME = 'nodes';
 export const SEVERITY_VARIABLE_NAME = 'severity';
 export const ALERTNAME_VARIABLE_NAME = 'alertname';
 
+// SceneAppPage's `$variables` are constructed eagerly (unlike the lazily
+// invoked `getScene` factory) for EVERY top-level page at once, as soon as
+// `getClustersSceneApp()` runs - not just for whichever page the user is
+// actually navigating to. So when several top-level pages each declare
+// their own same-named variable (e.g. every top-level page has its own
+// "cluster"), Scenes' URL-key deduplication silently renames every page but
+// the first-registered one to "-2"/"-3" etc in the whole scene graph, and a
+// cross-page link's plain `var-cluster=...` query param lands on a
+// suffixed key nothing reads, leaving the destination page showing "All".
+//
+// The fix must NOT read this from the constructor: on a hard reload landing
+// directly on, say, Alerts with `?var-cluster=demo-cluster-aws`, every
+// top-level page's variable is constructed at that same instant and would
+// ALL see that query param - including Clusters, Namespaces etc, which the
+// user never visited. That value then sits latent in memory and leaks back
+// out the next time the user navigates to one of those other pages (via
+// Scenes' own url sync re-serializing whatever the variable currently
+// holds). Only reacting on *activation* - which fires when a page's own
+// variable set actually mounts as the active page, not merely once
+// constructed - correctly scopes the fix to the page actually being viewed.
+function initialValueFromUrl(variableName: string): string | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+  return new URLSearchParams(window.location.search).get(`var-${variableName}`) ?? undefined;
+}
+
+function syncValueFromUrlOnActivation(variable: QueryVariable, variableName: string): QueryVariable {
+  variable.addActivationHandler(() => {
+    const urlValue = initialValueFromUrl(variableName);
+    if (urlValue !== undefined) {
+      variable.changeValueTo(urlValue);
+    }
+  });
+  return variable;
+}
+
 export function createThanosDatasourceVariable() {
   return new DataSourceVariable({
     name: THANOS_VARIABLE_NAME,
@@ -42,7 +79,7 @@ export function createRqliteDatasourceVariable() {
 
 export function createClusterFilterVariable(options: { isMulti?: boolean } = {}) {
   const isMulti = options.isMulti ?? true;
-  return new QueryVariable({
+  const variable = new QueryVariable({
     name: CLUSTER_VARIABLE_NAME,
     label: 'Cluster',
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -52,6 +89,7 @@ export function createClusterFilterVariable(options: { isMulti?: boolean } = {})
     allValue: isMulti ? '.+' : undefined,
     value: isMulti ? '$__all' : '',
   });
+  return syncValueFromUrlOnActivation(variable, CLUSTER_VARIABLE_NAME);
 }
 
 // clusterRegex defaults to referencing the scene-level "cluster" variable,
@@ -60,7 +98,7 @@ export function createClusterFilterVariable(options: { isMulti?: boolean } = {})
 export function createNamespaceFilterVariable(options: { isMulti?: boolean; clusterRegex?: string } = {}) {
   const isMulti = options.isMulti ?? true;
   const clusterRegex = options.clusterRegex ?? `\${${CLUSTER_VARIABLE_NAME}:regex}`;
-  return new QueryVariable({
+  const variable = new QueryVariable({
     name: NAMESPACE_VARIABLE_NAME,
     label: 'Namespace',
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -73,6 +111,7 @@ export function createNamespaceFilterVariable(options: { isMulti?: boolean; clus
     allValue: isMulti ? '.+' : undefined,
     value: isMulti ? '$__all' : '',
   });
+  return syncValueFromUrlOnActivation(variable, NAMESPACE_VARIABLE_NAME);
 }
 
 // Unlike the other filter variables, the cluster detail page doesn't have a
@@ -80,7 +119,7 @@ export function createNamespaceFilterVariable(options: { isMulti?: boolean; clus
 // the drilldown route) - so the cluster is inlined directly into the query.
 export function createNodesFilterVariable(clusterRegex: string, options: { isMulti?: boolean } = {}) {
   const isMulti = options.isMulti ?? true;
-  return new QueryVariable({
+  const variable = new QueryVariable({
     name: NODES_VARIABLE_NAME,
     label: 'Node',
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -93,11 +132,12 @@ export function createNodesFilterVariable(clusterRegex: string, options: { isMul
     allValue: isMulti ? '.+' : undefined,
     value: isMulti ? '$__all' : '',
   });
+  return syncValueFromUrlOnActivation(variable, NODES_VARIABLE_NAME);
 }
 
 export function createSeverityFilterVariable(options: { isMulti?: boolean } = {}) {
   const isMulti = options.isMulti ?? true;
-  return new QueryVariable({
+  const variable = new QueryVariable({
     name: SEVERITY_VARIABLE_NAME,
     label: 'Severity',
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -110,11 +150,12 @@ export function createSeverityFilterVariable(options: { isMulti?: boolean } = {}
     allValue: isMulti ? '.+' : undefined,
     value: isMulti ? '$__all' : '',
   });
+  return syncValueFromUrlOnActivation(variable, SEVERITY_VARIABLE_NAME);
 }
 
 export function createAlertnameFilterVariable(options: { isMulti?: boolean } = {}) {
   const isMulti = options.isMulti ?? true;
-  return new QueryVariable({
+  const variable = new QueryVariable({
     name: ALERTNAME_VARIABLE_NAME,
     label: 'Alert name',
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -127,11 +168,12 @@ export function createAlertnameFilterVariable(options: { isMulti?: boolean } = {
     allValue: isMulti ? '.+' : undefined,
     value: isMulti ? '$__all' : '',
   });
+  return syncValueFromUrlOnActivation(variable, ALERTNAME_VARIABLE_NAME);
 }
 
 export function createWorkloadFilterVariable(options: { isMulti?: boolean } = {}) {
   const isMulti = options.isMulti ?? true;
-  return new QueryVariable({
+  const variable = new QueryVariable({
     name: WORKLOAD_VARIABLE_NAME,
     label: 'Workload',
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -144,4 +186,5 @@ export function createWorkloadFilterVariable(options: { isMulti?: boolean } = {}
     allValue: isMulti ? '.+' : undefined,
     value: isMulti ? '$__all' : '',
   });
+  return syncValueFromUrlOnActivation(variable, WORKLOAD_VARIABLE_NAME);
 }

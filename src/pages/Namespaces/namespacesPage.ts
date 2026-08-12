@@ -40,14 +40,11 @@ export function getNamespacesPage() {
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
     ],
-    preserveUrlKeys: [
-      'from',
-      'to',
-      'timezone',
-      'refresh',
-      `var-${THANOS_VARIABLE_NAME}`,
-      `var-${CLUSTER_VARIABLE_NAME}`,
-      `var-${NAMESPACE_VARIABLE_NAME}`,
-    ],
+    // Deliberately excludes the filter variables (cluster/namespace): they
+    // must reset when landing on this page fresh (e.g. via the left nav),
+    // and only carry a value forward when an explicit drilldown link sets
+    // it directly in the destination URL - see datasourceVariables.ts's
+    // syncValueFromUrlOnActivation for how that value actually lands.
+    preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });
 }

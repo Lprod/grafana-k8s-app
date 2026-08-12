@@ -222,17 +222,8 @@ export function getAlertsPage() {
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
     ],
-    preserveUrlKeys: [
-      'from',
-      'to',
-      'timezone',
-      'refresh',
-      `var-${THANOS_VARIABLE_NAME}`,
-      `var-${CLUSTER_VARIABLE_NAME}`,
-      `var-${NODES_VARIABLE_NAME}`,
-      `var-${NAMESPACE_VARIABLE_NAME}`,
-      `var-${SEVERITY_VARIABLE_NAME}`,
-      `var-${ALERTNAME_VARIABLE_NAME}`,
-    ],
+    // Deliberately excludes the filter variables - see the same note in
+    // namespacesPage.ts.
+    preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });
 }
