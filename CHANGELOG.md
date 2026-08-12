@@ -3,6 +3,7 @@
 ## 1.4.0
 
 - Added the Namespaces page: a table across all selected clusters (Cluster/Namespace/Workloads/Alerts/CPU Usage/Requests/Requests%/Mem Usage/Requests/Requests%/Limits/Limits%) with the same usage thresholds and colored-icon cells as the Clusters/Nodes tables. Cluster links to the Clusters Drilldown page; Workloads links to the (still stub) Workloads page; Alerts links to the Alerts page, both pre-filtered to that cluster and namespace.
+- Added the Workloads page: a table across all selected clusters/namespaces (Cluster/Namespace/Workload/Type/Ready Pods/Desired Pods/CPU Usage/Requests/Requests%/Mem Usage/Requests/Requests%/Limits/Limits%). Unlike the Nodes/Namespaces tables, a workload's identity is cluster+namespace+workload+type (names repeat across namespaces), so this table merges its 10 queries by every field they share instead of a single join key.
 
 ## 1.3.0
 
