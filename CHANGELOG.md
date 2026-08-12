@@ -3,6 +3,7 @@
 ## 1.3.0
 
 - Added the Nodes page: a table across all selected clusters (Cluster/Node/Alerts/CPU Avg/Avg%/Max/Max%/Mem Avg/Avg%/Max/Max%) with the same orange/green/red usage thresholds and colored-icon cells as the Clusters table. Cluster column links to the Clusters Drilldown page; Alerts column links to the Alerts page pre-filtered to that cluster and node.
+- Fixed the Alerts table's "Investigate" button sending Grafana Assistant a prompt with blank alert details (cluster/severity/alertname/namespace/pod/container). It looked up the table's ALL-CAPS display names (`CLUSTER`, `SEVERITY`, ...), but Grafana's rename transform only sets a field's display name, not its underlying name - the button now reads the original lowercase field names.
 
 ## 1.2.2
 

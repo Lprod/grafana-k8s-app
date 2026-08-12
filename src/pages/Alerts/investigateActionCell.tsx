@@ -33,13 +33,17 @@ function fieldValue(frame: CustomCellRendererProps['frame'], rowIndex: number, f
   return field ? String(field.values[rowIndex] ?? '') : '';
 }
 
+// The alerts table's `organize` transform renames these fields to
+// ALL-CAPS for display via `renameByName`, but that only sets
+// `field.config.displayName` - the underlying `field.name` stays the
+// original lowercase Prometheus label name. Look up by that original name.
 export function InvestigateActionCell({ frame, rowIndex }: CustomCellRendererProps) {
-  const cluster = fieldValue(frame, rowIndex, 'CLUSTER');
-  const severity = fieldValue(frame, rowIndex, 'SEVERITY');
-  const alertname = fieldValue(frame, rowIndex, 'ALERTNAME');
-  const namespace = fieldValue(frame, rowIndex, 'NAMESPACE');
-  const pod = fieldValue(frame, rowIndex, 'POD');
-  const container = fieldValue(frame, rowIndex, 'CONTAINER');
+  const cluster = fieldValue(frame, rowIndex, 'cluster');
+  const severity = fieldValue(frame, rowIndex, 'severity');
+  const alertname = fieldValue(frame, rowIndex, 'alertname');
+  const namespace = fieldValue(frame, rowIndex, 'namespace');
+  const pod = fieldValue(frame, rowIndex, 'pod');
+  const container = fieldValue(frame, rowIndex, 'container');
 
   const prompt = `Perform a root cause analysis for the firing Kubernetes alert "${alertname}" (severity: ${severity}) in namespace "${namespace}" on cluster "${cluster}"${
     pod ? `, pod "${pod}"` : ''
