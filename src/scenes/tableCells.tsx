@@ -111,3 +111,67 @@ export function linkedValueCell(percentFieldName: string) {
     );
   };
 }
+
+// Combines a "ready" field with a sibling "desired" field into a single
+// "ready / desired" cell with a proportional colored bar underneath -
+// matching Grafana Play's Workloads "Pods" column. The desired field stays
+// present in the data frame (for this lookup) but is hidden from its own
+// column via `hideFrom: { viz: true }` on that field's override, so it
+// doesn't also render as a separate "Desired Pods" column.
+//
+// Unlike the usage-tier coloring elsewhere in this codebase (low is orange/
+// underused, high is red/near-capacity), readiness is the opposite sense:
+// ready caught up to (or past, e.g. mid-rollout) desired is healthy/green,
+// short of desired is red. Plain colors rather than usageTierFromFraction,
+// which encodes the other scale.
+export function readyDesiredPodsCell(desiredFieldName: string) {
+  return function ReadyDesiredPodsCell({ rowIndex, frame, value }: CustomCellRendererProps) {
+    const theme = useTheme2();
+    const ready = typeof value === 'number' ? value : Number(value ?? 0);
+    const desired = findFraction(frame, rowIndex, desiredFieldName) ?? 0;
+    const fraction = desired > 0 ? Math.min(ready / desired, 1) : ready > 0 ? 1 : 0;
+    const color =
+      desired === 0 && ready === 0
+        ? theme.visualization.getColorByName('grey')
+        : ready >= desired
+          ? theme.visualization.getColorByName('green')
+          : theme.visualization.getColorByName('red');
+
+    return (
+      <div
+        style={{
+          position: 'relative',
+          height: 20,
+          minWidth: 60,
+          width: '100%',
+          borderRadius: 2,
+          overflow: 'hidden',
+          backgroundColor: theme.colors.background.secondary,
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: `${fraction * 100}%`,
+            backgroundColor: color,
+            opacity: 0.35,
+          }}
+        />
+        <span
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            fontSize: 12,
+          }}
+        >
+          {ready} / {desired}
+        </span>
+      </div>
+    );
+  };
+}

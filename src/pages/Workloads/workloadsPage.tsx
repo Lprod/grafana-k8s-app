@@ -19,7 +19,7 @@ import { TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildWorkloadsListTargets } from '../../queries/workloadQueries';
-import { UsageIcon, linkedValueCell, usageColorFromTier } from '../../scenes/tableCells';
+import { UsageIcon, linkedValueCell, readyDesiredPodsCell, usageColorFromTier } from '../../scenes/tableCells';
 import {
   CLUSTER_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
@@ -127,13 +127,20 @@ function getWorkloadsListScene() {
         .overrideDisplayName('Type')
         .overrideCustomFieldConfig('align', 'left')
         .matchFieldsWithName('Value #ready_pods')
-        .overrideDisplayName('Ready Pods')
+        .overrideDisplayName('Pods')
         .overrideUnit('none')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: readyDesiredPodsCell('Value #desired_pods'),
+        } as any)
         .matchFieldsWithName('Value #desired_pods')
-        .overrideDisplayName('Desired Pods')
-        .overrideUnit('none')
-        .overrideCustomFieldConfig('align', 'left')
+        // Not its own column - readyDesiredPodsCell (above) reads this
+        // field's value for the same row to render "ready / desired". The
+        // field must stay present in the data (hideFrom.viz only hides its
+        // own column in the Table panel, unlike excludeByName in the
+        // organize transform, which would remove the field entirely).
+        .overrideCustomFieldConfig('hideFrom', { viz: true, legend: false, tooltip: false })
         .matchFieldsWithName('Value #cpu_usage')
         .overrideDisplayName('CPU Usage')
         .overrideUnit('cores')
