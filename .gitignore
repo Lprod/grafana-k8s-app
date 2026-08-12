@@ -49,3 +49,6 @@ ci/
 
 # Local, machine-specific agent settings (not shared team config)
 .claude/settings.local.json
+
+# graphify's generated knowledge graph - regenerated locally, would just churn on every commit
+graphify-out/
