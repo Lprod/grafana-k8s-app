@@ -23,5 +23,13 @@ scrape_configs:
 
   - job_name: kube-metrics-demo
     fallback_scrape_protocol: PrometheusText0.0.4
+    # Several demo metrics embed their own "job" label (e.g.
+    # kube_pod_container_resource_requests{job="kube-state-metrics",...},
+    # matching the real kube-state-metrics/cAdvisor exporters the Workloads/
+    # Namespaces queries filter on). Without honor_labels, Prometheus
+    # overwrites that with this scrape job's own name ("kube-metrics-demo"),
+    # so job="kube-state-metrics" would never match. Real kube-state-metrics
+    # scrape configs commonly set this for the same reason.
+    honor_labels: true
     static_configs:
       - targets: ['kube-metrics-demo:80']

@@ -183,3 +183,138 @@ container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="app
 # TYPE container_fs_writes_total counter
 container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="app-0",container="app",device="/dev/sda"} 2000000
 container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="app-0",container="app",device="/dev/sda"} 3500000
+
+# Workloads page demo data: one workload per type in namespace "default",
+# reusing the existing "app" Deployment (pod app-0) and adding a DaemonSet
+# ("node-agent"), a StatefulSet ("cache"), a completed Job ("db-migrate"),
+# and a bare pod ("debug-shell"). "app" is intentionally mismatched on
+# demo-cluster-gce (spec_replicas=3, available=2) to match the existing
+# KubeDeploymentReplicasMismatch alert on that cluster.
+#
+# Deliberately NOT adding pod-level rows to
+# node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate:
+# that metric already exists above at node granularity (no pod label) and
+# is summed by the Cluster CPU chart and the Namespaces page's CPU Usage
+# column; adding pod-level rows under the same name would double-count into
+# those already-correct totals. Workloads' CPU Usage/CPU Requests % stay
+# empty as a result - CPU Requests/Limits, Ready/Desired Pods, and all
+# Memory columns (a separate, previously-unused metric name) still populate.
+# HELP namespace_workload_pod:kube_pod_owner:relabel Recording rule: pod-to-workload attribution (demo data).
+# TYPE namespace_workload_pod:kube_pod_owner:relabel gauge
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="app-aws",workload="app",workload_type="deployment"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="app-gce",workload="app",workload_type="deployment"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",workload="node-agent",workload_type="daemonset"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",workload="node-agent",workload_type="daemonset"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",workload="cache",workload_type="statefulset"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",workload="cache",workload_type="statefulset"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",workload="db-migrate",workload_type="job"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",workload="db-migrate",workload_type="job"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",workload="debug-shell",workload_type="pod"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",workload="debug-shell",workload_type="pod"} 1
+
+# HELP kube_pod_owner Information about the Pod's owner (demo data).
+# TYPE kube_pod_owner gauge
+kube_pod_owner{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",owner_kind=""} 1
+kube_pod_owner{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",owner_kind=""} 1
+
+# HELP kube_deployment_status_replicas_available The number of available replicas per deployment (demo data).
+# TYPE kube_deployment_status_replicas_available gauge
+kube_deployment_status_replicas_available{cluster="demo-cluster-aws",namespace="default",deployment="app"} 1
+kube_deployment_status_replicas_available{cluster="demo-cluster-gce",namespace="default",deployment="app"} 2
+
+# HELP kube_deployment_spec_replicas Number of desired pods for a deployment (demo data).
+# TYPE kube_deployment_spec_replicas gauge
+kube_deployment_spec_replicas{cluster="demo-cluster-aws",namespace="default",deployment="app"} 1
+kube_deployment_spec_replicas{cluster="demo-cluster-gce",namespace="default",deployment="app"} 3
+
+# HELP kube_daemonset_status_number_ready The number of nodes that should be running the daemon pod and have one or more running and ready (demo data).
+# TYPE kube_daemonset_status_number_ready gauge
+kube_daemonset_status_number_ready{cluster="demo-cluster-aws",namespace="default",daemonset="node-agent"} 3
+kube_daemonset_status_number_ready{cluster="demo-cluster-gce",namespace="default",daemonset="node-agent"} 2
+
+# HELP kube_daemonset_status_desired_number_scheduled The number of nodes that should be running the daemon pod (demo data).
+# TYPE kube_daemonset_status_desired_number_scheduled gauge
+kube_daemonset_status_desired_number_scheduled{cluster="demo-cluster-aws",namespace="default",daemonset="node-agent"} 3
+kube_daemonset_status_desired_number_scheduled{cluster="demo-cluster-gce",namespace="default",daemonset="node-agent"} 2
+
+# HELP kube_statefulset_status_replicas_ready The number of ready replicas per StatefulSet (demo data).
+# TYPE kube_statefulset_status_replicas_ready gauge
+kube_statefulset_status_replicas_ready{cluster="demo-cluster-aws",namespace="default",statefulset="cache"} 2
+kube_statefulset_status_replicas_ready{cluster="demo-cluster-gce",namespace="default",statefulset="cache"} 3
+
+# HELP kube_statefulset_replicas Number of desired replicas per StatefulSet (demo data).
+# TYPE kube_statefulset_replicas gauge
+kube_statefulset_replicas{cluster="demo-cluster-aws",namespace="default",statefulset="cache"} 2
+kube_statefulset_replicas{cluster="demo-cluster-gce",namespace="default",statefulset="cache"} 3
+
+# HELP kube_job_status_succeeded The number of pods which reached Phase Succeeded (demo data).
+# TYPE kube_job_status_succeeded gauge
+kube_job_status_succeeded{cluster="demo-cluster-aws",namespace="default",job_name="db-migrate"} 1
+kube_job_status_succeeded{cluster="demo-cluster-gce",namespace="default",job_name="db-migrate"} 1
+
+# HELP kube_job_spec_completions The number of pods which are still required to finish (demo data).
+# TYPE kube_job_spec_completions gauge
+kube_job_spec_completions{cluster="demo-cluster-aws",namespace="default",job_name="db-migrate"} 1
+kube_job_spec_completions{cluster="demo-cluster-gce",namespace="default",job_name="db-migrate"} 1
+
+# HELP kube_namespace_status_phase The phase a namespace is currently in (demo data).
+# TYPE kube_namespace_status_phase gauge
+kube_namespace_status_phase{cluster="demo-cluster-aws",namespace="default",phase="Active"} 1
+kube_namespace_status_phase{cluster="demo-cluster-gce",namespace="default",phase="Active"} 1
+kube_namespace_status_phase{cluster="demo-cluster-aws",namespace="cluster-tests",phase="Active"} 1
+kube_namespace_status_phase{cluster="demo-cluster-gce",namespace="cluster-tests",phase="Active"} 1
+
+# CPU/memory requests+limits per workload pod (demo data). resource="cpu" is
+# in cores, resource="memory" in bytes - both new resource values on
+# kube_pod_container_resource_limits (declared above for "ephemeral_storage"
+# on app-0), so no double counting with the Storage tab's usage of it.
+# HELP kube_pod_container_resource_requests Resource requests of a container (demo data).
+# TYPE kube_pod_container_resource_requests gauge
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",resource="cpu"} 0.5
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",resource="cpu"} 0.5
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",resource="memory"} 536870912
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",resource="memory"} 536870912
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",resource="cpu"} 0.1
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",resource="cpu"} 0.1
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",resource="memory"} 134217728
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",resource="memory"} 134217728
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",resource="cpu"} 0.25
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",resource="cpu"} 0.25
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",resource="memory"} 268435456
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",resource="memory"} 268435456
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",resource="cpu"} 0.2
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",resource="cpu"} 0.2
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",resource="memory"} 134217728
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",resource="memory"} 134217728
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",resource="cpu"} 0.05
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",resource="cpu"} 0.05
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",resource="memory"} 67108864
+kube_pod_container_resource_requests{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",resource="memory"} 67108864
+
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",resource="memory"} 1073741824
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",resource="memory"} 1073741824
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",resource="memory"} 268435456
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",resource="memory"} 268435456
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",resource="memory"} 536870912
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",resource="memory"} 536870912
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",resource="memory"} 268435456
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",resource="memory"} 268435456
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",resource="memory"} 134217728
+kube_pod_container_resource_limits{job="kube-state-metrics",cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",resource="memory"} 134217728
+
+# Memory usage per workload pod (demo data). This is the raw cAdvisor-style
+# metric name (job="kubelet", metrics_path="/metrics/cadvisor") - distinct
+# from node_namespace_pod_container:container_memory_working_set_bytes
+# (node-granularity recording rule, declared above), so no double counting.
+# HELP container_memory_working_set_bytes Container memory working set (demo data).
+# TYPE container_memory_working_set_bytes gauge
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",image="app:1.0"} 419430400
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",image="app:1.0"} 419430400
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",image="node-agent:1.0"} 125829120
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",image="node-agent:1.0"} 125829120
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",image="cache:1.0"} 209715200
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",image="cache:1.0"} 209715200
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",image="db-migrate:1.0"} 104857600
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",image="db-migrate:1.0"} 104857600
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",image="debug-shell:1.0"} 62914560
+container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",image="debug-shell:1.0"} 62914560
