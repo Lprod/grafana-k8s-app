@@ -1,5 +1,6 @@
 import { DataSourceVariable, QueryVariable } from '@grafana/scenes';
 import { getDatasourceDefaults } from '../utils/appJsonData';
+import { substituteClusterAndNamespace, workloadTableQueries } from '../queries/workloadQueries';
 
 // Thanos is exposed to Grafana as a Prometheus-compatible datasource, so we
 // pick from all configured "prometheus" datasources (Thanos included).
@@ -173,14 +174,52 @@ export function createAlertnameFilterVariable(options: { isMulti?: boolean } = {
 
 export function createWorkloadFilterVariable(options: { isMulti?: boolean } = {}) {
   const isMulti = options.isMulti ?? true;
+  // kube_pod_owner{owner_name=...} (the previous source here) only carries
+  // owner_name for pods WITHOUT an owner (bare pods) - every other workload
+  // type gets its "workload" label from a different source metric via
+  // label_replace (see workloadTableQueries.ready_pods), so that query
+  // always came back empty except for bare pods. Reusing ready_pods itself
+  // guarantees this variable's options match exactly what the Workloads
+  // table's own "workload" column can show, however it's derived.
+  //
+  // Can't use `label_values(<expr>, workload)` for that: Grafana sends
+  // <expr> as Prometheus's `match[]` parameter (a GET to
+  // /api/v1/label/workload/values?match[]=<expr>), and match[] only accepts
+  // a plain series selector - not an expression with aggregations,
+  // label_replace, or the `OR`/`*`/`group_left` this one has ("invalid
+  // parameter \"match[]\": ... unexpected \"(\""). `query_result(<expr>)`
+  // runs it as a normal instant query via /api/v1/query instead, which has
+  // no such restriction (verified directly against Prometheus) - but only
+  // if Grafana actually recognizes the `query_result(...)` wrapper: its
+  // detection regex doesn't span newlines, and ready_pods is a formatted
+  // multi-line expression with `#`-comments, so left as-is Grafana failed
+  // to match the wrapper and sent the whole literal string (including the
+  // "query_result(" text) to match[] again, same failure as label_values.
+  // Comments are stripped and every line joined with spaces first - once
+  // it's single-line, Grafana correctly treats it as an instant query and
+  // the regex below pulls the "workload" label out of each result series.
+  const toSingleLinePromQL = (expr: string) =>
+    expr
+      .split('\n')
+      .map((line) => line.replace(/#.*$/, '').trim())
+      .filter(Boolean)
+      .join(' ');
+  const readyPodsExpr = toSingleLinePromQL(
+    substituteClusterAndNamespace(
+      workloadTableQueries.ready_pods,
+      `\${${CLUSTER_VARIABLE_NAME}:regex}`,
+      `\${${NAMESPACE_VARIABLE_NAME}:regex}`
+    )
+  );
   const variable = new QueryVariable({
     name: WORKLOAD_VARIABLE_NAME,
     label: 'Workload',
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     query: {
       refId: 'workloadVariableQuery',
-      query: `label_values(kube_pod_owner{cluster=~"\${${CLUSTER_VARIABLE_NAME}:regex}", namespace=~"\${${NAMESPACE_VARIABLE_NAME}:regex}"}, owner_name)`,
+      query: `query_result(${readyPodsExpr})`,
     },
+    regex: '/workload="([^"]+)"/',
     isMulti,
     includeAll: isMulti,
     allValue: isMulti ? '.+' : undefined,

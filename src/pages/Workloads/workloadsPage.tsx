@@ -24,9 +24,11 @@ import {
   CLUSTER_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
   THANOS_VARIABLE_NAME,
+  WORKLOAD_VARIABLE_NAME,
   createClusterFilterVariable,
   createNamespaceFilterVariable,
   createThanosDatasourceVariable,
+  createWorkloadFilterVariable,
 } from '../../variables/datasourceVariables';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
@@ -82,6 +84,26 @@ function getWorkloadsListScene() {
     $data: queryRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // The "workload" field only exists after the queries' own label_replace
+      // calls (see workloadQueries.ts), so it can't be filtered with a
+      // PromQL selector like cluster/namespace are - this row-filters the
+      // merged table instead. SceneDataTransformer interpolates scene
+      // variables into a transformation's `options` (JSON.stringify -> scene
+      // interpolate -> JSON.parse) the same way it does for query
+      // expressions, so `${workload:regex}` resolves before this runs.
+      {
+        id: 'filterByValue',
+        options: {
+          filters: [
+            {
+              fieldName: 'workload',
+              config: { id: 'regex', options: { value: `\${${WORKLOAD_VARIABLE_NAME}:regex}` } },
+            },
+          ],
+          type: 'include',
+          match: 'any',
+        },
+      },
       {
         id: 'organize',
         options: {
@@ -225,14 +247,20 @@ export function getWorkloadsPage() {
     url: WORKLOADS_URL,
     routePath: `/${ROUTES.Workloads}/*`,
     getScene: getWorkloadsListScene,
-    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'utc' }),
+    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({
-      variables: [createThanosDatasourceVariable(), createClusterFilterVariable(), createNamespaceFilterVariable()],
+      variables: [
+        createThanosDatasourceVariable(),
+        createClusterFilterVariable(),
+        createNamespaceFilterVariable(),
+        createWorkloadFilterVariable(),
+      ],
     }),
     controls: [
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: CLUSTER_VARIABLE_NAME }),
       new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
+      new VariableValueControl({ variableName: WORKLOAD_VARIABLE_NAME }),
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
