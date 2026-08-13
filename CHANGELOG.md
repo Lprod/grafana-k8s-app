@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0
+
+- Added a None/hour/day/week-before comparison picker to every timeseries panel on the Clusters Drilldown (CPU/Memory/Network/Storage/Overview tabs) and Alerts pages. It's a header action on each panel individually, not a single page-wide control - each panel toggles its own comparison independently. Rendered as a small ghost-style button (styled to match Grafana Play's own "Predict CPU usage" panel-header button) that opens a compact dropdown menu, rather than the framework's default full toolbar control. Table-only pages (Clusters, Namespaces, Workloads, Nodes) don't get it, since there's no timeseries to compare. New timeseries panels added to the Drilldown/Alerts pages pick it up automatically via `PanelTimeRangeCompare` (`src/scenes/panelTimeRangeCompare.tsx`).
+
 ## 1.4.0
 
 - Added the Namespaces page: a table across all selected clusters (Cluster/Namespace/Workloads/Alerts/CPU Usage/Requests/Requests%/Mem Usage/Requests/Requests%/Limits/Limits%) with the same usage thresholds and colored-icon cells as the Clusters/Nodes tables. Cluster links to the Clusters Drilldown page; Workloads links to the (still stub) Workloads page; Alerts links to the Alerts page, both pre-filtered to that cluster and namespace.

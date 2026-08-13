@@ -59,6 +59,7 @@ import { getWorkloadsPage } from '../pages/Workloads/workloadsPage';
 import { getNodesPage } from '../pages/Nodes/nodesPage';
 import { getAlertsPage } from '../pages/Alerts/alertsPage';
 import { UsageIcon, linkedValueCell, usageColorFromTier } from './tableCells';
+import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
@@ -400,6 +401,8 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
     .setData(cpuOptimizationRunner)
     .setOverrides(applyOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const memoryOptimizationRunner = new SceneQueryRunner({
@@ -418,6 +421,8 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
     .setData(memoryOptimizationRunner)
     .setOverrides(applyOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const nodesRunner = new SceneQueryRunner({
@@ -641,6 +646,8 @@ function getClusterCpuScene(clusterRegex: string) {
     .setUnit('cores')
     .setData(namespaceUsageRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const namespaceDistributionRunner = new SceneQueryRunner({
@@ -662,6 +669,8 @@ function getClusterCpuScene(clusterRegex: string) {
     .setCustomFieldConfig('lineWidth', 2)
     .setCustomFieldConfig('fillOpacity', 60)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const namespaceAlignmentRunner = new SceneQueryRunner({
@@ -680,6 +689,8 @@ function getClusterCpuScene(clusterRegex: string) {
     .setUnit('percentunit')
     .setData(namespaceAlignmentRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const namespacesTableRunner = new SceneQueryRunner({
@@ -775,6 +786,8 @@ function getClusterCpuScene(clusterRegex: string) {
     .setData(nodeOverviewRunner)
     .setOverrides(applyOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const nodeDistributionRunner = new SceneQueryRunner({
@@ -797,6 +810,8 @@ function getClusterCpuScene(clusterRegex: string) {
     .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
     .setData(nodeDistributionRunner)
     .setCustomFieldConfig('stacking', { mode: StackingMode.Normal })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const nodeEfficiencyRunner = new SceneQueryRunner({
@@ -818,6 +833,8 @@ function getClusterCpuScene(clusterRegex: string) {
     .setThresholds(usageThresholds)
     .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
     .setData(nodeEfficiencyRunner)
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const nodesTableRunner = new SceneQueryRunner({
@@ -989,6 +1006,8 @@ function getClusterMemoryScene(clusterRegex: string) {
     .setUnit('bytes')
     .setData(namespaceUsageRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const namespaceDistributionRunner = new SceneQueryRunner({
@@ -1010,6 +1029,8 @@ function getClusterMemoryScene(clusterRegex: string) {
     .setCustomFieldConfig('lineWidth', 2)
     .setCustomFieldConfig('fillOpacity', 60)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const namespaceAlignmentRunner = new SceneQueryRunner({
@@ -1028,6 +1049,8 @@ function getClusterMemoryScene(clusterRegex: string) {
     .setUnit('percentunit')
     .setData(namespaceAlignmentRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const namespacesTableRunner = new SceneQueryRunner({
@@ -1122,6 +1145,8 @@ function getClusterMemoryScene(clusterRegex: string) {
     .setData(nodeOverviewRunner)
     .setOverrides(applyOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const nodeDistributionRunner = new SceneQueryRunner({
@@ -1144,6 +1169,8 @@ function getClusterMemoryScene(clusterRegex: string) {
     .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
     .setData(nodeDistributionRunner)
     .setCustomFieldConfig('stacking', { mode: StackingMode.Normal })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const nodeEfficiencyRunner = new SceneQueryRunner({
@@ -1165,6 +1192,8 @@ function getClusterMemoryScene(clusterRegex: string) {
     .setThresholds(usageThresholds)
     .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
     .setData(nodeEfficiencyRunner)
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const nodesTableRunner = new SceneQueryRunner({
@@ -1316,7 +1345,7 @@ function getClusterNetworkScene(clusterRegex: string) {
     ],
   });
 
-  const bandwidthPanel = PanelBuilders.timeseries().setTitle('Network Bandwidth').setUnit('Bps').setData(bandwidthRunner).build();
+  const bandwidthPanel = PanelBuilders.timeseries().setTitle('Network Bandwidth').setUnit('Bps').setData(bandwidthRunner).setHeaderActions(new PanelTimeRangeCompare()).build();
 
   const saturationRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -1334,7 +1363,7 @@ function getClusterNetworkScene(clusterRegex: string) {
     ],
   });
 
-  const saturationPanel = PanelBuilders.timeseries().setTitle('Network Saturation').setUnit('pps').setData(saturationRunner).build();
+  const saturationPanel = PanelBuilders.timeseries().setTitle('Network Saturation').setUnit('pps').setData(saturationRunner).setHeaderActions(new PanelTimeRangeCompare()).build();
 
   const saturationByNodeRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -1352,7 +1381,7 @@ function getClusterNetworkScene(clusterRegex: string) {
     ],
   });
 
-  const saturationByNodePanel = PanelBuilders.timeseries().setTitle('Network Saturation by node').setUnit('pps').setData(saturationByNodeRunner).build();
+  const saturationByNodePanel = PanelBuilders.timeseries().setTitle('Network Saturation by node').setUnit('pps').setData(saturationByNodeRunner).setHeaderActions(new PanelTimeRangeCompare()).build();
 
   const bandwidthByNodeRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -1370,7 +1399,7 @@ function getClusterNetworkScene(clusterRegex: string) {
     ],
   });
 
-  const bandwidthByNodePanel = PanelBuilders.timeseries().setTitle('Network Bandwidth by node').setUnit('Bps').setData(bandwidthByNodeRunner).build();
+  const bandwidthByNodePanel = PanelBuilders.timeseries().setTitle('Network Bandwidth by node').setUnit('Bps').setData(bandwidthByNodeRunner).setHeaderActions(new PanelTimeRangeCompare()).build();
 
   return new EmbeddedScene({
     body: new SceneFlexLayout({
@@ -1411,7 +1440,7 @@ function getClusterStorageScene(clusterRegex: string) {
     ],
   });
 
-  const ephemeralUsagePanel = PanelBuilders.timeseries().setTitle('Ephemeral Volume Usage').setUnit('percentunit').setData(ephemeralUsageRunner).build();
+  const ephemeralUsagePanel = PanelBuilders.timeseries().setTitle('Ephemeral Volume Usage').setUnit('percentunit').setData(ephemeralUsageRunner).setHeaderActions(new PanelTimeRangeCompare()).build();
 
   const pvcStorageClassRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -1424,7 +1453,7 @@ function getClusterStorageScene(clusterRegex: string) {
     ],
   });
 
-  const pvcStorageClassPanel = PanelBuilders.timeseries().setTitle('PVC Storage Class').setUnit('short').setData(pvcStorageClassRunner).build();
+  const pvcStorageClassPanel = PanelBuilders.timeseries().setTitle('PVC Storage Class').setUnit('short').setData(pvcStorageClassRunner).setHeaderActions(new PanelTimeRangeCompare()).build();
 
   const pvcVolumeBytesRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -1452,6 +1481,8 @@ function getClusterStorageScene(clusterRegex: string) {
     .setUnit('bytes')
     .setData(pvcVolumeBytesRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const pvcVolumeBytesByNamespaceRunner = new SceneQueryRunner({
@@ -1474,6 +1505,8 @@ function getClusterStorageScene(clusterRegex: string) {
     .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
     .setData(pvcVolumeBytesByNamespaceRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const pvcVolumeInodesRunner = new SceneQueryRunner({
@@ -1497,6 +1530,8 @@ function getClusterStorageScene(clusterRegex: string) {
     .setUnit('short')
     .setData(pvcVolumeInodesRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const pvcVolumeInodesByNamespaceRunner = new SceneQueryRunner({
@@ -1519,6 +1554,8 @@ function getClusterStorageScene(clusterRegex: string) {
     .setCustomFieldConfig('thresholdsStyle', { mode: GraphThresholdsStyleMode.Dashed })
     .setData(pvcVolumeInodesByNamespaceRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const pvcStatusRunner = new SceneQueryRunner({
@@ -1532,7 +1569,7 @@ function getClusterStorageScene(clusterRegex: string) {
     ],
   });
 
-  const pvcStatusPanel = PanelBuilders.timeseries().setTitle('PVC Status').setUnit('short').setData(pvcStatusRunner).build();
+  const pvcStatusPanel = PanelBuilders.timeseries().setTitle('PVC Status').setUnit('short').setData(pvcStatusRunner).setHeaderActions(new PanelTimeRangeCompare()).build();
 
   const pvStatusRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -1545,7 +1582,7 @@ function getClusterStorageScene(clusterRegex: string) {
     ],
   });
 
-  const pvStatusPanel = PanelBuilders.timeseries().setTitle('PV Status').setUnit('short').setData(pvStatusRunner).build();
+  const pvStatusPanel = PanelBuilders.timeseries().setTitle('PV Status').setUnit('short').setData(pvStatusRunner).setHeaderActions(new PanelTimeRangeCompare()).build();
 
   const throughputRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -1568,6 +1605,8 @@ function getClusterStorageScene(clusterRegex: string) {
     .setUnit('Bps')
     .setData(throughputRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const throughputByNamespaceRunner = new SceneQueryRunner({
@@ -1591,6 +1630,8 @@ function getClusterStorageScene(clusterRegex: string) {
     .setUnit('Bps')
     .setData(throughputByNamespaceRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const iopsRunner = new SceneQueryRunner({
@@ -1614,6 +1655,8 @@ function getClusterStorageScene(clusterRegex: string) {
     .setUnit('iops')
     .setData(iopsRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const iopsByNamespaceRunner = new SceneQueryRunner({
@@ -1637,6 +1680,8 @@ function getClusterStorageScene(clusterRegex: string) {
     .setUnit('iops')
     .setData(iopsByNamespaceRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   return new EmbeddedScene({
@@ -1721,7 +1766,7 @@ function getClusterDetailPage(routeMatch: SceneRouteMatch<{ cluster: string }>, 
     routePath: `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`,
     getParentPage: () => parent,
     tabs,
-    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'utc' }),
+    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable()] }),
     controls: [
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
@@ -1739,7 +1784,7 @@ const clustersPage = new SceneAppPage({
   url: CLUSTERS_URL,
   routePath: `/clusters/*`,
   getScene: getClustersListScene,
-  $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'utc' }),
+  $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
   $variables: new SceneVariableSet({
     variables: [createThanosDatasourceVariable(), createClusterFilterVariable()],
   }),

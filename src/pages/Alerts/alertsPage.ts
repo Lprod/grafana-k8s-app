@@ -16,6 +16,7 @@ import {
   VariableValueControl,
 } from '@grafana/scenes';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
+import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { addActionField, InvestigateActionCell } from './investigateActionCell';
 import {
   ALERTNAME_VARIABLE_NAME,
@@ -71,6 +72,7 @@ function getAlertsScene() {
     .setTitle('Firing alerts by cluster')
     .setUnit('short')
     .setData(firingByClusterRunner)
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const firingByNamespaceRunner = new SceneQueryRunner({
@@ -88,6 +90,7 @@ function getAlertsScene() {
     .setTitle('Firing alerts by namespace')
     .setUnit('short')
     .setData(firingByNamespaceRunner)
+    .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   const severityRunner = new SceneQueryRunner({
@@ -101,7 +104,12 @@ function getAlertsScene() {
     ],
   });
 
-  const severityPanel = PanelBuilders.timeseries().setTitle('Alert severity').setUnit('short').setData(severityRunner).build();
+  const severityPanel = PanelBuilders.timeseries()
+    .setTitle('Alert severity')
+    .setUnit('short')
+    .setData(severityRunner)
+    .setHeaderActions(new PanelTimeRangeCompare())
+    .build();
 
   const alertsTableRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -200,7 +208,7 @@ export function getAlertsPage() {
     url: ALERTS_URL,
     routePath: `/${ROUTES.Alerts}/*`,
     getScene: getAlertsScene,
-    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'utc' }),
+    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({
       variables: [
         createThanosDatasourceVariable(),
