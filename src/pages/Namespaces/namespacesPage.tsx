@@ -232,7 +232,7 @@ export function getNamespacesPage() {
     url: NAMESPACES_URL,
     routePath: `/${ROUTES.Namespaces}/*`,
     getScene: getNamespacesListScene,
-    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'utc' }),
+    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({
       variables: [createThanosDatasourceVariable(), createClusterFilterVariable(), createNamespaceFilterVariable()],
     }),

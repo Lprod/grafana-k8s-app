@@ -221,7 +221,7 @@ export function getNodesPage() {
     url: NODES_URL,
     routePath: `/${ROUTES.Nodes}/*`,
     getScene: getNodesListScene,
-    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'utc' }),
+    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({
       variables: [
         createThanosDatasourceVariable(),
