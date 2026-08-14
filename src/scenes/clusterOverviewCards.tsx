@@ -141,6 +141,49 @@ function ClusterHealthBannerRenderer({ model }: SceneComponentProps<ClusterHealt
   return <Alert severity="error" title="Cluster is degraded (user impact)" />;
 }
 
+// Namespace Health banner: namespaces have no synthetic probe CronJobs like
+// clusters do, so health is derived from the same alerts-by-severity frame
+// ClusterAlertsBadge consumes (see buildNamespaceAlertsSeverityQuery) rather
+// than a dedicated health metric.
+interface NamespaceHealthBannerState extends SceneObjectState {}
+
+export class NamespaceHealthBanner extends SceneObjectBase<NamespaceHealthBannerState> {
+  static Component = NamespaceHealthBannerRenderer;
+}
+
+function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceHealthBanner>) {
+  const { data } = sceneGraph.getData(model).useState();
+
+  let total = 0;
+  let hasCritical = false;
+  let hasWarning = false;
+  for (const frame of data?.series ?? []) {
+    const valueField = frame.fields.find((f) => f.type === 'number');
+    const count = valueField?.values[0];
+    if (typeof count !== 'number' || Number.isNaN(count)) {
+      continue;
+    }
+    total += count;
+    const severity = valueField?.labels?.severity;
+    if (severity === 'critical') {
+      hasCritical = true;
+    } else if (severity === 'warning') {
+      hasWarning = true;
+    }
+  }
+
+  if (total === 0) {
+    return <Alert severity="success" title="Namespace is healthy" />;
+  }
+  if (hasCritical) {
+    return <Alert severity="error" title="Namespace has critical alerts firing" />;
+  }
+  if (hasWarning) {
+    return <Alert severity="warning" title="Namespace has warning alerts firing" />;
+  }
+  return <Alert severity="warning" title="Namespace has alerts firing" />;
+}
+
 // Compact, clickable pill that sits next to the Cluster Health banner - it
 // needs the same "impossible to miss when something's wrong" coloring, but
 // a second full-width Alert banner underneath the health one would be too

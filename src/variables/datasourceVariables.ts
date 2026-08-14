@@ -6,6 +6,7 @@ import { substituteClusterAndNamespace, workloadTableQueries } from '../queries/
 // pick from all configured "prometheus" datasources (Thanos included).
 export const THANOS_VARIABLE_NAME = 'datasource';
 export const ELASTIC_VARIABLE_NAME = 'elasticsearch';
+export const LOGS_DATASOURCE_VARIABLE_NAME = 'logsDatasource';
 export const RQLITE_VARIABLE_NAME = 'infraDatasource';
 export const CLUSTER_VARIABLE_NAME = 'cluster';
 export const NAMESPACE_VARIABLE_NAME = 'namespace';
@@ -65,6 +66,33 @@ export function createElasticDatasourceVariable() {
     name: ELASTIC_VARIABLE_NAME,
     label: 'Logs',
     pluginId: 'elasticsearch',
+    value: getDatasourceDefaults().elasticsearchUid,
+  });
+}
+
+// The org runs many Elasticsearch datasource instances, but only these
+// three hold the k8s-application log/event indices the Namespace
+// Drilldown's Logs/Events panels query. DataSourceVariable's own `regex`
+// state field filters its resolved option list down to just these, matched
+// against each datasource's *name* (see DataSourceVariable's isValid(),
+// which runs `regex.exec(source.name)` - not the uid).
+const LOGS_DATASOURCE_NAMES = [
+  'Elasticsearch Elastic Prod Debeka Cloud',
+  'Elasticsearch Elastic Tech Debeka Cloud',
+  'Elasticsearch Logmanagement Prod Main',
+];
+
+function exactNameMatchRegex(names: string[]): string {
+  const escaped = names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return `/^(${escaped.join('|')})$/`;
+}
+
+export function createLogsDatasourceVariable() {
+  return new DataSourceVariable({
+    name: LOGS_DATASOURCE_VARIABLE_NAME,
+    label: 'Logs data source',
+    pluginId: 'elasticsearch',
+    regex: exactNameMatchRegex(LOGS_DATASOURCE_NAMES),
     value: getDatasourceDefaults().elasticsearchUid,
   });
 }

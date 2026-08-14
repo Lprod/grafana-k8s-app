@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.0
+
+- Added the Namespaces Drilldown page (`src/pages/Namespaces/namespacesPage.tsx`), reached by clicking a row on the Namespaces table - same structure as the Clusters Drilldown: namespace name + "namespace" badge title, "in cluster X" subtitle linking back to the Clusters Drilldown, and Overview/CPU/Memory/Network/Storage/Logs/Events tabs (only Overview has real content so far; the rest are scaffolded placeholders).
+- Namespace Overview tab: an alerts-derived health banner and badge (namespaces have no synthetic health-probe CronJobs like clusters do, so "healthy/degraded" is derived from firing-alert severity instead), an info card (cluster link, workload count link, an EgressIP row not yet wired to a metric - none exists in this codebase/demo data), two CPU/Memory requests-quota cards modeled on the Resource Simulator's own summary cards (linking back to it, pre-filtered to this namespace), a "Namespace optimization" section with capacity/limits/requests/usage/allocation timeseries for CPU and Memory, a per-workload table (Workload/Type/CPU+Mem Usage+Requests+Limits/Pods, using the same combined meter cells as the Namespaces list table and the same ready/desired Pods cell as the Workloads page), and a "Logs / Events" section with two stacked bar charts (grouped by `log.level`/`event.type`) reading from a new dedicated Elasticsearch datasource variable that's regex-filtered to just the three log-management datasources these panels target (the org has many other Elasticsearch instances configured). Level/type colors are matched case-insensitively and cover common abbreviations (e.g. "Err"/"Error"/"ERROR" all resolve to the same color) since the underlying log source doesn't use consistent casing.
+
 ## 1.6.0
 
 - Added reusable Badge-styled "value + percent + bar" and "icon + tier-colored value" table cell renderers (`requestUsageCell`, `usageTierCell` in `src/scenes/tableCells.tsx`), generalizing the sibling-field-value-attach transform the Workloads Pods column already used, for reuse on the Namespaces page.

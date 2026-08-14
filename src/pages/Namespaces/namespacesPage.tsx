@@ -1,8 +1,10 @@
 import React from 'react';
 import {
   EmbeddedScene,
+  FieldConfigOverridesBuilder,
   PanelBuilders,
   SceneAppPage,
+  SceneAppPageLike,
   SceneControlsSpacer,
   SceneDataTransformer,
   SceneFlexItem,
@@ -10,33 +12,56 @@ import {
   SceneQueryRunner,
   SceneReactObject,
   SceneRefreshPicker,
+  SceneRouteMatch,
   SceneTimePicker,
   SceneTimeRange,
   SceneVariableSet,
   VariableValueControl,
 } from '@grafana/scenes';
-import { TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
-import { useTheme2 } from '@grafana/ui';
+import { FieldColorModeId } from '@grafana/data';
+import { LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
+import { Alert, Badge, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
-import { buildNamespacesListTargets } from '../../queries/namespaceQueries';
+import { buildNamespacesListTargets, namespaceTableQueries, substituteClusterAndNamespace } from '../../queries/namespaceQueries';
+import {
+  buildElasticsearchTermsOverTimeQuery,
+  buildNamespaceAlertsSeverityQuery,
+  namespaceCpuOptimizationQueries,
+  namespaceEventsLuceneQuery,
+  namespaceLogsLuceneQuery,
+  namespaceMemoryOptimizationQueries,
+  namespaceWorkloadsTableQueries,
+  NamespaceOptimizationQueryKey,
+  NamespaceWorkloadsQueryKey,
+  substituteLuceneClusterAndNamespace,
+} from '../../queries/namespaceOverviewQueries';
+import { simulatorQuotaQuery } from '../../queries/resourceSimulator';
 import {
   UsageIcon,
+  attachDesiredPodsField,
   attachPercentField,
+  readyDesiredPodsCell,
   requestUsageCell,
   usageColorFromTier,
   usageTierCell,
 } from '../../scenes/tableCells';
+import { ClusterAlertsBadge, InfoCard, NamespaceHealthBanner } from '../../scenes/clusterOverviewCards';
+import { NamespaceQuotaCard } from '../../scenes/namespaceOverviewCards';
+import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import {
   CLUSTER_VARIABLE_NAME,
+  LOGS_DATASOURCE_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
   THANOS_VARIABLE_NAME,
   createClusterFilterVariable,
+  createLogsDatasourceVariable,
   createNamespaceFilterVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
+const RESOURCE_SIMULATOR_URL = `${PLUGIN_BASE_URL}/${ROUTES.ResourceSimulator}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
 const alertsThresholds = {
@@ -139,6 +164,9 @@ function getNamespacesListScene() {
         .matchFieldsWithName('namespace')
         .overrideDisplayName('Namespace')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          { title: 'View namespace', url: `${NAMESPACES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}` },
+        ])
         .matchFieldsWithName('Value #info')
         .overrideDisplayName('Workloads')
         .overrideUnit('none')
@@ -228,6 +256,550 @@ function getNamespacesListScene() {
   });
 }
 
+function SectionHeading({ title }: { title: string }) {
+  const theme = useTheme2();
+  return <h3 style={{ ...theme.typography.h3, margin: 0 }}>{title}</h3>;
+}
+
+function NamespacePageTitle({ title, cluster }: { title: string; cluster: string }) {
+  const theme = useTheme2();
+  const clusterUrl = `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`;
+  return (
+    <div>
+      <h1 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+        {title}
+        <Badge text="namespace" color="purple" />
+      </h1>
+      <div style={{ fontSize: theme.typography.body.fontSize, color: theme.colors.text.secondary, marginTop: 2 }}>
+        in cluster{' '}
+        {/* Real page load (not <a href>) - see the same note above
+            SectionHeading in clustersApp.tsx for why: this page's own
+            "cluster" scene variable would otherwise collide with the
+            destination's and silently rename itself in the URL. */}
+        <button
+          onClick={() => window.location.assign(clusterUrl)}
+          style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: theme.colors.text.link, cursor: 'pointer' }}
+        >
+          {cluster}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Shared series styling for the "Namespace optimization" CPU/Memory charts:
+// Capacity (the resourcequota hard ceiling) is a solid red line; Limits a
+// dashed red line; Requests a dashed orange line; Allocation (requests,
+// falling back to usage where none are set) a finely-dashed green line;
+// Usage a solid blue line. Matched by refId, mirroring
+// applyOptimizationSeriesOverrides in clustersApp.tsx.
+function applyNamespaceOptimizationSeriesOverrides(b: FieldConfigOverridesBuilder<any>) {
+  return b
+    .matchFieldsByQuery('capacity')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'red' })
+    .matchFieldsByQuery('limits')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'red' })
+    .overrideCustomFieldConfig('lineStyle', { fill: 'dash' })
+    .matchFieldsByQuery('requests')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'orange' })
+    .overrideCustomFieldConfig('lineStyle', { fill: 'dash' })
+    .matchFieldsByQuery('allocation')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'green' })
+    .overrideCustomFieldConfig('lineStyle', { fill: 'dash', dash: [2, 3] })
+    .matchFieldsByQuery('usage')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'blue' });
+}
+
+function buildNamespaceOptimizationPanel(
+  title: string,
+  unit: string,
+  queries: Record<NamespaceOptimizationQueryKey, string>,
+  legends: Record<NamespaceOptimizationQueryKey, string>,
+  clusterRegex: string,
+  namespaceRegex: string
+) {
+  const runner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: (Object.keys(queries) as NamespaceOptimizationQueryKey[]).map((key) => ({
+      refId: key,
+      expr: substituteClusterAndNamespace(queries[key], clusterRegex, namespaceRegex),
+      legendFormat: legends[key],
+    })),
+  });
+
+  return PanelBuilders.timeseries()
+    .setTitle(title)
+    .setUnit(unit)
+    .setData(runner)
+    .setOverrides(applyNamespaceOptimizationSeriesOverrides)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    .setHeaderActions(new PanelTimeRangeCompare())
+    .build();
+}
+
+function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRegex: string, namespaceRegex: string) {
+  const infoRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      {
+        refId: 'info',
+        expr: substituteClusterAndNamespace(namespaceTableQueries.info, clusterRegex, namespaceRegex),
+        format: 'table',
+        instant: true,
+      },
+    ],
+  });
+
+  const infoCard = new InfoCard({
+    $data: infoRunner,
+    rows: [
+      { label: 'cluster:', fieldName: 'cluster', href: `${CLUSTERS_URL}/${encodeURIComponent(cluster)}` },
+      {
+        label: 'workloads:',
+        fieldName: 'Value',
+        href: `${PLUGIN_BASE_URL}/${ROUTES.Workloads}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}`,
+      },
+      // TODO: no EgressIP metric exists in this codebase/demo data yet
+      // (checked - see conversation). Wired to a field name nothing
+      // currently populates, so this renders "-" until the real
+      // metric/label is known.
+      { label: 'egress ip:', fieldName: 'egress_ip' },
+    ],
+  });
+
+  const simulatorUrl = `${RESOURCE_SIMULATOR_URL}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}`;
+
+  // Two separate runners (one per card): each SceneObject needs to own its
+  // own $data in the scene graph, same reasoning as healthRunner/
+  // alertsBadgeRunner below.
+  const cpuQuotaRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      { refId: 'quota', expr: simulatorQuotaQuery({ cluster: clusterRegex, namespace: namespaceRegex }), format: 'time_series', instant: true, range: false },
+    ],
+    maxDataPoints: 1,
+  });
+
+  const cpuQuotaCard = new NamespaceQuotaCard({
+    $data: cpuQuotaRunner,
+    title: 'CPU requests quota',
+    resource: 'requests.cpu',
+    unit: 'cores',
+    simulatorUrl,
+  });
+
+  const memQuotaRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      { refId: 'quota', expr: simulatorQuotaQuery({ cluster: clusterRegex, namespace: namespaceRegex }), format: 'time_series', instant: true, range: false },
+    ],
+    maxDataPoints: 1,
+  });
+
+  const memQuotaCard = new NamespaceQuotaCard({
+    $data: memQuotaRunner,
+    title: 'Memory requests quota',
+    resource: 'requests.memory',
+    unit: 'bytes',
+    simulatorUrl,
+  });
+
+  // Two separate runners with the same expression: each SceneObject needs
+  // to own its own $data in the scene graph (same pattern as
+  // healthRunner/alertsBadgeRunner in clustersApp.tsx's cluster Overview).
+  const healthRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [{ refId: 'alerts', expr: buildNamespaceAlertsSeverityQuery(clusterRegex, namespaceRegex), instant: true }],
+  });
+
+  const healthBanner = new NamespaceHealthBanner({ $data: healthRunner });
+
+  const alertsBadgeRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [{ refId: 'alerts', expr: buildNamespaceAlertsSeverityQuery(clusterRegex, namespaceRegex), instant: true }],
+  });
+
+  const alertsBadge = new ClusterAlertsBadge({
+    $data: alertsBadgeRunner,
+    alertsUrl: `${PLUGIN_BASE_URL}/${ROUTES.Alerts}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}`,
+  });
+
+  const cpuOptimizationPanel = buildNamespaceOptimizationPanel(
+    'Namespace CPU',
+    'cores',
+    namespaceCpuOptimizationQueries,
+    {
+      allocation: 'Sum of container cpu allocation',
+      requests: 'Sum of container cpu requests',
+      limits: 'Sum of container cpu limits',
+      usage: 'Sum of container cpu usage',
+      capacity: 'Namespace Capacity',
+    },
+    clusterRegex,
+    namespaceRegex
+  );
+
+  const memoryOptimizationPanel = buildNamespaceOptimizationPanel(
+    'Namespace Memory',
+    'bytes',
+    namespaceMemoryOptimizationQueries,
+    {
+      allocation: 'Sum of container memory allocation',
+      requests: 'Sum of container memory requests',
+      limits: 'Sum of container memory limits',
+      usage: 'Sum of container memory usage',
+      capacity: 'Namespace Capacity',
+    },
+    clusterRegex,
+    namespaceRegex
+  );
+
+  // Workload identity here is just (workload, workload_type) - every query
+  // is already scoped to this page's single cluster+namespace (route
+  // params), unlike the top-level Workloads page, which needs the fuller
+  // (cluster, namespace, workload, workload_type) identity because it can
+  // span several of each. "merge" still applies (see workloadQueries.ts) -
+  // ready_pods/desired_pods additionally carry cluster/namespace/
+  // asserts_env/asserts_site, but workload+workload_type alone is a common
+  // field set across all 10 queries, which is all merge needs.
+  const workloadsRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: (Object.keys(namespaceWorkloadsTableQueries) as NamespaceWorkloadsQueryKey[]).map((key) => ({
+      refId: key,
+      expr: substituteClusterAndNamespace(namespaceWorkloadsTableQueries[key], clusterRegex, namespaceRegex),
+      format: 'table' as const,
+      instant: true,
+    })),
+  });
+
+  const workloadsData = new SceneDataTransformer({
+    $data: workloadsRunner,
+    transformations: [
+      { id: 'merge', options: {} },
+      // Same CPU-usage-by-requests / Mem-usage-by-limits coloring choice as
+      // the Namespaces list page (getNamespacesListScene above) - see its
+      // own comment for the "usage vs. hard limit" reasoning.
+      attachPercentField('Value #cpu_requests', 'Value #cpu_requests_percent'),
+      attachPercentField('Value #cpu_usage', 'Value #cpu_requests_percent'),
+      attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
+      attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
+      attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
+      attachDesiredPodsField('Value #ready_pods', 'Value #desired_pods'),
+      {
+        id: 'organize',
+        options: {
+          excludeByName: {
+            Time: true,
+            cluster: true,
+            namespace: true,
+            asserts_env: true,
+            asserts_site: true,
+            'Value #desired_pods': true,
+            'Value #cpu_requests_percent': true,
+            'Value #mem_requests_percent': true,
+            'Value #mem_limits_percent': true,
+          },
+          indexByName: {
+            workload: 0,
+            workload_type: 1,
+            'Value #cpu_usage': 2,
+            'Value #cpu_requests': 3,
+            'Value #mem_usage': 4,
+            'Value #mem_requests': 5,
+            'Value #mem_limits': 6,
+            'Value #ready_pods': 7,
+          },
+          renameByName: {},
+        },
+      },
+    ],
+  });
+
+  const workloadsTable = PanelBuilders.table()
+    .setTitle('Workloads')
+    .setData(workloadsData)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('workload')
+        .overrideDisplayName('Workload')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('workload_type')
+        .overrideDisplayName('Type')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #cpu_usage')
+        .overrideDisplayName('CPU Usage')
+        .overrideUnit('cores')
+        .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: usageTierCell(),
+        } as any)
+        .matchFieldsWithName('Value #cpu_requests')
+        .overrideDisplayName('CPU Requests')
+        .overrideUnit('cores')
+        .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: requestUsageCell(),
+        } as any)
+        .matchFieldsWithName('Value #mem_usage')
+        .overrideDisplayName('Mem Usage')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: usageTierCell(),
+        } as any)
+        .matchFieldsWithName('Value #mem_requests')
+        .overrideDisplayName('Mem Requests')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: requestUsageCell(),
+        } as any)
+        .matchFieldsWithName('Value #mem_limits')
+        .overrideDisplayName('Mem Limits')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: requestUsageCell(),
+        } as any)
+        .matchFieldsWithName('Value #ready_pods')
+        .overrideDisplayName('Pods')
+        .overrideUnit('none')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: readyDesiredPodsCell(),
+        } as any)
+    )
+    .build();
+
+  // log.level/event.type spelling varies by source (ERROR vs Error vs Err,
+  // WARN vs Warning) - matchFieldsWithNameByRegex's pattern goes through
+  // stringToJsRegex, which honors a trailing "/i" flag, so one
+  // case-insensitive alternation per color covers every casing/abbreviation
+  // variant instead of listing each exact string.
+  const levelRegex = (...alternatives: string[]) => `/^(${alternatives.join('|')})$/i`;
+
+  // Logs/Events bar charts: Elasticsearch date_histogram + terms query,
+  // one time series per term value (see buildElasticsearchTermsOverTimeQuery
+  // - "terms" nests date_histogram inside each term bucket, which the ES
+  // datasource turns into one frame per term). "joinByField" on Time reshapes
+  // those long-format frames into the single wide table the Bar Chart panel
+  // needs to stack per-term columns within each time bucket.
+  const logsRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${LOGS_DATASOURCE_VARIABLE_NAME}}` },
+    queries: [
+      buildElasticsearchTermsOverTimeQuery(
+        'logs',
+        substituteLuceneClusterAndNamespace(namespaceLogsLuceneQuery, cluster, namespace),
+        'log.level'
+      ) as any,
+    ],
+  });
+
+  const logsData = new SceneDataTransformer({
+    $data: logsRunner,
+    transformations: [{ id: 'joinByField', options: { byField: 'Time' } }],
+  });
+
+  const logsPanel = PanelBuilders.barchart()
+    .setTitle('Logs')
+    .setData(logsData)
+    .setOption('stacking', StackingMode.Normal)
+    .setColor({ mode: FieldColorModeId.Fixed, fixedColor: 'grey' })
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithNameByRegex(levelRegex('alert'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'dark-red' })
+        .matchFieldsWithNameByRegex(levelRegex('error', 'err'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'red' })
+        .matchFieldsWithNameByRegex(levelRegex('warn', 'warning'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'orange' })
+        .matchFieldsWithNameByRegex(levelRegex('info'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'blue' })
+        .matchFieldsWithNameByRegex(levelRegex('debug'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'green' })
+        .matchFieldsWithNameByRegex(levelRegex('trace'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'purple' })
+    )
+    .build();
+
+  const eventsRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${LOGS_DATASOURCE_VARIABLE_NAME}}` },
+    queries: [
+      buildElasticsearchTermsOverTimeQuery(
+        'events',
+        substituteLuceneClusterAndNamespace(namespaceEventsLuceneQuery, cluster, namespace),
+        'event.type'
+      ) as any,
+    ],
+  });
+
+  const eventsData = new SceneDataTransformer({
+    $data: eventsRunner,
+    transformations: [{ id: 'joinByField', options: { byField: 'Time' } }],
+  });
+
+  const eventsPanel = PanelBuilders.barchart()
+    .setTitle('Events')
+    .setData(eventsData)
+    .setOption('stacking', StackingMode.Normal)
+    .setColor({ mode: FieldColorModeId.Fixed, fixedColor: 'grey' })
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithNameByRegex(levelRegex('normal'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'green' })
+        .matchFieldsWithNameByRegex(levelRegex('warn', 'warning'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'orange' })
+        .matchFieldsWithNameByRegex(levelRegex('error', 'err'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'red' })
+        .matchFieldsWithNameByRegex(levelRegex('notice'))
+        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'yellow' })
+    )
+    .build();
+
+  return new EmbeddedScene({
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ body: new SceneControlsSpacer() }),
+            new SceneFlexItem({ width: 220, ySizing: 'content', body: alertsBadge }),
+          ],
+        }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Namespace information" /> }),
+        }),
+        new SceneFlexItem({ ySizing: 'content', body: healthBanner }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ width: '40%', ySizing: 'content', minWidth: 0, body: infoCard }),
+            new SceneFlexItem({ width: '30%', ySizing: 'content', minWidth: 0, body: cpuQuotaCard }),
+            new SceneFlexItem({ width: '30%', ySizing: 'content', minWidth: 0, body: memQuotaCard }),
+          ],
+        }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Namespace optimization" /> }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          children: [
+            new SceneFlexItem({ height: 400, body: cpuOptimizationPanel }),
+            new SceneFlexItem({ height: 400, body: memoryOptimizationPanel }),
+          ],
+        }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Workloads" /> }),
+        }),
+        new SceneFlexItem({ height: 400, body: workloadsTable }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Logs / Events" /> }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          children: [
+            new SceneFlexItem({ height: 400, body: logsPanel }),
+            new SceneFlexItem({ height: 400, body: eventsPanel }),
+          ],
+        }),
+      ],
+    }),
+  });
+}
+
+// Placeholder for tabs not yet built out - keeps routing/tab structure in
+// place (see "Where to pick up next" in summary.md) without pretending
+// there's real content behind them.
+function getNamespacePlaceholderScene(title: string) {
+  return new EmbeddedScene({
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({
+            reactNode: (
+              <Alert severity="info" title={`${title} - coming soon`}>
+                This tab is scaffolded but not built out yet.
+              </Alert>
+            ),
+          }),
+        }),
+      ],
+    }),
+  });
+}
+
+interface NamespaceTabDef {
+  slug: string;
+  title: string;
+  getScene: () => EmbeddedScene;
+}
+
+function getNamespaceDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; namespace: string }>, parent: SceneAppPageLike) {
+  const cluster = decodeURIComponent(routeMatch.params.cluster);
+  const namespace = decodeURIComponent(routeMatch.params.namespace);
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const clusterRegex = escapeRegex(cluster);
+  const namespaceRegex = escapeRegex(namespace);
+  const baseUrl = `${NAMESPACES_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}`;
+
+  const tabDefs: NamespaceTabDef[] = [
+    { slug: 'overview', title: 'Overview', getScene: () => getNamespaceOverviewScene(cluster, namespace, clusterRegex, namespaceRegex) },
+    { slug: 'cpu', title: 'CPU', getScene: () => getNamespacePlaceholderScene('CPU') },
+    { slug: 'memory', title: 'Memory', getScene: () => getNamespacePlaceholderScene('Memory') },
+    { slug: 'network', title: 'Network', getScene: () => getNamespacePlaceholderScene('Network') },
+    { slug: 'storage', title: 'Storage', getScene: () => getNamespacePlaceholderScene('Storage') },
+    { slug: 'logs', title: 'Logs', getScene: () => getNamespacePlaceholderScene('Logs') },
+    { slug: 'events', title: 'Events', getScene: () => getNamespacePlaceholderScene('Events') },
+  ];
+
+  const tabs = tabDefs.map(
+    (tab) =>
+      new SceneAppPage({
+        title: tab.title,
+        url: `${baseUrl}/${tab.slug}`,
+        routePath: tab.slug,
+        getScene: tab.getScene,
+      })
+  );
+
+  return new SceneAppPage({
+    title: namespace,
+    titleImg: KUBERNETES_ICON,
+    renderTitle: (title) => <NamespacePageTitle title={title} cluster={cluster} />,
+    url: baseUrl,
+    routePath: `${NAMESPACES_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}`,
+    getParentPage: () => parent,
+    tabs,
+    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
+    $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
+    controls: [
+      new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
+      new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
+      new SceneControlsSpacer(),
+      new SceneTimePicker({}),
+      new SceneRefreshPicker({ refresh: '1m' }),
+    ],
+    preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
+  });
+}
+
 export function getNamespacesPage() {
   return new SceneAppPage({
     title: 'Namespaces',
@@ -250,5 +822,11 @@ export function getNamespacesPage() {
     // Deliberately excludes the filter variables - see the same note in
     // the pre-existing stub this file replaces.
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
+    drilldowns: [
+      {
+        routePath: `/:cluster/:namespace/*`,
+        getPage: getNamespaceDetailPage,
+      },
+    ],
   });
 }
