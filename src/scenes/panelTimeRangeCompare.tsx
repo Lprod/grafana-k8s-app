@@ -1,6 +1,6 @@
 import React from 'react';
 import { SceneComponentProps, SceneTimeRangeCompare } from '@grafana/scenes';
-import { Button, Dropdown, Menu } from '@grafana/ui';
+import { Badge, Dropdown, Menu } from '@grafana/ui';
 
 // Fixed set instead of the base class's range-adaptive Day/Week/Month-before
 // options (which also drop "Day before" once the panel's time range exceeds
@@ -30,12 +30,12 @@ const PANEL_COMPARE_OPTIONS: Array<{ label: string; value: string }> = [
 // child of the VizPanel - so an instance placed there scopes the compare
 // toggle, and the shifted comparison query it adds, to that single panel.
 //
-// Renders as its own small ghost-text button + dropdown menu (below) rather
-// than the base class's built-in ButtonGroup+ButtonSelect, which reads as a
-// full toolbar control and is too heavy for a panel header slot - styled to
-// match Grafana Play's own "Predict CPU usage" panel-header button (a plain
-// Button, variant="secondary" size="sm", no icon), inspected directly on
-// play.grafana.org via Playwright.
+// Renders as its own small pill + dropdown menu (below) rather than the base
+// class's built-in ButtonGroup+ButtonSelect, which reads as a full toolbar
+// control and is too heavy for a panel header slot - styled to match this
+// app's own Resource Simulator quota cards (the "Unlimited" pill next to
+// e.g. "CPU requests quota", see StatusBadge in ResourceSimulatorObject.tsx),
+// which are themselves just @grafana/ui's Badge.
 export class PanelTimeRangeCompare extends SceneTimeRangeCompare {
   static Component = PanelTimeRangeCompareRenderer;
 
@@ -64,13 +64,20 @@ function PanelTimeRangeCompareRenderer({ model }: SceneComponentProps<PanelTimeR
 
   return (
     <Dropdown overlay={menu} placement="bottom-end">
-      <Button
-        variant="secondary"
-        size="sm"
-        tooltip={activeOption ? `Comparing to ${activeOption.label.toLowerCase()}` : 'Compare with a previous period'}
+      {/* Badge itself isn't clickable (no ref forwarding, no onClick in its
+          props) - Dropdown clones its trigger element to inject the click/ref
+          handlers that open the menu, so a real <button> carries those and
+          Badge just renders its normal, non-interactive visual inside it. */}
+      <button
+        type="button"
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex' }}
       >
-        {activeOption ? activeOption.label : 'Compare'}
-      </Button>
+        <Badge
+          color={activeOption ? 'purple' : 'blue'}
+          text={activeOption ? activeOption.label : 'Compare'}
+          tooltip={activeOption ? `Comparing to ${activeOption.label.toLowerCase()}` : 'Compare with a previous period'}
+        />
+      </button>
     </Dropdown>
   );
 }
