@@ -58,6 +58,7 @@ import { getNamespacesPage } from '../pages/Namespaces/namespacesPage';
 import { getWorkloadsPage } from '../pages/Workloads/workloadsPage';
 import { getNodesPage } from '../pages/Nodes/nodesPage';
 import { getAlertsPage } from '../pages/Alerts/alertsPage';
+import { getKubernetesHomePage } from '../pages/Kubernetes/kubernetesPage';
 import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds } from './tableCells';
 import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
 
@@ -267,7 +268,7 @@ function ClusterPageTitle({ title }: { title: string }) {
 // a plain Button (no href, so nothing intercepts it) and navigating via
 // window.location forces a real page load, so the destination mounts fresh
 // and "var-cluster" binds to its own variable.
-function SectionHeading({ title }: { title: string }) {
+export function SectionHeading({ title }: { title: string }) {
   const theme = useTheme2();
   return <h3 style={{ ...theme.typography.h3, margin: 0 }}>{title}</h3>;
 }
@@ -1795,7 +1796,15 @@ const clustersPage = new SceneAppPage({
 
 export function getClustersSceneApp() {
   return new SceneApp({
-    pages: [clustersPage, getResourceSimulatorPage(), getNamespacesPage(), getWorkloadsPage(), getNodesPage(), getAlertsPage()],
+    pages: [
+      getKubernetesHomePage(),
+      clustersPage,
+      getResourceSimulatorPage(),
+      getNamespacesPage(),
+      getWorkloadsPage(),
+      getNodesPage(),
+      getAlertsPage(),
+    ],
     urlSyncOptions: { updateUrlOnInit: true, createBrowserHistorySteps: true },
   });
 }

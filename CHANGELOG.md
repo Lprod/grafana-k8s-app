@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0
+
+- Added the plugin's own root/home page ("Kubernetes" — the app's nav parent one level above Clusters/Nodes/Namespaces/Workloads/Alerts in Grafana's left nav). It previously had no page matching the bare plugin URL and fell through to Scenes' built-in "Not found" fallback whenever the parent nav entry was clicked directly. It's a 3-tab page (Overview/Efficiency/Alerts) mirroring Grafana's own Kubernetes Monitoring app; Alerts stays a "coming soon" placeholder for now (see the standalone Alerts page for real alert data in the meantime).
+- Built out the Overview tab: 6 linked stat tiles (Clusters/Nodes/Namespaces/Workloads/Pods/Containers), 3 sections of issue-count mini panels (Availability/Stability/Infrastructure — Zero replica deployments, Deployment rollout issues, Nodes not ready, Pods not ready, Restarting containers, OOMKilled containers, Pending pods, Image pull errors, Node pressure, Evicted pods, Pods unknown phase, Unschedulable nodes), a shared "Detail view" table that any panel's "View detail" link can re-point at its own query, and a Deployed container images table.
+- Built out the Efficiency tab: 4 stat tiles (No Resource Requests/Limits, CPU/Memory Over-requested), CPU/Memory waste-by-namespace bar gauges, and 5 top-50 tables (containers missing resource requests/memory limits/CPU limits, containers over-requesting CPU/memory). Empty tables show a friendly sentence ("All containers have resource requests set.", etc.) instead of the generic "No data" placeholder, matching Grafana's own reference.
+- Fixed the Deployed container images table showing a raw `Time` column and generic `image_spec`/`Value` field names with no sorting or bar visualization — now matches Grafana's reference styling (Image spec / Containers columns, descending-sorted gradient gauge bars, row-count footer).
+- Added the per-pod/per-container demo metrics (`kube_pod_info`, `kube_pod_container_info`, `kube_pod_status_phase`, and several other kube-state-metrics) the new Overview tab's stat tiles and issue panels need — none of these existed anywhere in the demo dataset before, so every one of that tab's panels showed "No data" against the local demo stack.
+
 ## 1.6.0
 
 - Added reusable Badge-styled "value + percent + bar" and "icon + tier-colored value" table cell renderers (`requestUsageCell`, `usageTierCell` in `src/scenes/tableCells.tsx`), generalizing the sibling-field-value-attach transform the Workloads Pods column already used, for reuse on the Namespaces page.

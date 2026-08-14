@@ -132,9 +132,20 @@ kube_cronjob_labels{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gc
 # TYPE kube_node_status_condition gauge
 kube_node_status_condition{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",node="demo-cluster-aws-node-1",condition="Ready",status="false"} 0
 kube_node_status_condition{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",node="demo-cluster-aws-node-2",condition="Ready",status="false"} 0
-kube_node_status_condition{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",node="demo-cluster-aws-node-3",condition="Ready",status="false"} 0
+kube_node_status_condition{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",node="demo-cluster-aws-node-3",condition="Ready",status="false"} 1
 kube_node_status_condition{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",node="demo-cluster-gce-node-1",condition="Ready",status="false"} 0
 kube_node_status_condition{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",node="demo-cluster-gce-node-2",condition="Ready",status="false"} 0
+
+# Kubernetes Overview tab demo data (kubernetesOverviewQueries.ts). node-3's
+# Ready condition above is flipped to 1 (genuinely NotReady) for this - safe
+# to do because the Cluster Health query above only uses this metric's
+# *presence*, multiplied by 0, as an "is this cluster reporting" fallback,
+# never its value (see the comment on buildClusterHealthQuery's OR branch).
+kube_node_status_condition{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",node="demo-cluster-gce-node-2",condition="DiskPressure",status="true"} 1
+
+# HELP kube_node_spec_unschedulable Whether a node can schedule new pods (demo data).
+# TYPE kube_node_spec_unschedulable gauge
+kube_node_spec_unschedulable{cluster="demo-cluster-aws",node="demo-cluster-aws-node-2"} 1
 
 # Storage tab demo data: a single PVC ("data-pvc") bound to a pod ("app-0")
 # in namespace "default", for both clusters.
@@ -342,3 +353,118 @@ container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor
 container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",image="db-migrate:1.0"} 104857600
 container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",image="debug-shell:1.0"} 62914560
 container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor",cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",image="debug-shell:1.0"} 62914560
+
+# Kubernetes Overview tab demo data (kubernetesOverviewQueries.ts). Adds the
+# raw per-pod/per-container inventory metrics (kube_pod_info,
+# kube_pod_container_info, kube_pod_status_phase) that the top 6 stat tiles
+# and the 12 Availability/Stability/Infrastructure issue panels read - none
+# of these existed anywhere else in this file, unlike the workload-level
+# metrics above which several other pages already share.
+#
+# The 10 existing workload pods (app/node-agent/cache/db-migrate/debug-shell
+# x aws/gce) are all modeled healthy (Running, Ready, no restarts) here. 4
+# new standalone "problem" pods are added purely to give each issue panel a
+# real non-zero example, one per scenario, named for what they demonstrate
+# rather than reusing the healthy workload pods:
+#   - canary-rollout-aws: stuck Pending (a new app version rolling out)
+#   - netsplit-node-gce: Unknown phase (node lost contact with the API server)
+#   - evicted-batch-aws: Evicted (node ran out of ephemeral storage)
+#   - broken-image-gce: ImagePullBackOff (a mistyped image tag)
+# These 4 aren't in namespace_workload_pod:kube_pod_owner:relabel above, so
+# the issue queries' "unless" OR-branch (for pods without workload
+# attribution) is what picks them up - no separate relabel row needed.
+#
+# HELP kube_pod_info Information about a pod (demo data).
+# TYPE kube_pod_info gauge
+kube_pod_info{cluster="demo-cluster-aws",namespace="default",pod="app-aws",node="demo-cluster-aws-node-1"} 1
+kube_pod_info{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",node="demo-cluster-aws-node-1"} 1
+kube_pod_info{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",node="demo-cluster-aws-node-2"} 1
+kube_pod_info{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",node="demo-cluster-aws-node-2"} 1
+kube_pod_info{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",node="demo-cluster-aws-node-3"} 1
+kube_pod_info{cluster="demo-cluster-aws",namespace="default",pod="canary-rollout-aws",node="demo-cluster-aws-node-1"} 1
+kube_pod_info{cluster="demo-cluster-aws",namespace="default",pod="evicted-batch-aws",node="demo-cluster-aws-node-2"} 1
+kube_pod_info{cluster="demo-cluster-gce",namespace="default",pod="app-gce",node="demo-cluster-gce-node-1"} 1
+kube_pod_info{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",node="demo-cluster-gce-node-1"} 1
+kube_pod_info{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",node="demo-cluster-gce-node-2"} 1
+kube_pod_info{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",node="demo-cluster-gce-node-2"} 1
+kube_pod_info{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",node="demo-cluster-gce-node-1"} 1
+kube_pod_info{cluster="demo-cluster-gce",namespace="default",pod="netsplit-node-gce",node="demo-cluster-gce-node-2"} 1
+kube_pod_info{cluster="demo-cluster-gce",namespace="default",pod="broken-image-gce",node="demo-cluster-gce-node-1"} 1
+
+# HELP kube_pod_container_info Information about a container in a pod (demo data).
+# TYPE kube_pod_container_info gauge
+kube_pod_container_info{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",image_spec="app:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",image_spec="node-agent:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",image_spec="cache:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",image_spec="db-migrate:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",image_spec="debug-shell:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-aws",namespace="default",pod="canary-rollout-aws",container="canary",image_spec="app:2.0-rc1"} 1
+kube_pod_container_info{cluster="demo-cluster-aws",namespace="default",pod="evicted-batch-aws",container="batch",image_spec="batch-job:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",image_spec="app:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",image_spec="node-agent:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",image_spec="cache:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",image_spec="db-migrate:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",image_spec="debug-shell:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="netsplit-node-gce",container="app",image_spec="app:1.0"} 1
+kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="broken-image-gce",container="app",image_spec="app:typo-tag"} 1
+
+# HELP kube_pod_status_phase The pod's current phase (demo data).
+# TYPE kube_pod_status_phase gauge
+kube_pod_status_phase{cluster="demo-cluster-aws",namespace="default",pod="app-aws",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-gce",namespace="default",pod="app-gce",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",phase="Running"} 1
+kube_pod_status_phase{cluster="demo-cluster-aws",namespace="default",pod="canary-rollout-aws",phase="Pending"} 1
+kube_pod_status_phase{cluster="demo-cluster-gce",namespace="default",pod="netsplit-node-gce",phase="Unknown"} 1
+kube_pod_status_phase{cluster="demo-cluster-aws",namespace="default",pod="evicted-batch-aws",phase="Failed"} 1
+kube_pod_status_phase{cluster="demo-cluster-gce",namespace="default",pod="broken-image-gce",phase="Pending"} 1
+
+# HELP kube_pod_status_condition The pod's current condition (demo data).
+# TYPE kube_pod_status_condition gauge
+kube_pod_status_condition{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",condition="Ready",status="false"} 1
+
+# HELP kube_pod_status_reason The pod's current status reason (demo data).
+# TYPE kube_pod_status_reason gauge
+kube_pod_status_reason{cluster="demo-cluster-aws",namespace="default",pod="evicted-batch-aws",reason="Evicted"} 1
+
+# HELP kube_pod_container_status_waiting_reason Reason a container is waiting (demo data).
+# TYPE kube_pod_container_status_waiting_reason gauge
+kube_pod_container_status_waiting_reason{cluster="demo-cluster-gce",namespace="default",pod="broken-image-gce",container="app",reason="ImagePullBackOff"} 1
+
+# HELP kube_pod_container_status_last_terminated_reason Reason a container last terminated (demo data).
+# TYPE kube_pod_container_status_last_terminated_reason gauge
+kube_pod_container_status_last_terminated_reason{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",reason="OOMKilled"} 1
+
+# HELP kube_pod_container_status_restarts_total Container restart count (demo data).
+# TYPE kube_pod_container_status_restarts_total counter
+# The "Restarting containers" panel reads increase(...[1h]) - since this
+# demo file is served statically (a plain nginx file, not a real exporter
+# that increments over time), the value below never changes between scrapes
+# and increase() always evaluates to 0, same documented limitation as
+# container_fs_{reads,writes}_total further up. Kept at a realistic
+# steady-state baseline for anything else that might read the raw counter.
+kube_pod_container_status_restarts_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app"} 0
+kube_pod_container_status_restarts_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app"} 0
+kube_pod_container_status_restarts_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent"} 0
+kube_pod_container_status_restarts_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent"} 0
+kube_pod_container_status_restarts_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache"} 0
+kube_pod_container_status_restarts_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache"} 4
+
+# HELP kube_deployment_status_condition Current condition of a deployment (demo data).
+# TYPE kube_deployment_status_condition gauge
+# Reuses the existing "app" deployment on demo-cluster-gce, which already
+# has a replica mismatch (spec=3, available=2) from the Workloads demo data
+# above - a stalled rollout is a realistic reason for that mismatch.
+kube_deployment_status_condition{cluster="demo-cluster-gce",namespace="default",deployment="app",condition="Progressing",status="false"} 1
+
+# HELP kube_deployment_status_replicas_available (continued) a deployment stuck at 0 available replicas.
+kube_deployment_status_replicas_available{cluster="demo-cluster-aws",namespace="default",deployment="broken-app"} 0
+
+# HELP kube_deployment_spec_replicas (continued) desired replicas for the stuck deployment.
+kube_deployment_spec_replicas{cluster="demo-cluster-aws",namespace="default",deployment="broken-app"} 2
