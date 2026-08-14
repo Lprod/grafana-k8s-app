@@ -3,6 +3,7 @@
 ## 1.6.0
 
 - Added reusable Badge-styled "value + percent + bar" and "icon + tier-colored value" table cell renderers (`requestUsageCell`, `usageTierCell` in `src/scenes/tableCells.tsx`), generalizing the sibling-field-value-attach transform the Workloads Pods column already used, for reuse on the Namespaces page.
+- Fixed the Workloads table showing a stray "Value #desired_pods" column. The `hideFrom: { viz: true }` field override used to keep it out of the table while its value stayed readable for the Pods cell doesn't actually work on Grafana's Table panel: `custom.*` field overrides are silently dropped unless the active panel type registers that property in its own field-config registry, and Table doesn't register `hideFrom` even though its own rendering code checks for it (confirmed by swapping it for `overrideDisplayName` on the same field, which did take effect). The desired-pods value is now attached directly onto the ready-pods field's own config instead, so the raw field can be fully removed from the table rather than merely hidden.
 
 ## 1.5.0
 

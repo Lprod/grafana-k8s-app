@@ -15,11 +15,18 @@ import {
   SceneVariableSet,
   VariableValueControl,
 } from '@grafana/scenes';
-import { TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
+import { TableCellDisplayMode } from '@grafana/schema';
 import { useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildWorkloadsListTargets } from '../../queries/workloadQueries';
-import { UsageIcon, linkedValueCell, readyDesiredPodsCell, usageColorFromTier } from '../../scenes/tableCells';
+import {
+  UsageIcon,
+  attachDesiredPodsField,
+  linkedValueCell,
+  readyDesiredPodsCell,
+  usageColorFromTier,
+  usageThresholds,
+} from '../../scenes/tableCells';
 import {
   CLUSTER_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
@@ -34,16 +41,6 @@ import {
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
-
-// orange < 60% (underused), green 60-90% (healthy), red > 90% (near capacity).
-const usageThresholds = {
-  mode: ThresholdsMode.Absolute,
-  steps: [
-    { color: 'orange', value: -Infinity },
-    { color: 'green', value: 0.6 },
-    { color: 'red', value: 0.9 },
-  ],
-};
 
 function ResourceUsageLegend() {
   const theme = useTheme2();
@@ -104,25 +101,29 @@ function getWorkloadsListScene() {
           match: 'any',
         },
       },
+      // Stashes "Value #desired_pods" onto "Value #ready_pods" (see
+      // attachDesiredPodsField's own comment for why), so the raw
+      // "Value #desired_pods" field/column can be fully dropped below
+      // instead of merely hidden.
+      attachDesiredPodsField('Value #ready_pods', 'Value #desired_pods'),
       {
         id: 'organize',
         options: {
-          excludeByName: { Time: true, asserts_env: true, asserts_site: true },
+          excludeByName: { Time: true, asserts_env: true, asserts_site: true, 'Value #desired_pods': true },
           indexByName: {
             cluster: 0,
             namespace: 1,
             workload: 2,
             workload_type: 3,
             'Value #ready_pods': 4,
-            'Value #desired_pods': 5,
-            'Value #cpu_usage': 6,
-            'Value #cpu_requests': 7,
-            'Value #cpu_requests_percent': 8,
-            'Value #mem_usage': 9,
-            'Value #mem_requests': 10,
-            'Value #mem_requests_percent': 11,
-            'Value #mem_limits': 12,
-            'Value #mem_limits_percent': 13,
+            'Value #cpu_usage': 5,
+            'Value #cpu_requests': 6,
+            'Value #cpu_requests_percent': 7,
+            'Value #mem_usage': 8,
+            'Value #mem_requests': 9,
+            'Value #mem_requests_percent': 10,
+            'Value #mem_limits': 11,
+            'Value #mem_limits_percent': 12,
           },
           renameByName: {},
         },
@@ -154,15 +155,8 @@ function getWorkloadsListScene() {
         .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
-          cellComponent: readyDesiredPodsCell('Value #desired_pods'),
+          cellComponent: readyDesiredPodsCell(),
         } as any)
-        .matchFieldsWithName('Value #desired_pods')
-        // Not its own column - readyDesiredPodsCell (above) reads this
-        // field's value for the same row to render "ready / desired". The
-        // field must stay present in the data (hideFrom.viz only hides its
-        // own column in the Table panel, unlike excludeByName in the
-        // organize transform, which would remove the field entirely).
-        .overrideCustomFieldConfig('hideFrom', { viz: true, legend: false, tooltip: false })
         .matchFieldsWithName('Value #cpu_usage')
         .overrideDisplayName('CPU Usage')
         .overrideUnit('cores')
