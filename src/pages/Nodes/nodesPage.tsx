@@ -19,7 +19,7 @@ import { TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildNodesListTargets } from '../../queries/nodeQueries';
-import { UsageIcon, linkedValueCell, usageColorFromTier } from '../../scenes/tableCells';
+import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds } from '../../scenes/tableCells';
 import {
   CLUSTER_VARIABLE_NAME,
   NODES_VARIABLE_NAME,
@@ -32,16 +32,6 @@ import {
 const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
-
-// orange < 60% (underused), green 60-90% (healthy), red > 90% (near capacity).
-const usageThresholds = {
-  mode: ThresholdsMode.Absolute,
-  steps: [
-    { color: 'orange', value: -Infinity },
-    { color: 'green', value: 0.6 },
-    { color: 'red', value: 0.9 },
-  ],
-};
 
 const alertsThresholds = {
   mode: ThresholdsMode.Absolute,

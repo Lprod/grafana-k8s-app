@@ -58,21 +58,11 @@ import { getNamespacesPage } from '../pages/Namespaces/namespacesPage';
 import { getWorkloadsPage } from '../pages/Workloads/workloadsPage';
 import { getNodesPage } from '../pages/Nodes/nodesPage';
 import { getAlertsPage } from '../pages/Alerts/alertsPage';
-import { UsageIcon, linkedValueCell, usageColorFromTier } from './tableCells';
+import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds } from './tableCells';
 import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
-
-// orange < 60% (underused), green 60-90% (healthy), red > 90% (near capacity).
-const usageThresholds = {
-  mode: ThresholdsMode.Absolute,
-  steps: [
-    { color: 'orange', value: -Infinity },
-    { color: 'green', value: 0.6 },
-    { color: 'red', value: 0.9 },
-  ],
-};
 
 const pvcCapacityThresholds = {
   mode: ThresholdsMode.Absolute,
