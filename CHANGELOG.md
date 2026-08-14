@@ -6,6 +6,7 @@
 - Fixed the Workloads table showing a stray "Value #desired_pods" column. The `hideFrom: { viz: true }` field override used to keep it out of the table while its value stayed readable for the Pods cell doesn't actually work on Grafana's Table panel: `custom.*` field overrides are silently dropped unless the active panel type registers that property in its own field-config registry, and Table doesn't register `hideFrom` even though its own rendering code checks for it (confirmed by swapping it for `overrideDisplayName` on the same field, which did take effect). The desired-pods value is now attached directly onto the ready-pods field's own config instead, so the raw field can be fully removed from the table rather than merely hidden.
 - Deduplicated the `usageThresholds` config (previously redeclared identically in Clusters, Nodes, Namespaces, and Workloads) into a single export in `tableCells.tsx`, imported everywhere it's still used.
 - Restyled the per-panel timeseries comparison control (Clusters Drilldown, Alerts) as a small colored Badge pill - matching the Resource Simulator's own quota-card badges - instead of a plain secondary button.
+- Split the Resource Simulator's ~20 pure formatting helpers out of the 2400-line `ResourceSimulatorObject.tsx` into their own module (`resourceSimulatorFormatters.ts`), and replaced the plain "No workload rows" text alert with a proper empty state (icon, title, description).
 
 ## 1.5.0
 

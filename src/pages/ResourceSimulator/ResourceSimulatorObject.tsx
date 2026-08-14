@@ -14,7 +14,7 @@ import {
   Badge,
   Button,
   Combobox,
-  ComboboxOption,
+  Icon,
   IconButton,
   Input,
   LoadingPlaceholder,
@@ -65,7 +65,6 @@ import {
   SIMULATOR_QUOTA_RESOURCE_KEYS,
   SimulatorResultRow,
   SimulatorRowStatus,
-  SimulatorRowUnit,
   WorkloadContainerValues,
   WorkloadEditableValues,
   WorkloadScenarioRow,
@@ -79,20 +78,34 @@ import {
   parseByteQuantityToGiB,
   parseCpuQuantityToCores,
 } from './resourceQuantities';
+import {
+  formatContainerCount,
+  formatDelta,
+  formatInputValue,
+  formatKafkaRole,
+  formatLimitValue,
+  formatLiveHardValue,
+  formatMeterPair,
+  formatPercentage,
+  formatRemainingSummary,
+  formatRemainingValue,
+  formatUsageSummary,
+  formatUsageValue,
+  formatValue,
+  formatWorkloadDelta,
+  formatWorkloadType,
+  UsageMeterUnit,
+  WORKLOAD_TYPE_OPTIONS,
+} from './resourceSimulatorFormatters';
 
 type ResourceSimulatorState = SceneObjectState & {
   scenario: string;
 };
 
 type UsageMeterStatus = 'no-request' | 'low' | 'ok' | 'warning' | 'over' | 'high';
-type UsageMeterUnit = 'cores' | 'bytes';
 type PvcMeterStatus = 'no-pvc' | 'ok' | 'warning' | 'risk';
 
 const DEFAULT_SCENARIO_JSON = serializeScenario(DEFAULT_WORKLOAD_SCENARIO);
-const WORKLOAD_TYPE_OPTIONS: Array<ComboboxOption<WorkloadType>> = [
-  { label: 'Deployment', value: 'deployment' },
-  { label: 'StatefulSet', value: 'statefulset' },
-];
 
 export class ResourceSimulatorObject extends SceneObjectBase<ResourceSimulatorState> {
   public static Component = ResourceSimulatorRenderer;
@@ -521,10 +534,14 @@ function ResourceSimulatorRenderer({ model }: SceneComponentProps<ResourceSimula
           </Stack>
 
           {results.workloadRows.length === 0 ? (
-            <Alert title="No workload rows" severity="info">
-              No live Deployment or StatefulSet metrics were returned for the current namespace. Add a temporary
-              workload to model a planned change.
-            </Alert>
+            <div className={styles.emptyState}>
+              <Icon name="layer-group" size="xl" className={styles.emptyStateIcon} />
+              <p className={styles.emptyStateTitle}>No workload rows</p>
+              <p className={styles.emptyStateText}>
+                No live Deployment or StatefulSet metrics were returned for the current namespace. Add a temporary
+                workload to model a planned change.
+              </p>
+            </div>
           ) : (
             <WorkloadTable model={model} rows={results.workloadRows} deltas={results.workloadDeltas} />
           )}
@@ -1904,101 +1921,6 @@ function pvcMeterBadgeClass(styles: ReturnType<typeof getStyles>, status: PvcMet
   return styles.usageMeterBadgeOk;
 }
 
-function formatMeterPair(used: number, requested: number, unit: UsageMeterUnit) {
-  if (unit === 'cores') {
-    const useMillicores = requested < 1 || (used < 1 && requested < 1);
-
-    return {
-      used: useMillicores ? formatMillicores(used) : formatCores(used),
-      requested: useMillicores ? formatMillicores(requested) : formatCores(requested),
-    };
-  }
-
-  const useMiB = requested < BYTES_PER_GIB;
-
-  return {
-    used: useMiB ? formatMiB(used) : formatGiB(used),
-    requested: useMiB ? formatMiB(requested) : formatGiB(requested),
-  };
-}
-
-function formatMillicores(cores: number) {
-  if (!Number.isFinite(cores) || cores <= 0) {
-    return '0m';
-  }
-
-  return `${formatQuantityNumber(cores * 1000)}m`;
-}
-
-function formatCores(cores: number) {
-  if (!Number.isFinite(cores) || cores <= 0) {
-    return '0 cores';
-  }
-
-  return `${formatQuantityNumber(cores)} cores`;
-}
-
-function formatMiB(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0Mi';
-  }
-
-  return `${formatQuantityNumber(bytes / 1024 ** 2)}Mi`;
-}
-
-function formatGiB(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0Gi';
-  }
-
-  return `${formatQuantityNumber(bytes / BYTES_PER_GIB)}Gi`;
-}
-
-function formatQuantityNumber(value: number) {
-  return Number(value.toFixed(3)).toLocaleString(undefined, { maximumFractionDigits: 3 });
-}
-
-function formatWorkloadType(type: WorkloadType) {
-  return WORKLOAD_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? type;
-}
-
-function formatKafkaRole(role: KafkaPoolSimulationRow['role']) {
-  return role === 'broker' ? 'Broker' : 'Controller';
-}
-
-function formatContainerCount(row: WorkloadSimulationRow) {
-  const plannedCount = `${formatValue(row.containers.length, 'count')} per Pod`;
-
-  if (row.currentContainers <= 0) {
-    return plannedCount;
-  }
-
-  if (row.currentPods <= 0) {
-    return `${plannedCount} / ${row.currentContainers.toLocaleString(undefined, { maximumFractionDigits: 0 })} live`;
-  }
-
-  const liveContainersPerPod = row.currentContainers / row.currentPods;
-  return `${plannedCount} / ${formatValue(row.currentContainers, 'count')} live, ${liveContainersPerPod.toLocaleString(
-    undefined,
-    {
-      maximumFractionDigits: 2,
-    }
-  )} per Pod`;
-}
-
-function formatWorkloadDelta(delta?: ReturnType<typeof calculateSimulatorResults>['workloadDeltas'][string]) {
-  if (!delta) {
-    return '-';
-  }
-
-  return [
-    `${formatDelta(delta.pods, 'count')} pods`,
-    `${formatDelta(delta.cpuRequests, 'cores')} CPU`,
-    `${formatDelta(delta.memoryRequests, 'bytes')} mem`,
-    `${formatDelta(delta.pvcStorage, 'bytes')} PVC`,
-  ].join(' / ');
-}
-
 function summaryStatusClass(styles: ReturnType<typeof getStyles>, status: SimulatorRowStatus) {
   if (status === 'exceeded') {
     return styles.summaryExceeded;
@@ -2033,86 +1955,6 @@ function progressStatusClass(styles: ReturnType<typeof getStyles>, status: Simul
   }
 
   return styles.summaryProgressOk;
-}
-
-function formatUsageSummary(row: SimulatorResultRow) {
-  if (row.ratio !== undefined) {
-    return `${formatPercentage(row.ratio)} of ${formatValue(row.hard ?? 0, row.unit)}`;
-  }
-
-  if (row.status === 'unlimited') {
-    return 'Unlimited';
-  }
-
-  return row.source === 'capacity' ? 'No capacity data' : 'No limit data';
-}
-
-function formatUsageValue(row: SimulatorResultRow) {
-  return row.ratio === undefined ? '-' : formatPercentage(row.ratio);
-}
-
-function formatLimitValue(row: SimulatorResultRow) {
-  if (row.hard !== undefined) {
-    return formatValue(row.hard, row.unit);
-  }
-
-  return row.status === 'unlimited' ? 'Unlimited' : 'Unknown';
-}
-
-function formatLiveHardValue(row: SimulatorResultRow) {
-  return row.liveHard === undefined ? 'Unlimited' : formatValue(row.liveHard, row.unit);
-}
-
-function formatRemainingValue(row: SimulatorResultRow) {
-  if (row.remaining !== undefined) {
-    return row.remaining < 0
-      ? `${formatValue(Math.abs(row.remaining), row.unit)} over`
-      : formatValue(row.remaining, row.unit);
-  }
-
-  return row.status === 'unlimited' ? 'Unlimited' : '-';
-}
-
-function formatRemainingSummary(row: SimulatorResultRow) {
-  if (row.remaining !== undefined) {
-    return row.remaining < 0
-      ? `${formatValue(Math.abs(row.remaining), row.unit)} over`
-      : `${formatValue(row.remaining, row.unit)} remaining`;
-  }
-
-  if (row.status === 'unlimited') {
-    return 'No configured hard limit';
-  }
-
-  return row.source === 'capacity' ? 'Capacity data missing' : 'Limit data missing';
-}
-
-function formatDelta(value: number, unit: SimulatorRowUnit) {
-  if (Math.abs(value) < 0.000001) {
-    return '+0';
-  }
-
-  return value > 0 ? `+${formatValue(value, unit)}` : formatValue(value, unit);
-}
-
-function formatValue(value: number, unit: SimulatorRowUnit) {
-  if (unit === 'cores') {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  }
-
-  if (unit === 'bytes') {
-    return `${(value / 1024 ** 3).toLocaleString(undefined, { maximumFractionDigits: 1 })} GiB`;
-  }
-
-  return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-}
-
-function formatPercentage(ratio: number) {
-  return `${(ratio * 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}%`;
-}
-
-function formatInputValue(value: number) {
-  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(3)));
 }
 
 function getStyles() {
@@ -2235,6 +2077,31 @@ function getStyles() {
     sectionText: css({
       margin: '4px 0 16px',
       opacity: 0.75,
+    }),
+    emptyState: css({
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      textAlign: 'center',
+      gap: 8,
+      padding: '32px 16px',
+      border: '1px dashed var(--border-weak)',
+      borderRadius: 4,
+    }),
+    emptyStateIcon: css({
+      opacity: 0.5,
+    }),
+    emptyStateTitle: css({
+      fontSize: 14,
+      fontWeight: 500,
+      margin: 0,
+    }),
+    emptyStateText: css({
+      fontSize: 12,
+      opacity: 0.75,
+      margin: 0,
+      maxWidth: 420,
     }),
     tableWrap: css({
       overflowX: 'auto',
