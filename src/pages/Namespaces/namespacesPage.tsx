@@ -19,7 +19,13 @@ import { TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildNamespacesListTargets } from '../../queries/namespaceQueries';
-import { UsageIcon, linkedValueCell, usageColorFromTier } from '../../scenes/tableCells';
+import {
+  UsageIcon,
+  attachPercentField,
+  requestUsageCell,
+  usageColorFromTier,
+  usageTierCell,
+} from '../../scenes/tableCells';
 import {
   CLUSTER_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
@@ -32,16 +38,6 @@ import {
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
-
-// orange < 60% (underused), green 60-90% (healthy), red > 90% (near capacity).
-const usageThresholds = {
-  mode: ThresholdsMode.Absolute,
-  steps: [
-    { color: 'orange', value: -Infinity },
-    { color: 'green', value: 0.6 },
-    { color: 'red', value: 0.9 },
-  ],
-};
 
 const alertsThresholds = {
   mode: ThresholdsMode.Absolute,
@@ -90,10 +86,30 @@ function getNamespacesListScene() {
     $data: queryRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // Stashes each "X_percent" field onto its own value field (see
+      // attachPercentField's own comment for why), so the raw percent
+      // field/column can be fully dropped below instead of merely hidden -
+      // requestUsageCell renders both together as one value+percent+bar cell.
+      // CPU Usage is also stashed with the *requests* percent, and Mem Usage
+      // with the *limits* percent (not requests) - usage vs. a hard limit is
+      // the closer read of "about to hit the ceiling" (limits are enforced,
+      // OOM-kill on memory; requests are only a scheduling reservation), so
+      // that's the more meaningful ratio to color Mem Usage's fill-level icon
+      // and text by (usageTierCell).
+      attachPercentField('Value #cpu_requests', 'Value #cpu_requests_percent'),
+      attachPercentField('Value #cpu_usage', 'Value #cpu_requests_percent'),
+      attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
+      attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
+      attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
       {
         id: 'organize',
         options: {
-          excludeByName: { Time: true },
+          excludeByName: {
+            Time: true,
+            'Value #cpu_requests_percent': true,
+            'Value #mem_requests_percent': true,
+            'Value #mem_limits_percent': true,
+          },
           indexByName: {
             cluster: 0,
             namespace: 1,
@@ -101,12 +117,9 @@ function getNamespacesListScene() {
             'Value #alerts': 3,
             'Value #cpu_usage': 4,
             'Value #cpu_requests': 5,
-            'Value #cpu_requests_percent': 6,
-            'Value #mem_usage': 7,
-            'Value #mem_requests': 8,
-            'Value #mem_requests_percent': 9,
-            'Value #mem_limits': 10,
-            'Value #mem_limits_percent': 11,
+            'Value #mem_usage': 6,
+            'Value #mem_requests': 7,
+            'Value #mem_limits': 8,
           },
           renameByName: {},
         },
@@ -153,6 +166,10 @@ function getNamespacesListScene() {
         .overrideUnit('cores')
         .overrideDecimals(2)
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: usageTierCell(),
+        } as any)
         .matchFieldsWithName('Value #cpu_requests')
         .overrideDisplayName('CPU Requests')
         .overrideUnit('cores')
@@ -160,46 +177,32 @@ function getNamespacesListScene() {
         .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
-          cellComponent: linkedValueCell('Value #cpu_requests_percent'),
+          cellComponent: requestUsageCell(),
         } as any)
-        .matchFieldsWithName('Value #cpu_requests_percent')
-        .overrideDisplayName('CPU Requests %')
-        .overrideUnit('percentunit')
-        .overrideThresholds(usageThresholds)
-        .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
         .matchFieldsWithName('Value #mem_usage')
         .overrideDisplayName('Mem Usage')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: usageTierCell(),
+        } as any)
         .matchFieldsWithName('Value #mem_requests')
         .overrideDisplayName('Mem Requests')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
-          cellComponent: linkedValueCell('Value #mem_requests_percent'),
+          cellComponent: requestUsageCell(),
         } as any)
-        .matchFieldsWithName('Value #mem_requests_percent')
-        .overrideDisplayName('Mem Requests %')
-        .overrideUnit('percentunit')
-        .overrideThresholds(usageThresholds)
-        .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
         .matchFieldsWithName('Value #mem_limits')
         .overrideDisplayName('Mem Limits')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
-          cellComponent: linkedValueCell('Value #mem_limits_percent'),
+          cellComponent: requestUsageCell(),
         } as any)
-        .matchFieldsWithName('Value #mem_limits_percent')
-        .overrideDisplayName('Mem Limits %')
-        .overrideUnit('percentunit')
-        .overrideThresholds(usageThresholds)
-        .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
     )
     .build();
 

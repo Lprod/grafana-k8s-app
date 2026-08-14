@@ -7,6 +7,7 @@
 - Deduplicated the `usageThresholds` config (previously redeclared identically in Clusters, Nodes, Namespaces, and Workloads) into a single export in `tableCells.tsx`, imported everywhere it's still used.
 - Restyled the per-panel timeseries comparison control (Clusters Drilldown, Alerts) as a small colored Badge pill - matching the Resource Simulator's own quota-card badges - instead of a plain secondary button.
 - Split the Resource Simulator's ~20 pure formatting helpers out of the 2400-line `ResourceSimulatorObject.tsx` into their own module (`resourceSimulatorFormatters.ts`), and replaced the plain "No workload rows" text alert with a proper empty state (icon, title, description).
+- Redesigned the Namespaces table's CPU/Mem Requests and Mem Limits columns from separate "value" + "value %" column pairs into single combined cells (value, percent badge, proportional bar), matching the Resource Simulator's own used/requested meter style. CPU Usage and Mem Usage are now colored (icon + text) by their respective requests/limits ratio too - Mem Usage specifically by the *limits* ratio (the hard OOM-kill ceiling) rather than requests (only a scheduling reservation), since that's the more meaningful "about to hit the wall" signal.
 
 ## 1.5.0
 
