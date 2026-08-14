@@ -44,6 +44,30 @@ namespace_memory:kube_pod_container_resource_limits:sum{cluster="demo-cluster-gc
 namespace_memory:kube_pod_container_resource_requests:sum{cluster="demo-cluster-aws",namespace="default"} 8589934592
 namespace_memory:kube_pod_container_resource_requests:sum{cluster="demo-cluster-gce",namespace="default"} 10737418240
 
+# The Namespaces page (namespaceQueries.ts) reads CPU/memory requests+limits
+# from a differently-named recording rule than the Clusters Drilldown
+# Overview page (clusterOverviewQueries.ts, the namespace_cpu:/namespace_memory:
+# metrics right above) - both are real, distinct kube-prometheus-stack-style
+# rules a real cluster would carry side by side, not a naming bug. This block
+# was missing entirely, so the Namespaces page's CPU/Mem Requests and Mem
+# Limits columns had nothing to show. Values mirror the namespace_cpu:/
+# namespace_memory: ones above 1:1, since both name the same real-world
+# per-namespace total.
+# HELP cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests Recording rule: active-pod CPU requests per namespace (demo data).
+# TYPE cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests gauge
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default"} 4
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default"} 5
+
+# HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_requests Recording rule: active-pod memory requests per namespace (demo data).
+# TYPE cluster:namespace:pod_memory:active:kube_pod_container_resource_requests gauge
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default"} 8589934592
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default"} 10737418240
+
+# HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_limits Recording rule: active-pod memory limits per namespace (demo data).
+# TYPE cluster:namespace:pod_memory:active:kube_pod_container_resource_limits gauge
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default"} 12884901888
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default"} 17179869184
+
 # HELP node_namespace_pod_container:container_memory_working_set_bytes Recording rule: summed memory working set per namespace/node (demo data).
 # TYPE node_namespace_pod_container:container_memory_working_set_bytes gauge
 node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-1"} 6442450944
