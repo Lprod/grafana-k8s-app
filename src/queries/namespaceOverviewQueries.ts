@@ -11,6 +11,16 @@ export function buildNamespaceAlertsSeverityQuery(clusterRegex: string, namespac
   return `count by (severity) (ALERTS{alertstate="firing", cluster="${clusterRegex}", namespace="${namespaceRegex}", alertname!~"ArgoCDSyncAlert"})`;
 }
 
+// OVN-Kubernetes' EgressIP info metric lives under a fixed "monitoring-addons"
+// namespace label - the actual namespace being viewed is matched via a
+// separate "environment_debeka_de" label instead. The IP itself has no
+// dedicated value field (standard Prometheus "info metric" pattern) - it's
+// the "egressip_assigned_0" label on the series, which the table-format
+// response turns into its own column.
+export function buildNamespaceEgressIpQuery(clusterRegex: string, namespaceRegex: string): string {
+  return `ovn_egressip_info{namespace="monitoring-addons", cluster="${clusterRegex}", environment_debeka_de="${namespaceRegex}"}`;
+}
+
 // "Namespace optimization" charts on the Overview tab: capacity/limits/
 // requests/usage over time, plus a synthetic "allocation" series (requests
 // where set, falling back to usage where they aren't - the same idea as
@@ -112,51 +122,120 @@ export const namespaceWorkloadsTableQueries = {
 
 export type NamespaceWorkloadsQueryKey = keyof typeof namespaceWorkloadsTableQueries;
 
-// Elasticsearch Lucene queries for the "Logs / Events" bar charts. Plain
-// (non-backtick) strings so the literal "${cluster:lucene}"/"${namespace:...}"
-// tokens below aren't mistaken for JS template interpolation - they're
-// placeholders this file substitutes itself (see
-// substituteLuceneClusterAndNamespace), since this page has no live
-// "cluster"/"namespace" scene variables of its own to interpolate through
-// (it's scoped to a single cluster+namespace via the drilldown route, same
-// as every other query on this page).
+// Elasticsearch Lucene queries for the "Logs / Events" bar charts.
 //
-// Events intentionally has no cluster filter and uses "${namespace:raw}"
-// (unwrapped, unescaped) rather than Logs' "${namespace:lucene})" - given
-// verbatim, not "fixed" to match Logs' style (see the project convention on
-// preserving intentional per-panel query differences).
-export const namespaceLogsLuceneQuery =
-  '(logmgmt.kind:openshift AND NOT logmgmt.category:event AND k8s.cluster.name:(${cluster:lucene}) AND k8s.namespace.name:(${namespace:lucene}))';
-
-export const namespaceEventsLuceneQuery =
-  '(logmgmt.kind:openshift AND logmgmt.category:event AND k8s.namespace.name:${namespace:raw})';
-
+// Each canonical level/type gets its OWN query (a plain date_histogram
+// count, no terms bucket) with an "AND log.level:(A OR B OR ...)" filter
+// covering every known spelling/casing variant of that level - rather than
+// one query with a "terms" bucket-agg grouped by the raw field value, which
+// would put "ERROR" and "Err" in separate buckets/series instead of
+// merging them. One query per bar-chart series, matching what the "group
+// by" ends up looking like once stacked.
 function escapeLucene(value: string): string {
   return value.replace(/([+\-&|!(){}[\]^"~*?:\\/])/g, '\\$1');
 }
 
-export function substituteLuceneClusterAndNamespace(expr: string, cluster: string, namespace: string): string {
-  return expr
-    .replaceAll('${cluster:lucene}', escapeLucene(cluster))
-    .replaceAll('${namespace:lucene}', escapeLucene(namespace))
-    .replaceAll('${namespace:raw}', namespace);
+export interface LevelDef {
+  canonical: string;
+  variants: string[];
+  color: string;
+}
+
+// "Only warn/error" keeps just the ERROR/WARN (Logs) or Error/Warning
+// (Events) defs - see filterLevelDefs.
+export const namespaceLogLevelDefs: LevelDef[] = [
+  { canonical: 'ALERT', variants: ['ALERT', 'Alert', 'alert'], color: 'dark-red' },
+  { canonical: 'ERROR', variants: ['ERROR', 'Error', 'error', 'ERR', 'Err', 'err'], color: 'red' },
+  { canonical: 'WARN', variants: ['WARN', 'Warn', 'warn', 'WARNING', 'Warning', 'warning'], color: 'orange' },
+  { canonical: 'INFO', variants: ['INFO', 'Info', 'info'], color: 'blue' },
+  { canonical: 'DEBUG', variants: ['DEBUG', 'Debug', 'debug'], color: 'green' },
+  { canonical: 'TRACE', variants: ['TRACE', 'Trace', 'trace'], color: 'purple' },
+];
+
+export const namespaceEventTypeDefs: LevelDef[] = [
+  { canonical: 'Normal', variants: ['Normal', 'NORMAL', 'normal'], color: 'green' },
+  { canonical: 'Warning', variants: ['Warning', 'WARNING', 'warning'], color: 'orange' },
+  { canonical: 'Error', variants: ['Error', 'ERROR', 'error'], color: 'red' },
+  { canonical: 'notice', variants: ['notice', 'Notice', 'NOTICE'], color: 'yellow' },
+];
+
+export const NAMESPACE_LEVEL_OTHER = 'Other';
+// A plain hex value, not Grafana's "grey" CSS-color-name fallback - the Bar
+// Chart panel's uPlot-based renderer parses fixedColor itself (hex/rgb/hsl/
+// color() only) instead of resolving it through Grafana's own named-hue
+// palette first, unlike red/orange/yellow/green/blue/purple above, which
+// are registered viz hues and do get resolved before reaching uPlot.
+export const NAMESPACE_LEVEL_OTHER_COLOR = '#8e8e8e';
+
+export function filterLevelDefsWarnErrorOnly(defs: LevelDef[]): LevelDef[] {
+  return defs.filter((d) => d.canonical === 'ERROR' || d.canonical === 'WARN' || d.canonical === 'Warning' || d.canonical === 'Error');
+}
+
+function luceneOrClause(field: string, variants: string[]): string {
+  return `${field}:(${variants.join(' OR ')})`;
+}
+
+function luceneNotAnyClause(field: string, defs: LevelDef[]): string {
+  return `NOT ${luceneOrClause(field, defs.flatMap((d) => d.variants))}`;
 }
 
 // Elasticsearch datasource query shape (bucketAggs/metrics) has no published
-// TS types (it's a core-bundled datasource, not an npm package) - this is
-// the well-established "terms outer, date_histogram inner" nesting that
-// produces one time series per term value, matching Grafana's own ES
-// dashboards. `min_doc_count: '0'` keeps zero-count buckets so the stacked
-// bar chart doesn't show gaps between time buckets.
-export function buildElasticsearchTermsOverTimeQuery(refId: string, query: string, termField: string) {
+// TS types (it's a core-bundled datasource, not an npm package).
+//
+// `interval` is a concrete duration string (e.g. "1m", "5m") computed by
+// the caller via @grafana/data's calculateInterval(timeRange, resolution,
+// '1m') - NOT the "$__interval" macro. $__interval alone auto-sizes to the
+// time range exactly like the timepicker, but Grafana's ES date_histogram
+// has no "minimum interval" syntax of its own to floor it at 1m (confirmed
+// against a live instance: interval values like ">1m"/"$__interval_ms"
+// both 400 - only "auto", "$__interval", and concrete durations are
+// accepted). calculateInterval() is the same helper Grafana panels use
+// internally for this, so this reproduces "auto, floored at 1m" without
+// relying on unsupported datasource syntax. `min_doc_count: '0'` keeps
+// zero-count buckets so the stacked bar chart doesn't show gaps between
+// time buckets.
+function buildElasticsearchLevelQuery(refId: string, query: string, alias: string, interval: string) {
   return {
     refId,
     query,
-    alias: `{{term ${termField}}}`,
+    alias,
     metrics: [{ id: '1', type: 'count' }],
-    bucketAggs: [
-      { id: '2', type: 'terms', field: termField, settings: { size: '0', order: 'desc', orderBy: '_count' } },
-      { id: '3', type: 'date_histogram', field: '@timestamp', settings: { interval: 'auto', min_doc_count: '0' } },
-    ],
+    bucketAggs: [{ id: '2', type: 'date_histogram', field: '@timestamp', settings: { interval, min_doc_count: '0' } }],
   };
+}
+
+// Events intentionally has no cluster filter and uses the namespace value
+// unwrapped/unescaped, rather than Logs' parenthesized/escaped form - given
+// verbatim per the original request, not "fixed" to match Logs' style (see
+// the project convention on preserving intentional per-panel query
+// differences).
+export function buildNamespaceLogsLevelQueries(cluster: string, namespace: string, onlyWarnError: boolean, interval: string) {
+  const base = (extra: string) =>
+    `(logmgmt.kind:openshift AND NOT logmgmt.category:event AND k8s.cluster.name:(${escapeLucene(cluster)}) AND k8s.namespace.name:(${escapeLucene(namespace)}) AND ${extra})`;
+
+  const defs = onlyWarnError ? filterLevelDefsWarnErrorOnly(namespaceLogLevelDefs) : namespaceLogLevelDefs;
+  const queries = defs.map((d) => buildElasticsearchLevelQuery(d.canonical, base(luceneOrClause('log.level', d.variants)), d.canonical, interval));
+
+  if (!onlyWarnError) {
+    queries.push(
+      buildElasticsearchLevelQuery(NAMESPACE_LEVEL_OTHER, base(luceneNotAnyClause('log.level', namespaceLogLevelDefs)), NAMESPACE_LEVEL_OTHER, interval)
+    );
+  }
+
+  return queries;
+}
+
+export function buildNamespaceEventsLevelQueries(namespace: string, onlyWarnError: boolean, interval: string) {
+  const base = (extra: string) => `(logmgmt.kind:openshift AND logmgmt.category:event AND k8s.namespace.name:${namespace} AND ${extra})`;
+
+  const defs = onlyWarnError ? filterLevelDefsWarnErrorOnly(namespaceEventTypeDefs) : namespaceEventTypeDefs;
+  const queries = defs.map((d) => buildElasticsearchLevelQuery(d.canonical, base(luceneOrClause('event.type', d.variants)), d.canonical, interval));
+
+  if (!onlyWarnError) {
+    queries.push(
+      buildElasticsearchLevelQuery(NAMESPACE_LEVEL_OTHER, base(luceneNotAnyClause('event.type', namespaceEventTypeDefs)), NAMESPACE_LEVEL_OTHER, interval)
+    );
+  }
+
+  return queries;
 }

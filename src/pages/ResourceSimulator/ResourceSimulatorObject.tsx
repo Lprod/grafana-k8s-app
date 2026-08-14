@@ -1957,7 +1957,10 @@ function progressStatusClass(styles: ReturnType<typeof getStyles>, status: Simul
   return styles.summaryProgressOk;
 }
 
-function getStyles() {
+// Exported so other pages that borrow this page's visual language (e.g. the
+// Namespace Drilldown's quota cards) can reuse the exact same summary-card
+// classes instead of recreating look-alike CSS that could drift over time.
+export function getStyles() {
   return {
     page: css({
       minHeight: 760,

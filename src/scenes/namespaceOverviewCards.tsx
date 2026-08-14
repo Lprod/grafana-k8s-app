@@ -1,16 +1,17 @@
 import React from 'react';
-import { GrafanaTheme2 } from '@grafana/data';
 import { SceneComponentProps, SceneObjectBase, SceneObjectState, sceneGraph } from '@grafana/scenes';
-import { Badge, useStyles2, useTheme2 } from '@grafana/ui';
-import { css } from '@emotion/css';
+import { Badge, useStyles2 } from '@grafana/ui';
 import { formatCores, formatGiB, formatMeterPair, UsageMeterUnit } from '../pages/ResourceSimulator/resourceSimulatorFormatters';
+import { getStyles as getResourceSimulatorStyles } from '../pages/ResourceSimulator/ResourceSimulatorObject';
 
-// A read-only, single-namespace "quota" card modeled visually on the
-// Resource Simulator's own summary cards (label + status Badge, big value,
-// meta text, progress bar - see StatusBadge/summaryGrid in
-// ResourceSimulatorObject.tsx) but backed directly by kube_resourcequota's
-// used/hard values instead of that page's full baseline+scenario
-// simulation model, which this doesn't need.
+// A read-only, single-namespace "quota" card reusing the Resource
+// Simulator's own summary-card CSS verbatim (getStyles' summary*/
+// summaryProgress* classes - imported, not recreated, so the two stay in
+// visual lockstep) but backed directly by kube_resourcequota's used/hard
+// values instead of that page's full baseline+scenario simulation model,
+// which this doesn't need.
+type QuotaStatus = 'ok' | 'warning' | 'exceeded' | 'unlimited';
+
 interface NamespaceQuotaCardState extends SceneObjectState {
   title: string;
   resource: 'requests.cpu' | 'requests.memory';
@@ -32,75 +33,83 @@ function extractQuotaValue(series: Array<{ fields: any[] }> | undefined, resourc
   return undefined;
 }
 
-function quotaCardStyles(theme: GrafanaTheme2) {
-  return {
-    card: css({
-      display: 'flex',
-      flexDirection: 'column',
-      gap: theme.spacing(1),
-      border: `1px solid ${theme.colors.border.weak}`,
-      borderRadius: theme.shape.radius.default,
-      background: theme.colors.background.secondary,
-      padding: theme.spacing(2),
-      cursor: 'pointer',
-      width: '100%',
-      boxSizing: 'border-box',
-    }),
-    header: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing(1) }),
-    label: css({ fontSize: theme.typography.bodySmall.fontSize, color: theme.colors.text.secondary }),
-    value: css({ fontSize: theme.typography.h3.fontSize, fontWeight: 500 }),
-    meta: css({ fontSize: theme.typography.bodySmall.fontSize, color: theme.colors.text.secondary }),
-    progress: css({
-      height: 6,
-      borderRadius: 3,
-      background: theme.colors.background.primary,
-      overflow: 'hidden',
-    }),
-    progressFill: css({ height: '100%', borderRadius: 3 }),
-  };
+// Same color/text mapping as ResourceSimulatorObject.tsx's own (unexported)
+// StatusBadge.
+function QuotaStatusBadge({ status }: { status: QuotaStatus }) {
+  const color = status === 'exceeded' ? 'red' : status === 'warning' ? 'orange' : status === 'ok' ? 'green' : 'blue';
+  const text = status === 'exceeded' ? 'Exceeded' : status === 'warning' ? 'Near limit' : status === 'unlimited' ? 'Unlimited' : 'OK';
+  return <Badge color={color} text={text} />;
+}
+
+function summaryStatusClass(styles: ReturnType<typeof getResourceSimulatorStyles>, status: QuotaStatus) {
+  if (status === 'exceeded') {
+    return styles.summaryExceeded;
+  }
+  if (status === 'warning') {
+    return styles.summaryWarning;
+  }
+  if (status === 'unlimited') {
+    return styles.summaryUnlimited;
+  }
+  return styles.summaryOk;
+}
+
+function progressStatusClass(styles: ReturnType<typeof getResourceSimulatorStyles>, status: QuotaStatus) {
+  if (status === 'exceeded') {
+    return styles.summaryProgressExceeded;
+  }
+  if (status === 'warning') {
+    return styles.summaryProgressWarning;
+  }
+  return styles.summaryProgressOk;
+}
+
+function formatByUnit(value: number, unit: UsageMeterUnit): string {
+  return unit === 'cores' ? formatCores(value) : formatGiB(value);
 }
 
 function NamespaceQuotaCardRenderer({ model }: SceneComponentProps<NamespaceQuotaCard>) {
   const { title, resource, unit, simulatorUrl } = model.useState();
   const { data } = sceneGraph.getData(model).useState();
-  const styles = useStyles2(quotaCardStyles);
-  const theme = useTheme2();
+  const styles = useStyles2(getResourceSimulatorStyles);
 
   const used = extractQuotaValue(data?.series, resource, 'used') ?? 0;
   const hard = extractQuotaValue(data?.series, resource, 'hard');
   const ratio = hard !== undefined && hard > 0 ? used / hard : undefined;
 
-  const status: 'unlimited' | 'exceeded' | 'warning' | 'ok' =
-    hard === undefined ? 'unlimited' : ratio! >= 1 ? 'exceeded' : ratio! >= 0.8 ? 'warning' : 'ok';
-  const badgeColor = status === 'exceeded' ? 'red' : status === 'warning' ? 'orange' : status === 'ok' ? 'green' : 'blue';
-  const badgeText =
-    status === 'exceeded' ? 'Exceeded' : status === 'warning' ? 'Near limit' : status === 'unlimited' ? 'Unlimited' : 'OK';
-
-  const usedText = unit === 'cores' ? formatCores(used) : formatGiB(used);
+  const status: QuotaStatus = hard === undefined ? 'unlimited' : ratio! >= 1 ? 'exceeded' : ratio! >= 0.8 ? 'warning' : 'ok';
+  const usedText = formatByUnit(used, unit);
   const hardText = hard !== undefined ? formatMeterPair(used, hard, unit).requested : undefined;
+  const progressWidth = ratio === undefined ? undefined : `${Math.min(100, Math.max(0, ratio * 100))}%`;
+
+  const helpText =
+    hard === undefined
+      ? 'No quota configured for this namespace.'
+      : status === 'exceeded'
+        ? `Over quota by ${formatByUnit(used - hard, unit)}`
+        : `${formatByUnit(Math.max(0, hard - used), unit)} remaining`;
 
   return (
     <div
-      className={styles.card}
+      className={`${styles.summary} ${summaryStatusClass(styles, status)}`}
       role="button"
       tabIndex={0}
       onClick={() => window.location.assign(simulatorUrl)}
       onKeyDown={(e) => e.key === 'Enter' && window.location.assign(simulatorUrl)}
+      style={{ cursor: 'pointer' }}
     >
-      <div className={styles.header}>
-        <span className={styles.label}>{title}</span>
-        <Badge color={badgeColor} text={badgeText} />
+      <div className={styles.summaryHeader}>
+        <span className={styles.summaryLabel}>{title}</span>
+        <QuotaStatusBadge status={status} />
       </div>
-      <strong className={styles.value}>{usedText}</strong>
-      <span className={styles.meta}>{hardText !== undefined ? `of ${hardText} requested` : 'No quota set'}</span>
-      {ratio !== undefined && (
-        <div className={styles.progress} aria-label={`${usedText} used`}>
-          <div
-            className={styles.progressFill}
-            style={{ width: `${Math.min(100, Math.max(0, ratio * 100))}%`, background: theme.visualization.getColorByName(badgeColor) }}
-          />
+      <strong className={styles.summaryValue}>{usedText}</strong>
+      <span className={styles.summaryMeta}>{hardText !== undefined ? `of ${hardText} requested` : ''}</span>
+      {progressWidth !== undefined && (
+        <div className={styles.summaryProgress} aria-label={`${usedText} used`}>
+          <div className={`${styles.summaryProgressFill} ${progressStatusClass(styles, status)}`} style={{ width: progressWidth }} />
         </div>
       )}
+      <span className={styles.summaryHelp}>{helpText}</span>
     </div>
   );
 }

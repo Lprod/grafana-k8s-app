@@ -22,10 +22,11 @@ import { buildWorkloadsListTargets } from '../../queries/workloadQueries';
 import {
   UsageIcon,
   attachDesiredPodsField,
-  linkedValueCell,
+  attachPercentField,
   readyDesiredPodsCell,
+  requestUsageCell,
   usageColorFromTier,
-  usageThresholds,
+  usageTierCell,
 } from '../../scenes/tableCells';
 import {
   CLUSTER_VARIABLE_NAME,
@@ -106,10 +107,30 @@ function getWorkloadsListScene() {
       // "Value #desired_pods" field/column can be fully dropped below
       // instead of merely hidden.
       attachDesiredPodsField('Value #ready_pods', 'Value #desired_pods'),
+      // Same combined value+percent+bar cell treatment as the Namespaces
+      // page's table (see getNamespacesListScene in namespacesPage.tsx) -
+      // CPU Usage colored by the CPU Requests ratio, Mem Usage by the Mem
+      // *Limits* ratio (the hard OOM-kill ceiling, not just a scheduling
+      // reservation), stashed via attachPercentField so the raw percent
+      // fields can be fully dropped below instead of kept as separate
+      // "... %" columns.
+      attachPercentField('Value #cpu_requests', 'Value #cpu_requests_percent'),
+      attachPercentField('Value #cpu_usage', 'Value #cpu_requests_percent'),
+      attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
+      attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
+      attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
       {
         id: 'organize',
         options: {
-          excludeByName: { Time: true, asserts_env: true, asserts_site: true, 'Value #desired_pods': true },
+          excludeByName: {
+            Time: true,
+            asserts_env: true,
+            asserts_site: true,
+            'Value #desired_pods': true,
+            'Value #cpu_requests_percent': true,
+            'Value #mem_requests_percent': true,
+            'Value #mem_limits_percent': true,
+          },
           indexByName: {
             cluster: 0,
             namespace: 1,
@@ -118,12 +139,9 @@ function getWorkloadsListScene() {
             'Value #ready_pods': 4,
             'Value #cpu_usage': 5,
             'Value #cpu_requests': 6,
-            'Value #cpu_requests_percent': 7,
-            'Value #mem_usage': 8,
-            'Value #mem_requests': 9,
-            'Value #mem_requests_percent': 10,
-            'Value #mem_limits': 11,
-            'Value #mem_limits_percent': 12,
+            'Value #mem_usage': 7,
+            'Value #mem_requests': 8,
+            'Value #mem_limits': 9,
           },
           renameByName: {},
         },
@@ -162,6 +180,10 @@ function getWorkloadsListScene() {
         .overrideUnit('cores')
         .overrideDecimals(2)
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: usageTierCell(),
+        } as any)
         .matchFieldsWithName('Value #cpu_requests')
         .overrideDisplayName('CPU Requests')
         .overrideUnit('cores')
@@ -169,46 +191,32 @@ function getWorkloadsListScene() {
         .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
-          cellComponent: linkedValueCell('Value #cpu_requests_percent'),
+          cellComponent: requestUsageCell(),
         } as any)
-        .matchFieldsWithName('Value #cpu_requests_percent')
-        .overrideDisplayName('CPU Requests %')
-        .overrideUnit('percentunit')
-        .overrideThresholds(usageThresholds)
-        .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
         .matchFieldsWithName('Value #mem_usage')
         .overrideDisplayName('Mem Usage')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', {
+          type: TableCellDisplayMode.Custom,
+          cellComponent: usageTierCell(),
+        } as any)
         .matchFieldsWithName('Value #mem_requests')
         .overrideDisplayName('Mem Requests')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
-          cellComponent: linkedValueCell('Value #mem_requests_percent'),
+          cellComponent: requestUsageCell(),
         } as any)
-        .matchFieldsWithName('Value #mem_requests_percent')
-        .overrideDisplayName('Mem Requests %')
-        .overrideUnit('percentunit')
-        .overrideThresholds(usageThresholds)
-        .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
         .matchFieldsWithName('Value #mem_limits')
         .overrideDisplayName('Mem Limits')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
         .overrideCustomFieldConfig('cellOptions', {
           type: TableCellDisplayMode.Custom,
-          cellComponent: linkedValueCell('Value #mem_limits_percent'),
+          cellComponent: requestUsageCell(),
         } as any)
-        .matchFieldsWithName('Value #mem_limits_percent')
-        .overrideDisplayName('Mem Limits %')
-        .overrideUnit('percentunit')
-        .overrideThresholds(usageThresholds)
-        .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
     )
     .build();
 

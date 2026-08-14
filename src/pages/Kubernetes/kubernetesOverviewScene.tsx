@@ -35,7 +35,11 @@ const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 
 // The 6 top tiles are informational counts, not health signals - always the
 // same flat color regardless of value (a single threshold step pins it).
-const flatStatThresholds = { mode: ThresholdsMode.Absolute, steps: [{ color: 'blue', value: -Infinity }] };
+// Teal-blue hex (not the named "blue" hue) to match Grafana's own
+// Kubernetes Monitoring app reference - sampled directly from
+// https://grafana.com/media/docs/grafana-cloud/k8s/k8s-overview-overvw-tab.png,
+// whose tiles render a distinctly cyan-leaning gradient, not standard blue.
+const flatStatThresholds = { mode: ThresholdsMode.Absolute, steps: [{ color: '#1CC4D7', value: -Infinity }] };
 
 // Same shape as `alertsThresholds` in clustersApp.tsx (green baseline, red
 // as soon as anything shows up) - kept local rather than imported since
@@ -236,9 +240,20 @@ export function getKubernetesOverviewScene() {
       b
         .matchFieldsWithName('Containers')
         .overrideUnit('none')
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'blue' })
+        // continuous-BlPu (Blue-Purple), not a fixed single color - matches
+        // Grafana's own reference (sampled directly from its docs
+        // screenshot: bars go from blue to purple, more purple the higher
+        // the value), combined with the existing Gradient cell mode's
+        // along-the-bar lightening.
+        .overrideColor({ mode: FieldColorModeId.ContinuousBlPu })
         .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Gauge, mode: BarGaugeDisplayMode.Gradient })
-        .overrideCustomFieldConfig('footer', { reducers: ['count'] })
+        // Fixed width so "Containers" doesn't stretch with the rest of the
+        // table - "Image spec" (the only other column) fills the remaining
+        // space, matching the reference's wide-name/narrow-count layout.
+        .overrideCustomFieldConfig('width', 160)
+        // "sum" (not "count"): the reference's footer is the *total number
+        // of containers* across every image, not the number of image rows.
+        .overrideCustomFieldConfig('footer', { reducers: ['sum'] })
     )
     .build();
 

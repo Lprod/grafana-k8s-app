@@ -10,7 +10,7 @@ datasources:
     jsonData:
       httpMethod: POST
 
-  - name: Elastic (Demo)
+  - name: Elasticsearch Logmanagement Prod Main
     type: elasticsearch
     uid: elastic-demo
     access: proxy

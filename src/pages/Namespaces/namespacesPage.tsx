@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   EmbeddedScene,
   FieldConfigOverridesBuilder,
   PanelBuilders,
   SceneAppPage,
   SceneAppPageLike,
+  sceneGraph,
   SceneControlsSpacer,
   SceneDataTransformer,
   SceneFlexItem,
@@ -18,22 +19,25 @@ import {
   SceneVariableSet,
   VariableValueControl,
 } from '@grafana/scenes';
-import { FieldColorModeId } from '@grafana/data';
-import { LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
-import { Alert, Badge, useTheme2 } from '@grafana/ui';
+import { FieldColorModeId, rangeUtil } from '@grafana/data';
+import { LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode, VisibilityMode } from '@grafana/schema';
+import { Alert, Badge, InlineSwitch, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildNamespacesListTargets, namespaceTableQueries, substituteClusterAndNamespace } from '../../queries/namespaceQueries';
 import {
-  buildElasticsearchTermsOverTimeQuery,
   buildNamespaceAlertsSeverityQuery,
+  buildNamespaceEgressIpQuery,
+  buildNamespaceEventsLevelQueries,
+  buildNamespaceLogsLevelQueries,
   namespaceCpuOptimizationQueries,
-  namespaceEventsLuceneQuery,
-  namespaceLogsLuceneQuery,
+  namespaceEventTypeDefs,
+  namespaceLogLevelDefs,
   namespaceMemoryOptimizationQueries,
   namespaceWorkloadsTableQueries,
+  NAMESPACE_LEVEL_OTHER,
+  NAMESPACE_LEVEL_OTHER_COLOR,
   NamespaceOptimizationQueryKey,
   NamespaceWorkloadsQueryKey,
-  substituteLuceneClusterAndNamespace,
 } from '../../queries/namespaceOverviewQueries';
 import { simulatorQuotaQuery } from '../../queries/resourceSimulator';
 import {
@@ -45,7 +49,7 @@ import {
   usageColorFromTier,
   usageTierCell,
 } from '../../scenes/tableCells';
-import { ClusterAlertsBadge, InfoCard, NamespaceHealthBanner } from '../../scenes/clusterOverviewCards';
+import { InfoCard, NamespaceHealthBanner } from '../../scenes/clusterOverviewCards';
 import { NamespaceQuotaCard } from '../../scenes/namespaceOverviewCards';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import {
@@ -287,6 +291,54 @@ function NamespacePageTitle({ title, cluster }: { title: string; cluster: string
   );
 }
 
+// Toggles both the Logs and Events bar charts between their normal query
+// and a "warn/error only" variant, AND keeps their date_histogram interval
+// following the timepicker (floored at 1m - see buildElasticsearchLevelQuery
+// in namespaceOverviewQueries.ts for why that's computed here in JS rather
+// than left to the datasource). Bypasses Scenes' variable-interpolation
+// machinery entirely for the toggle - CustomVariable's CSV/"label : value"
+// option parser isn't a good fit for Lucene clauses full of colons and
+// parens - so this just swaps each SceneQueryRunner's own `queries` state
+// directly and calls `runQueries()` to force the re-fetch (setState alone
+// doesn't trigger one; that only happens automatically for
+// *variable-driven* query changes).
+function LogsEventsLevelToggle({
+  logsRunner,
+  eventsRunner,
+  cluster,
+  namespace,
+}: {
+  logsRunner: SceneQueryRunner;
+  eventsRunner: SceneQueryRunner;
+  cluster: string;
+  namespace: string;
+}) {
+  const [onlyWarnError, setOnlyWarnError] = useState(false);
+  const timeRange = sceneGraph.getTimeRange(logsRunner).useState().value;
+
+  useEffect(() => {
+    // resolution 50 (not the ~100+ a timeseries panel would target): a Bar
+    // Chart draws each time bucket as its own labeled category, so fewer,
+    // wider buckets keep the x-axis legible at this panel's width.
+    const interval = rangeUtil.calculateInterval(timeRange, 50, '1m').interval;
+    logsRunner.setState({ queries: buildNamespaceLogsLevelQueries(cluster, namespace, onlyWarnError, interval) as any });
+    logsRunner.runQueries();
+    eventsRunner.setState({ queries: buildNamespaceEventsLevelQueries(namespace, onlyWarnError, interval) as any });
+    eventsRunner.runQueries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeRange.from.valueOf(), timeRange.to.valueOf(), onlyWarnError]);
+
+  return (
+    <InlineSwitch
+      transparent
+      showLabel
+      label="Only warn/error"
+      value={onlyWarnError}
+      onChange={(e) => setOnlyWarnError(e.currentTarget.checked)}
+    />
+  );
+}
+
 // Shared series styling for the "Namespace optimization" CPU/Memory charts:
 // Capacity (the resourcequota hard ceiling) is a solid red line; Limits a
 // dashed red line; Requests a dashed orange line; Allocation (requests,
@@ -347,6 +399,12 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
         format: 'table',
         instant: true,
       },
+      {
+        refId: 'egressip',
+        expr: buildNamespaceEgressIpQuery(clusterRegex, namespaceRegex),
+        format: 'table',
+        instant: true,
+      },
     ],
   });
 
@@ -356,14 +414,13 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
       { label: 'cluster:', fieldName: 'cluster', href: `${CLUSTERS_URL}/${encodeURIComponent(cluster)}` },
       {
         label: 'workloads:',
-        fieldName: 'Value',
+        // Prometheus datasource only names the value field bare "Value"
+        // when a request has exactly one query - with the egressip query
+        // added alongside "info" below, it disambiguates to "Value #info".
+        fieldName: 'Value #info',
         href: `${PLUGIN_BASE_URL}/${ROUTES.Workloads}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}`,
       },
-      // TODO: no EgressIP metric exists in this codebase/demo data yet
-      // (checked - see conversation). Wired to a field name nothing
-      // currently populates, so this renders "-" until the real
-      // metric/label is known.
-      { label: 'egress ip:', fieldName: 'egress_ip' },
+      { label: 'egress ip:', fieldName: 'egressip_assigned_0' },
     ],
   });
 
@@ -404,23 +461,16 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
     simulatorUrl,
   });
 
-  // Two separate runners with the same expression: each SceneObject needs
-  // to own its own $data in the scene graph (same pattern as
-  // healthRunner/alertsBadgeRunner in clustersApp.tsx's cluster Overview).
+  // The alerts button now lives inside the health banner itself (its Alert
+  // `action` slot) rather than as a separate badge elsewhere on the page,
+  // so one query/runner covers both the banner's message and its button.
   const healthRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [{ refId: 'alerts', expr: buildNamespaceAlertsSeverityQuery(clusterRegex, namespaceRegex), instant: true }],
   });
 
-  const healthBanner = new NamespaceHealthBanner({ $data: healthRunner });
-
-  const alertsBadgeRunner = new SceneQueryRunner({
-    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'alerts', expr: buildNamespaceAlertsSeverityQuery(clusterRegex, namespaceRegex), instant: true }],
-  });
-
-  const alertsBadge = new ClusterAlertsBadge({
-    $data: alertsBadgeRunner,
+  const healthBanner = new NamespaceHealthBanner({
+    $data: healthRunner,
     alertsUrl: `${PLUGIN_BASE_URL}/${ROUTES.Alerts}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}`,
   });
 
@@ -579,28 +629,27 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
     )
     .build();
 
-  // log.level/event.type spelling varies by source (ERROR vs Error vs Err,
-  // WARN vs Warning) - matchFieldsWithNameByRegex's pattern goes through
-  // stringToJsRegex, which honors a trailing "/i" flag, so one
-  // case-insensitive alternation per color covers every casing/abbreviation
-  // variant instead of listing each exact string.
-  const levelRegex = (...alternatives: string[]) => `/^(${alternatives.join('|')})$/i`;
+  // Logs/Events bar charts: one Elasticsearch date_histogram-only query per
+  // canonical level/type (see buildNamespaceLogsLevelQueries/
+  // buildNamespaceEventsLevelQueries), each already merging every known
+  // spelling/casing variant via its own Lucene OR-clause - so "ERROR" and
+  // "Err" land in the same series/bucket instead of two. "joinByField" on
+  // Time reshapes those per-level frames into the single wide table the Bar
+  // Chart panel needs to stack them. Colors are now plain exact-name
+  // matches since each query's alias already IS the canonical name.
+  function applyLevelColorOverrides(b: FieldConfigOverridesBuilder<any>, defs: typeof namespaceLogLevelDefs) {
+    for (const def of defs) {
+      b = b.matchFieldsWithName(def.canonical).overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: def.color });
+    }
+    return b.matchFieldsWithName(NAMESPACE_LEVEL_OTHER).overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR });
+  }
 
-  // Logs/Events bar charts: Elasticsearch date_histogram + terms query,
-  // one time series per term value (see buildElasticsearchTermsOverTimeQuery
-  // - "terms" nests date_histogram inside each term bucket, which the ES
-  // datasource turns into one frame per term). "joinByField" on Time reshapes
-  // those long-format frames into the single wide table the Bar Chart panel
-  // needs to stack per-term columns within each time bucket.
+  // Queries start empty and are populated by LogsEventsLevelToggle's effect
+  // as soon as it mounts (it needs the live time range to compute the
+  // interval, which isn't known yet here at scene-construction time).
   const logsRunner = new SceneQueryRunner({
     datasource: { uid: `\${${LOGS_DATASOURCE_VARIABLE_NAME}}` },
-    queries: [
-      buildElasticsearchTermsOverTimeQuery(
-        'logs',
-        substituteLuceneClusterAndNamespace(namespaceLogsLuceneQuery, cluster, namespace),
-        'log.level'
-      ) as any,
-    ],
+    queries: [],
   });
 
   const logsData = new SceneDataTransformer({
@@ -612,33 +661,15 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
     .setTitle('Logs')
     .setData(logsData)
     .setOption('stacking', StackingMode.Normal)
-    .setColor({ mode: FieldColorModeId.Fixed, fixedColor: 'grey' })
-    .setOverrides((b) =>
-      b
-        .matchFieldsWithNameByRegex(levelRegex('alert'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'dark-red' })
-        .matchFieldsWithNameByRegex(levelRegex('error', 'err'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'red' })
-        .matchFieldsWithNameByRegex(levelRegex('warn', 'warning'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'orange' })
-        .matchFieldsWithNameByRegex(levelRegex('info'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'blue' })
-        .matchFieldsWithNameByRegex(levelRegex('debug'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'green' })
-        .matchFieldsWithNameByRegex(levelRegex('trace'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'purple' })
-    )
+    .setOption('xTickLabelRotation', -45)
+    .setOption('showValue', VisibilityMode.Never)
+    .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
+    .setOverrides((b) => applyLevelColorOverrides(b, namespaceLogLevelDefs))
     .build();
 
   const eventsRunner = new SceneQueryRunner({
     datasource: { uid: `\${${LOGS_DATASOURCE_VARIABLE_NAME}}` },
-    queries: [
-      buildElasticsearchTermsOverTimeQuery(
-        'events',
-        substituteLuceneClusterAndNamespace(namespaceEventsLuceneQuery, cluster, namespace),
-        'event.type'
-      ) as any,
-    ],
+    queries: [],
   });
 
   const eventsData = new SceneDataTransformer({
@@ -650,32 +681,16 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
     .setTitle('Events')
     .setData(eventsData)
     .setOption('stacking', StackingMode.Normal)
-    .setColor({ mode: FieldColorModeId.Fixed, fixedColor: 'grey' })
-    .setOverrides((b) =>
-      b
-        .matchFieldsWithNameByRegex(levelRegex('normal'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'green' })
-        .matchFieldsWithNameByRegex(levelRegex('warn', 'warning'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'orange' })
-        .matchFieldsWithNameByRegex(levelRegex('error', 'err'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'red' })
-        .matchFieldsWithNameByRegex(levelRegex('notice'))
-        .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'yellow' })
-    )
+    .setOption('xTickLabelRotation', -45)
+    .setOption('showValue', VisibilityMode.Never)
+    .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
+    .setOverrides((b) => applyLevelColorOverrides(b, namespaceEventTypeDefs))
     .build();
 
   return new EmbeddedScene({
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
-        new SceneFlexLayout({
-          direction: 'row',
-          ySizing: 'content',
-          children: [
-            new SceneFlexItem({ body: new SceneControlsSpacer() }),
-            new SceneFlexItem({ width: 220, ySizing: 'content', body: alertsBadge }),
-          ],
-        }),
         new SceneFlexItem({
           ySizing: 'content',
           body: new SceneReactObject({ reactNode: <SectionHeading title="Namespace information" /> }),
@@ -685,9 +700,9 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
           direction: 'row',
           ySizing: 'content',
           children: [
-            new SceneFlexItem({ width: '40%', ySizing: 'content', minWidth: 0, body: infoCard }),
-            new SceneFlexItem({ width: '30%', ySizing: 'content', minWidth: 0, body: cpuQuotaCard }),
-            new SceneFlexItem({ width: '30%', ySizing: 'content', minWidth: 0, body: memQuotaCard }),
+            new SceneFlexItem({ width: '50%', ySizing: 'content', minWidth: 0, body: infoCard }),
+            new SceneFlexItem({ width: '25%', ySizing: 'content', minWidth: 0, body: cpuQuotaCard }),
+            new SceneFlexItem({ width: '25%', ySizing: 'content', minWidth: 0, body: memQuotaCard }),
           ],
         }),
         new SceneFlexItem({
@@ -709,6 +724,12 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
         new SceneFlexItem({
           ySizing: 'content',
           body: new SceneReactObject({ reactNode: <SectionHeading title="Logs / Events" /> }),
+        }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({
+            reactNode: <LogsEventsLevelToggle logsRunner={logsRunner} eventsRunner={eventsRunner} cluster={cluster} namespace={namespace} />,
+          }),
         }),
         new SceneFlexLayout({
           direction: 'row',

@@ -8,7 +8,7 @@ import {
   VariableValueControl,
 } from '@grafana/scenes';
 import { PLUGIN_BASE_URL } from '../../constants';
-import { getComingSoonScene } from '../../scenes/comingSoon';
+import { getKubernetesAlertsScene } from './kubernetesAlertsScene';
 import { getKubernetesEfficiencyScene } from './kubernetesEfficiencyScene';
 import { getKubernetesOverviewScene } from './kubernetesOverviewScene';
 import {
@@ -57,7 +57,7 @@ export function getKubernetesHomePage() {
         // specific static sibling always wins over this page's `/*` match,
         // so a tab literally named "alerts" here would be unreachable.
         routePath: 'alerts-tab',
-        getScene: () => getComingSoonScene('The Alerts tab is coming soon - see the standalone Alerts page for now.'),
+        getScene: getKubernetesAlertsScene,
       }),
     ],
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
