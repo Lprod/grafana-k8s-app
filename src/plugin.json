@@ -44,6 +44,12 @@
     },
     {
       "type": "page",
+      "name": "All Jobs",
+      "path": "/a/%PLUGIN_ID%/jobs",
+      "addToNav": true
+    },
+    {
+      "type": "page",
       "name": "Nodes",
       "path": "/a/%PLUGIN_ID%/nodes",
       "addToNav": true

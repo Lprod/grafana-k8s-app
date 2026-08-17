@@ -196,6 +196,50 @@ kube_cronjob_labels{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aw
 kube_cronjob_labels{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",exported_namespace="cluster-tests",cronjob="infra-check",label_category="infra"} 1
 kube_cronjob_labels{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",exported_namespace="cluster-tests",cronjob="user-check",label_category="user-impact"} 1
 
+# "All Jobs" page's Cronjobs tab demo data (demo data) - reuses the same
+# infra-check/user-check CronJobs as the Cluster Health data above, adding
+# the metrics that page's own queries read (kube_cronjob_info and friends),
+# additive only - doesn't touch anything Cluster Health depends on.
+# demo-cluster-gce's user-check is suspended, for STATUS column variety.
+# The last_success/last_schedule/next_schedule timestamps are relative to
+# when this file was last edited (~2026-08-17), not live - like the
+# kube_job_status_start_time values above, they'll drift stale over time,
+# same known static-demo-data limitation documented elsewhere in this file.
+# HELP kube_cronjob_info Info about cronjob.
+# TYPE kube_cronjob_info gauge
+kube_cronjob_info{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="infra-check",schedule="0 * * * *",concurrency_policy="Allow"} 1
+kube_cronjob_info{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="user-check",schedule="*/15 * * * *",concurrency_policy="Allow"} 1
+kube_cronjob_info{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="infra-check",schedule="0 * * * *",concurrency_policy="Allow"} 1
+kube_cronjob_info{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="user-check",schedule="*/15 * * * *",concurrency_policy="Allow"} 1
+
+# HELP kube_cronjob_status_last_successful_time LastSuccessfulTime of the cronjob.
+# TYPE kube_cronjob_status_last_successful_time gauge
+kube_cronjob_status_last_successful_time{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="infra-check"} 1786963449
+kube_cronjob_status_last_successful_time{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="user-check"} 1786963449
+kube_cronjob_status_last_successful_time{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="infra-check"} 1786963449
+kube_cronjob_status_last_successful_time{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="user-check"} 1786860000
+
+# HELP kube_cronjob_status_last_schedule_time LastScheduleTime of the cronjob.
+# TYPE kube_cronjob_status_last_schedule_time gauge
+kube_cronjob_status_last_schedule_time{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="infra-check"} 1786964289
+kube_cronjob_status_last_schedule_time{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="user-check"} 1786964289
+kube_cronjob_status_last_schedule_time{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="infra-check"} 1786964289
+kube_cronjob_status_last_schedule_time{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="user-check"} 1786860000
+
+# HELP kube_cronjob_next_schedule_time Next time the cronjob should be scheduled.
+# TYPE kube_cronjob_next_schedule_time gauge
+kube_cronjob_next_schedule_time{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="infra-check"} 1786967649
+kube_cronjob_next_schedule_time{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="user-check"} 1786964949
+kube_cronjob_next_schedule_time{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="infra-check"} 1786967649
+kube_cronjob_next_schedule_time{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="user-check"} 1786964949
+
+# HELP kube_cronjob_spec_suspend Suspend flag of a cronjob.
+# TYPE kube_cronjob_spec_suspend gauge
+kube_cronjob_spec_suspend{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="infra-check"} 0
+kube_cronjob_spec_suspend{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",cronjob="user-check"} 0
+kube_cronjob_spec_suspend{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="infra-check"} 0
+kube_cronjob_spec_suspend{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",cronjob="user-check"} 1
+
 # HELP kube_node_status_condition The condition of a cluster node. Every node
 # reports a status="false" row for "Ready" (0 when the node is Ready); the
 # Cluster Health query multiplies this branch by 0 and only uses it as a
@@ -503,6 +547,30 @@ kube_statefulset_status_replicas_ready{cluster="demo-cluster-gce",namespace="def
 # TYPE kube_statefulset_replicas gauge
 kube_statefulset_replicas{cluster="demo-cluster-aws",namespace="default",statefulset="cache"} 2
 kube_statefulset_replicas{cluster="demo-cluster-gce",namespace="default",statefulset="cache"} 3
+
+# "All Jobs" page's Jobs tab demo data (demo data) - extends the existing
+# db-migrate Job (below) with the owner/start/completion metrics its own
+# queries read, rather than reusing infra-check/user-check (whose
+# kube_job_status_start_time above is a much older fixed timestamp the
+# Jobs tab's own `> (time() - $__range)` filtering would exclude from the
+# default 1h view). owner_kind/owner_name empty (bare Job, not CronJob-owned)
+# gives db-migrate's row a plain "Job" TYPE/CONTROLLED-BY, contrasting with
+# the Cronjobs tab's infra-check/user-check. Same relative-to-editing-time
+# staleness caveat as the Cronjobs demo data above.
+# HELP kube_job_owner Information about the Job's owner (demo data).
+# TYPE kube_job_owner gauge
+kube_job_owner{cluster="demo-cluster-aws",namespace="default",job_name="db-migrate",owner_kind="",owner_name=""} 1
+kube_job_owner{cluster="demo-cluster-gce",namespace="default",job_name="db-migrate",owner_kind="",owner_name=""} 1
+
+# HELP kube_job_status_start_time StartTime represents time when the job was acknowledged by the Job Manager (demo data).
+# TYPE kube_job_status_start_time gauge
+kube_job_status_start_time{cluster="demo-cluster-aws",namespace="default",job_name="db-migrate"} 1786963149
+kube_job_status_start_time{cluster="demo-cluster-gce",namespace="default",job_name="db-migrate"} 1786963149
+
+# HELP kube_job_status_completion_time CompletionTime represents time when the job was completed (demo data).
+# TYPE kube_job_status_completion_time gauge
+kube_job_status_completion_time{cluster="demo-cluster-aws",namespace="default",job_name="db-migrate"} 1786963449
+kube_job_status_completion_time{cluster="demo-cluster-gce",namespace="default",job_name="db-migrate"} 1786963449
 
 # HELP kube_job_status_succeeded The number of pods which reached Phase Succeeded (demo data).
 # TYPE kube_job_status_succeeded gauge

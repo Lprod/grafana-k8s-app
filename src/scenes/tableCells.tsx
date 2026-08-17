@@ -182,7 +182,7 @@ export function linkedValueCell(percentFieldName: string) {
 // *did* take effect. Attaching the value here instead sidesteps field
 // overrides entirely: the source field can then be fully removed from the
 // frame via `organize`'s `excludeByName` rather than merely hidden.
-function attachFieldValues(targetFieldName: string, sourceFieldName: string, configKey: string): CustomTransformOperator {
+export function attachFieldValues(targetFieldName: string, sourceFieldName: string, configKey: string): CustomTransformOperator {
   return () => (source) =>
     source.pipe(
       map((frames) =>

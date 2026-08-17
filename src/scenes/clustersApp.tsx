@@ -58,6 +58,7 @@ import { getNamespacesPage } from '../pages/Namespaces/namespacesPage';
 import { getWorkloadsPage } from '../pages/Workloads/workloadsPage';
 import { getNodesPage } from '../pages/Nodes/nodesPage';
 import { getAlertsPage } from '../pages/Alerts/alertsPage';
+import { getJobsPage } from '../pages/Jobs/jobsPage';
 import { getKubernetesHomePage } from '../pages/Kubernetes/kubernetesPage';
 import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds } from './tableCells';
 import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
@@ -1802,6 +1803,7 @@ export function getClustersSceneApp() {
       getResourceSimulatorPage(),
       getNamespacesPage(),
       getWorkloadsPage(),
+      getJobsPage(),
       getNodesPage(),
       getAlertsPage(),
     ],
