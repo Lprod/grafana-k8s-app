@@ -41,6 +41,7 @@ import {
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
+const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
 function ResourceUsageLegend() {
@@ -161,6 +162,7 @@ function getWorkloadsListScene() {
         .matchFieldsWithName('namespace')
         .overrideDisplayName('Namespace')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([{ title: 'View namespace', url: `${NAMESPACES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}` }])
         .matchFieldsWithName('workload')
         .overrideDisplayName('Workload')
         .overrideCustomFieldConfig('align', 'left')

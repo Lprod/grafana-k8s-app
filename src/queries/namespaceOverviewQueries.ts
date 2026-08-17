@@ -17,8 +17,68 @@ export function buildNamespaceAlertsSeverityQuery(clusterRegex: string, namespac
 // dedicated value field (standard Prometheus "info metric" pattern) - it's
 // the "egressip_assigned_0" label on the series, which the table-format
 // response turns into its own column.
-export function buildNamespaceEgressIpQuery(clusterRegex: string, namespaceRegex: string): string {
-  return `ovn_egressip_info{namespace="monitoring-addons", cluster="${clusterRegex}", environment_debeka_de="${namespaceRegex}"}`;
+//
+// `environment_debeka_de` is "<application>-<substage>" (the namespace's
+// *application coordinates*), not the k8s namespace name itself - these
+// usually match but not always. `environmentDebekaDe` is passed in already
+// resolved: either literal Grafana variable-interpolation tokens
+// (`${application}-${substage}`, when the RQLite lookup below could run) or
+// the plain namespace as a same-as-before fallback when it couldn't - see
+// getNamespaceOverviewScene in namespacesPage.tsx.
+export function buildNamespaceEgressIpQuery(clusterRegex: string, environmentDebekaDe: string): string {
+  return `ovn_egressip_info{namespace="monitoring-addons", cluster="${clusterRegex}", environment_debeka_de="${environmentDebekaDe}"}`;
+}
+
+export interface OpenshiftClusterCoordinates {
+  dcArea: string;
+  dcTenant: string;
+  dcCluster: string;
+}
+
+// The k8s cluster name embeds datacenter coordinates as
+// "openshift-<dc_cluster>-<dc_tenant>-<dc_area>" - extracted so the RQLite
+// application/substage lookup queries below can filter on them. Real prod
+// cluster names follow this scheme; this demo's own "demo-cluster-aws"/
+// "demo-cluster-gce" names don't, so this returns undefined there and
+// getNamespaceOverviewScene falls back to the namespace-name-only EgressIP
+// query instead of attempting the RQLite lookup.
+export function parseOpenshiftClusterCoordinates(cluster: string): OpenshiftClusterCoordinates | undefined {
+  const areaMatch = cluster.match(/openshift-[^-]+-[^-]+-([^-]+)/);
+  const tenantMatch = cluster.match(/openshift-[^-]+-([^-]+)-[^-]+/);
+  const clusterMatch = cluster.match(/openshift-([^-]+)-[^-]+-[^-]+/);
+  if (!areaMatch || !tenantMatch || !clusterMatch) {
+    return undefined;
+  }
+  return { dcArea: areaMatch[1], dcTenant: tenantMatch[1], dcCluster: clusterMatch[1] };
+}
+
+// Escapes a value going into a single-quoted SQL string literal - the
+// namespace name is the only piece of these queries that isn't already a
+// regex-derived, dash-and-alphanumeric-only coordinate.
+function escapeSqlLiteral(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+function namespaceCoordinatesWhereClause(namespace: string, coordinates: OpenshiftClusterCoordinates): string {
+  return `r.infra_type = 'ocp_namespace' AND r.state = 'present' AND r.infra_key LIKE '${escapeSqlLiteral(namespace)}' AND r.area LIKE '${escapeSqlLiteral(coordinates.dcArea)}' AND r.tenant LIKE '${escapeSqlLiteral(coordinates.dcTenant)}' AND json_extract(r.result, '$.cluster') LIKE '${escapeSqlLiteral(coordinates.dcCluster)}'`;
+}
+
+// The org's CMDB (RQLite) resolves a namespace's real "application"/
+// "substage" application coordinates from its datacenter coordinates - used
+// as hidden QueryVariables (see getNamespaceOverviewScene) rather than run
+// as a panel query, since only the single resolved value is needed.
+export function buildNamespaceApplicationQuery(namespace: string, coordinates: OpenshiftClusterCoordinates): string {
+  return `SELECT r.application
+FROM resource r JOIN coordinates c ON r.application = c.application AND r.substage = c.substage AND r.area = c.area AND r.tenant = c.tenant
+LEFT JOIN itsm_service i ON c.itsm_service_name = i.name
+WHERE ${namespaceCoordinatesWhereClause(namespace, coordinates)}`;
+}
+
+export function buildNamespaceSubstageQuery(namespace: string, coordinates: OpenshiftClusterCoordinates): string {
+  return `SELECT r.substage
+FROM resource r JOIN coordinates c ON r.application = c.application AND r.substage = c.substage AND r.area = c.area AND r.tenant = c.tenant
+LEFT JOIN itsm_service i ON c.itsm_service_name = i.name
+WHERE ${namespaceCoordinatesWhereClause(namespace, coordinates)}`;
 }
 
 // "Namespace optimization" charts on the Overview tab: capacity/limits/

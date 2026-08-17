@@ -3,6 +3,7 @@ import { SceneComponentProps, SceneObjectBase, SceneObjectState, sceneGraph } fr
 import { Badge, useStyles2 } from '@grafana/ui';
 import { formatCores, formatGiB, formatMeterPair, UsageMeterUnit } from '../pages/ResourceSimulator/resourceSimulatorFormatters';
 import { getStyles as getResourceSimulatorStyles } from '../pages/ResourceSimulator/ResourceSimulatorObject';
+import { PanelLinkTitleItem } from './panelLinks';
 
 // A read-only, single-namespace "quota" card reusing the Resource
 // Simulator's own summary-card CSS verbatim (getStyles' summary*/
@@ -92,22 +93,31 @@ function NamespaceQuotaCardRenderer({ model }: SceneComponentProps<NamespaceQuot
   return (
     <div
       className={`${styles.summary} ${summaryStatusClass(styles, status)}`}
-      role="button"
-      tabIndex={0}
-      onClick={() => window.location.assign(simulatorUrl)}
-      onKeyDown={(e) => e.key === 'Enter' && window.location.assign(simulatorUrl)}
       // height:100% + a column flex layout so that, when the parent
       // SceneFlexItem stretches this card taller than its own natural
       // content height (to match a taller sibling card, e.g. the "Namespace
       // information" InfoCard), the help text anchors to the bottom of the
       // box instead of leaving dead space below it.
-      style={{ cursor: 'pointer', height: '100%', display: 'flex', flexDirection: 'column' }}
+      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
     >
       <div className={styles.summaryHeader}>
         <span className={styles.summaryLabel}>{title}</span>
-        <QuotaStatusBadge status={status} />
+        {/* Badge + Panel Link (title-bar icon) grouped so `summaryHeader`'s
+            own space-between doesn't float the badge into the middle once a
+            third child is added - Value Link is below, on the number
+            itself. Same two-link pattern as the Kubernetes home page's stat
+            tiles, replacing the previous whole-card onClick (not a standard
+            Grafana affordance, and redundant with these). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <QuotaStatusBadge status={status} />
+          <PanelLinkTitleItem title="View in Resource Simulator" url={simulatorUrl} />
+        </div>
       </div>
-      <strong className={styles.summaryValue}>{usedText}</strong>
+      {/* nested <strong> preserves summaryValue's original bold weight -
+          <a> itself doesn't render bold by default the way <strong> did. */}
+      <a href={simulatorUrl} className={styles.summaryValue} style={{ color: 'inherit', textDecoration: 'none' }}>
+        <strong>{usedText}</strong>
+      </a>
       <span className={styles.summaryMeta}>{hardText !== undefined ? `of ${hardText} requested` : ''}</span>
       {progressWidth !== undefined && (
         <div className={styles.summaryProgress} aria-label={`${usedText} used`}>

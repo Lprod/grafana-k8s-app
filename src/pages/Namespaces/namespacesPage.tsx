@@ -3,6 +3,7 @@ import {
   EmbeddedScene,
   FieldConfigOverridesBuilder,
   PanelBuilders,
+  QueryVariable,
   SceneAppPage,
   SceneAppPageLike,
   sceneGraph,
@@ -19,18 +20,20 @@ import {
   SceneVariableSet,
   VariableValueControl,
 } from '@grafana/scenes';
-import { FieldColorModeId, rangeUtil } from '@grafana/data';
+import { FieldColorModeId, rangeUtil, VariableHide } from '@grafana/data';
 import { LegendDisplayMode, LogsSortOrder, StackingMode, TableCellDisplayMode, ThresholdsMode, VisibilityMode } from '@grafana/schema';
 import { Badge, InlineSwitch, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildNamespacesListTargets, namespaceTableQueries, substituteClusterAndNamespace } from '../../queries/namespaceQueries';
 import {
   buildNamespaceAlertsSeverityQuery,
+  buildNamespaceApplicationQuery,
   buildNamespaceEgressIpQuery,
   buildNamespaceEventsLevelQueries,
   buildNamespaceEventsQuery,
   buildNamespaceLogsLevelQueries,
   buildNamespaceLogsQuery,
+  buildNamespaceSubstageQuery,
   namespaceCpuOptimizationQueries,
   namespaceEventTypeDefs,
   namespaceLogLevelDefs,
@@ -40,7 +43,9 @@ import {
   NAMESPACE_LEVEL_OTHER_COLOR,
   NamespaceOptimizationQueryKey,
   NamespaceWorkloadsQueryKey,
+  parseOpenshiftClusterCoordinates,
 } from '../../queries/namespaceOverviewQueries';
+import { infraDatasource } from '../../queries/datasources';
 import { simulatorQuotaQuery } from '../../queries/resourceSimulator';
 import {
   UsageIcon,
@@ -67,6 +72,7 @@ import {
   createClusterFilterVariable,
   createLogsDatasourceVariable,
   createNamespaceFilterVariable,
+  createRqliteDatasourceVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 
@@ -397,6 +403,38 @@ function buildNamespaceOptimizationPanel(
 }
 
 function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRegex: string, namespaceRegex: string, baseUrl: string) {
+  // `environment_debeka_de` (the label the EgressIP query below filters on)
+  // is the namespace's "<application>-<substage>" application coordinates,
+  // not always the same as the k8s namespace name - resolved via the org's
+  // RQLite CMDB from the cluster's own datacenter coordinates, embedded in
+  // its name. Falls back to the namespace name directly (the old behavior)
+  // when the cluster name doesn't follow that scheme - this demo's own
+  // "demo-cluster-aws"/"demo-cluster-gce" names don't, so the fallback is
+  // what's exercised here.
+  const clusterCoordinates = parseOpenshiftClusterCoordinates(cluster);
+  const applicationVariableName = 'namespaceApplication';
+  const substageVariableName = 'namespaceSubstage';
+  const rqliteDatasourceVariable = createRqliteDatasourceVariable();
+  rqliteDatasourceVariable.setState({ hide: VariableHide.hideVariable });
+  const rqliteVariables = clusterCoordinates
+    ? [
+        rqliteDatasourceVariable,
+        new QueryVariable({
+          name: applicationVariableName,
+          datasource: infraDatasource(),
+          query: buildNamespaceApplicationQuery(namespace, clusterCoordinates),
+          hide: VariableHide.hideVariable,
+        }),
+        new QueryVariable({
+          name: substageVariableName,
+          datasource: infraDatasource(),
+          query: buildNamespaceSubstageQuery(namespace, clusterCoordinates),
+          hide: VariableHide.hideVariable,
+        }),
+      ]
+    : [];
+  const environmentDebekaDe = clusterCoordinates ? `\${${applicationVariableName}}-\${${substageVariableName}}` : namespaceRegex;
+
   const infoRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
@@ -408,7 +446,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
       },
       {
         refId: 'egressip',
-        expr: buildNamespaceEgressIpQuery(clusterRegex, namespaceRegex),
+        expr: buildNamespaceEgressIpQuery(clusterRegex, environmentDebekaDe),
         format: 'table',
         instant: true,
       },
@@ -697,6 +735,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
   eventsPanel.setState({ titleItems: <PanelLinkTitleItem title="View Events" url={`${baseUrl}/events`} /> });
 
   return new EmbeddedScene({
+    $variables: new SceneVariableSet({ variables: rqliteVariables }),
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

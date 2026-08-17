@@ -118,7 +118,7 @@ function getClustersListScene() {
       {
         id: 'organize',
         options: {
-          excludeByName: { Time: true, asserts_env: true, asserts_site: true, provider_id: true },
+          excludeByName: { Time: true, asserts_env: true, asserts_site: true, provider: true },
           indexByName: {
             cluster: 0,
             'Value #info': 1,
@@ -326,7 +326,7 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
         fieldName: 'Value',
         href: `${PLUGIN_BASE_URL}/${ROUTES.Nodes}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}`,
       },
-      { label: 'provider:', fieldName: 'provider_id' },
+      { label: 'provider:', fieldName: 'provider' },
     ],
   });
 

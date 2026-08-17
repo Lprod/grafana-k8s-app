@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.1
+
+- Workloads table: the Namespace column now links to the Namespaces Drilldown, same as the Cluster column already did.
+- Cluster Drilldown's "Cluster information" card now reads the Provider field from `kube_node_info`'s own `provider` label instead of `provider_id` (a full `<scheme>://<node-id>` URI, previously stripped down via a regex `label_replace`) - a cleaner, more direct source now that the underlying metric carries a dedicated label for it.
+- Namespace Drilldown Overview: the CPU/Memory requests quota cards now have a Panel Link (title-bar icon) and a Value Link (on the number itself) to the Resource Simulator, pre-filtered to that cluster/namespace - replacing the previous whole-card `onClick`, which wasn't a standard Grafana link affordance and duplicated what these two now provide.
+- Namespace Drilldown Overview: the EgressIP row now resolves `environment_debeka_de` (the label `ovn_egressip_info` is actually matched on) via the org's RQLite CMDB instead of assuming it always equals the namespace name - the two can differ. Extracts datacenter coordinates (`dc_area`/`dc_tenant`/`dc_cluster`) from the cluster name, looks up the namespace's real `application`/`substage` application coordinates via two hidden RQLite query variables, and builds `environment_debeka_de` from those. Falls back to the namespace name directly when the cluster name doesn't follow the expected naming scheme.
+
 ## 1.9.0
 
 - Added a Panel Link (a small link icon in the title bar, `PanelLinkTitleItem` in the new `src/scenes/panelLinks.tsx`) alongside the existing Value Link on the Kubernetes home page's Clusters/Nodes/Namespaces/Workloads stat tiles, so the whole panel - not just the value area - carries a visible way to navigate to the linked page.
