@@ -65,6 +65,13 @@ export function substituteClusterAndNamespace(expr: string, clusterRegex: string
   return expr.replaceAll('$cluster', clusterRegex).replaceAll('$namespace', namespaceRegex);
 }
 
+// Same as above, plus a `$pod` placeholder - used by the CPU/Memory tabs
+// (namespaceCpuQueries.ts/namespaceMemoryQueries.ts), whose queries filter
+// by a Pod picker variable that the rest of this page doesn't have.
+export function substituteClusterNamespacePod(expr: string, clusterRegex: string, namespaceRegex: string, podRegex: string): string {
+  return substituteClusterAndNamespace(expr, clusterRegex, namespaceRegex).replaceAll('$pod', podRegex);
+}
+
 export function buildNamespacesListTargets(clusterRegex: string, namespaceRegex: string) {
   return (Object.keys(namespaceTableQueries) as NamespaceQueryKey[]).map((key) => ({
     refId: key,

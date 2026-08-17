@@ -20,15 +20,17 @@ import {
   VariableValueControl,
 } from '@grafana/scenes';
 import { FieldColorModeId, rangeUtil } from '@grafana/data';
-import { LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode, VisibilityMode } from '@grafana/schema';
-import { Alert, Badge, InlineSwitch, useTheme2 } from '@grafana/ui';
+import { LegendDisplayMode, LogsSortOrder, StackingMode, TableCellDisplayMode, ThresholdsMode, VisibilityMode } from '@grafana/schema';
+import { Badge, InlineSwitch, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildNamespacesListTargets, namespaceTableQueries, substituteClusterAndNamespace } from '../../queries/namespaceQueries';
 import {
   buildNamespaceAlertsSeverityQuery,
   buildNamespaceEgressIpQuery,
   buildNamespaceEventsLevelQueries,
+  buildNamespaceEventsQuery,
   buildNamespaceLogsLevelQueries,
+  buildNamespaceLogsQuery,
   namespaceCpuOptimizationQueries,
   namespaceEventTypeDefs,
   namespaceLogLevelDefs,
@@ -50,7 +52,12 @@ import {
   usageTierCell,
 } from '../../scenes/tableCells';
 import { InfoCard, NamespaceHealthBanner } from '../../scenes/clusterOverviewCards';
+import { getNamespaceCpuScene } from './namespaceCpuScene';
+import { getNamespaceMemoryScene } from './namespaceMemoryScene';
+import { getNamespaceNetworkScene } from './namespaceNetworkScene';
+import { getNamespaceStorageScene } from './namespaceStorageScene';
 import { NamespaceQuotaCard } from '../../scenes/namespaceOverviewCards';
+import { PanelLinkTitleItem } from '../../scenes/panelLinks';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import {
   CLUSTER_VARIABLE_NAME,
@@ -389,7 +396,7 @@ function buildNamespaceOptimizationPanel(
     .build();
 }
 
-function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRegex: string, namespaceRegex: string) {
+function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRegex: string, namespaceRegex: string, baseUrl: string) {
   const infoRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
@@ -666,6 +673,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
     .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
     .setOverrides((b) => applyLevelColorOverrides(b, namespaceLogLevelDefs))
     .build();
+  logsPanel.setState({ titleItems: <PanelLinkTitleItem title="View Logs" url={`${baseUrl}/logs`} /> });
 
   const eventsRunner = new SceneQueryRunner({
     datasource: { uid: `\${${LOGS_DATASOURCE_VARIABLE_NAME}}` },
@@ -686,6 +694,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
     .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
     .setOverrides((b) => applyLevelColorOverrides(b, namespaceEventTypeDefs))
     .build();
+  eventsPanel.setState({ titleItems: <PanelLinkTitleItem title="View Events" url={`${baseUrl}/events`} /> });
 
   return new EmbeddedScene({
     body: new SceneFlexLayout({
@@ -701,8 +710,12 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
           ySizing: 'content',
           children: [
             new SceneFlexItem({ width: '50%', ySizing: 'content', minWidth: 0, body: infoCard }),
-            new SceneFlexItem({ width: '25%', ySizing: 'content', minWidth: 0, body: cpuQuotaCard }),
-            new SceneFlexItem({ width: '25%', ySizing: 'content', minWidth: 0, body: memQuotaCard }),
+            // No ySizing here (defaults to 'fill'/alignSelf:stretch) - unlike
+            // infoCard, these should stretch to match its content-driven
+            // height rather than sit at their own (shorter) natural height,
+            // which used to leave a visible gap below each quota card.
+            new SceneFlexItem({ width: '25%', minWidth: 0, body: cpuQuotaCard }),
+            new SceneFlexItem({ width: '25%', minWidth: 0, body: memQuotaCard }),
           ],
         }),
         new SceneFlexItem({
@@ -743,10 +756,44 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
   });
 }
 
-// Placeholder for tabs not yet built out - keeps routing/tab structure in
-// place (see "Where to pick up next" in summary.md) without pretending
-// there's real content behind them.
-function getNamespacePlaceholderScene(title: string) {
+// Shared "only warn/error" toggle for the dedicated Logs/Events tabs' single
+// Log panel each - simpler than the Overview tab's LogsEventsLevelToggle
+// above: a Log panel needs no date_histogram interval (it lists individual
+// documents, not per-bucket counts), so there's no live-time-range effect to
+// run here, just a straight query-string swap on toggle.
+function LogsTabLevelToggle({ runner, buildQuery }: { runner: SceneQueryRunner; buildQuery: (onlyWarnError: boolean) => string }) {
+  const [onlyWarnError, setOnlyWarnError] = useState(false);
+
+  const toggle = (checked: boolean) => {
+    setOnlyWarnError(checked);
+    runner.setState({ queries: [{ refId: 'logs', query: buildQuery(checked), metrics: [{ id: '1', type: 'logs' }], bucketAggs: [] }] as any });
+    runner.runQueries();
+  };
+
+  return (
+    <InlineSwitch transparent showLabel label="Only warn/error" value={onlyWarnError} onChange={(e) => toggle(e.currentTarget.checked)} />
+  );
+}
+
+function buildNamespaceLogPanel(title: string, runner: SceneQueryRunner) {
+  return PanelBuilders.logs()
+    .setTitle(title)
+    .setData(runner)
+    .setOption('sortOrder', LogsSortOrder.Descending)
+    .setOption('showTime', true)
+    .setOption('wrapLogMessage', true)
+    .build();
+}
+
+function getNamespaceLogsScene(cluster: string, namespace: string) {
+  const logsRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${LOGS_DATASOURCE_VARIABLE_NAME}}` },
+    queries: [
+      { refId: 'logs', query: buildNamespaceLogsQuery(cluster, namespace, false), metrics: [{ id: '1', type: 'logs' }], bucketAggs: [] },
+    ] as any,
+  });
+  const logsPanel = buildNamespaceLogPanel('Logs', logsRunner);
+
   return new EmbeddedScene({
     body: new SceneFlexLayout({
       direction: 'column',
@@ -754,13 +801,35 @@ function getNamespacePlaceholderScene(title: string) {
         new SceneFlexItem({
           ySizing: 'content',
           body: new SceneReactObject({
-            reactNode: (
-              <Alert severity="info" title={`${title} - coming soon`}>
-                This tab is scaffolded but not built out yet.
-              </Alert>
-            ),
+            reactNode: <LogsTabLevelToggle runner={logsRunner} buildQuery={(onlyWarnError) => buildNamespaceLogsQuery(cluster, namespace, onlyWarnError)} />,
           }),
         }),
+        new SceneFlexItem({ body: logsPanel }),
+      ],
+    }),
+  });
+}
+
+function getNamespaceEventsScene(namespace: string) {
+  const eventsRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${LOGS_DATASOURCE_VARIABLE_NAME}}` },
+    queries: [
+      { refId: 'logs', query: buildNamespaceEventsQuery(namespace, false), metrics: [{ id: '1', type: 'logs' }], bucketAggs: [] },
+    ] as any,
+  });
+  const eventsPanel = buildNamespaceLogPanel('Events', eventsRunner);
+
+  return new EmbeddedScene({
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({
+            reactNode: <LogsTabLevelToggle runner={eventsRunner} buildQuery={(onlyWarnError) => buildNamespaceEventsQuery(namespace, onlyWarnError)} />,
+          }),
+        }),
+        new SceneFlexItem({ body: eventsPanel }),
       ],
     }),
   });
@@ -781,13 +850,13 @@ function getNamespaceDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; n
   const baseUrl = `${NAMESPACES_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}`;
 
   const tabDefs: NamespaceTabDef[] = [
-    { slug: 'overview', title: 'Overview', getScene: () => getNamespaceOverviewScene(cluster, namespace, clusterRegex, namespaceRegex) },
-    { slug: 'cpu', title: 'CPU', getScene: () => getNamespacePlaceholderScene('CPU') },
-    { slug: 'memory', title: 'Memory', getScene: () => getNamespacePlaceholderScene('Memory') },
-    { slug: 'network', title: 'Network', getScene: () => getNamespacePlaceholderScene('Network') },
-    { slug: 'storage', title: 'Storage', getScene: () => getNamespacePlaceholderScene('Storage') },
-    { slug: 'logs', title: 'Logs', getScene: () => getNamespacePlaceholderScene('Logs') },
-    { slug: 'events', title: 'Events', getScene: () => getNamespacePlaceholderScene('Events') },
+    { slug: 'overview', title: 'Overview', getScene: () => getNamespaceOverviewScene(cluster, namespace, clusterRegex, namespaceRegex, baseUrl) },
+    { slug: 'cpu', title: 'CPU', getScene: () => getNamespaceCpuScene(clusterRegex, namespaceRegex) },
+    { slug: 'memory', title: 'Memory', getScene: () => getNamespaceMemoryScene(clusterRegex, namespaceRegex) },
+    { slug: 'network', title: 'Network', getScene: () => getNamespaceNetworkScene(clusterRegex, namespaceRegex) },
+    { slug: 'storage', title: 'Storage', getScene: () => getNamespaceStorageScene(clusterRegex, namespaceRegex) },
+    { slug: 'logs', title: 'Logs', getScene: () => getNamespaceLogsScene(cluster, namespace) },
+    { slug: 'events', title: 'Events', getScene: () => getNamespaceEventsScene(namespace) },
   ];
 
   const tabs = tabDefs.map(

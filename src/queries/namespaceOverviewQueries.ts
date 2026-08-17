@@ -204,6 +204,35 @@ function buildElasticsearchLevelQuery(refId: string, query: string, alias: strin
   };
 }
 
+// Level-restriction clause shared by the raw-log-line queries below (the
+// dedicated Logs/Events tabs' Log panels) - the same "only ERROR/WARN(ING)"
+// filter the Overview tab's bar charts apply by dropping every other
+// per-level query, expressed here as a single extra Lucene AND-clause
+// instead, since a Log panel is one query returning individual documents,
+// not one query per canonical level.
+function buildLevelRestrictionClause(field: string, defs: LevelDef[], onlyWarnError: boolean): string {
+  if (!onlyWarnError) {
+    return '';
+  }
+  return ` AND ${luceneOrClause(field, filterLevelDefsWarnErrorOnly(defs).flatMap((d) => d.variants))}`;
+}
+
+// Raw log-line queries for the dedicated Logs/Events tabs' Log panels - as
+// opposed to the per-level date_histogram queries above (Overview tab's bar
+// charts), these use metrics:[{type:'logs'}] with no bucketAggs, so the
+// Elasticsearch datasource returns individual documents (message, level,
+// timestamp, ...) instead of per-interval counts.
+export function buildNamespaceLogsQuery(cluster: string, namespace: string, onlyWarnError: boolean): string {
+  return `logmgmt.kind:openshift AND NOT logmgmt.category:event AND k8s.cluster.name:(${escapeLucene(cluster)}) AND k8s.namespace.name:(${escapeLucene(namespace)})${buildLevelRestrictionClause('log.level', namespaceLogLevelDefs, onlyWarnError)}`;
+}
+
+// Same "no cluster filter, unescaped namespace" asymmetry as
+// buildNamespaceEventsLevelQueries below - given verbatim per the original
+// request, not "fixed" to match Logs' style.
+export function buildNamespaceEventsQuery(namespace: string, onlyWarnError: boolean): string {
+  return `logmgmt.kind:openshift AND logmgmt.category:event AND k8s.namespace.name:${namespace}${buildLevelRestrictionClause('event.type', namespaceEventTypeDefs, onlyWarnError)}`;
+}
+
 // Events intentionally has no cluster filter and uses the namespace value
 // unwrapped/unescaped, rather than Logs' parenthesized/escaped form - given
 // verbatim per the original request, not "fixed" to match Logs' style (see

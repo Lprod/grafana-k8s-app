@@ -53,30 +53,102 @@ namespace_memory:kube_pod_container_resource_requests:sum{cluster="demo-cluster-
 # Limits columns had nothing to show. Values mirror the namespace_cpu:/
 # namespace_memory: ones above 1:1, since both name the same real-world
 # per-namespace total.
-# HELP cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests Recording rule: active-pod CPU requests per namespace (demo data).
+# HELP cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests Recording rule: active-pod CPU requests per pod/container (demo data).
 # TYPE cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests gauge
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default"} 4
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default"} 5
+# Per-pod+container rows (not just a namespace-level total) - the Namespace
+# Drilldown's CPU tab (namespaceCpuQueries.ts) needs `container!=""` and
+# `group by (..., pod, container)` to actually match something; a
+# namespace-total-only row (this metric's previous shape here) has no pod/
+# container labels at all, so those filters/groupings would drop it
+# entirely. Values mirror kube_pod_container_resource_requests{resource="cpu"}
+# below 1:1 (same real per-container quantity, different rule name) -
+# replaces the old flat 4/5 namespace totals, which summed to a fictitious
+# amount well above the real per-container sum of 1.1 cores/cluster; the
+# Namespaces page's own CPU Requests column (sum(...) by (namespace,cluster))
+# now reflects that real sum instead.
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app"} 0.5
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent"} 0.1
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache"} 0.25
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate"} 0.2
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell"} 0.05
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app"} 0.5
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent"} 0.1
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache"} 0.25
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate"} 0.2
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell"} 0.05
 
-# HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_requests Recording rule: active-pod memory requests per namespace (demo data).
+# HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_requests Recording rule: active-pod memory requests per pod/container (demo data).
 # TYPE cluster:namespace:pod_memory:active:kube_pod_container_resource_requests gauge
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default"} 8589934592
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default"} 10737418240
+# Per-pod+container rows (not just a namespace-level total) - same reasoning
+# as the CPU sibling above: the Namespace Drilldown's Memory tab
+# (namespaceMemoryQueries.ts) needs `container!=""` and
+# `group by (..., pod, container)` to match anything, which a
+# namespace-total-only row (no pod/container labels) can't satisfy. Values
+# mirror kube_pod_container_resource_requests{resource="memory"} below 1:1 -
+# replaces the old flat 8GiB/10GiB namespace totals (well above the real
+# per-container sum of ~1GiB/cluster).
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app"} 536870912
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell"} 67108864
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app"} 536870912
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell"} 67108864
 
-# HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_limits Recording rule: active-pod memory limits per namespace (demo data).
+# HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_limits Recording rule: active-pod memory limits per pod/container (demo data).
 # TYPE cluster:namespace:pod_memory:active:kube_pod_container_resource_limits gauge
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default"} 12884901888
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default"} 17179869184
+# Per-pod+container rows, same reasoning as requests above. Values mirror
+# kube_pod_container_resource_limits{resource="memory"} below 1:1 - unlike
+# CPU (where no container has a limit set at all, by design - see the
+# Efficiency tab's demo-data notes), memory limits ARE set for every
+# container here, so this metric gets real per-container data rather than
+# staying empty.
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app"} 1073741824
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache"} 536870912
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app"} 1073741824
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache"} 536870912
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell"} 134217728
 
-# HELP node_namespace_pod_container:container_memory_working_set_bytes Recording rule: summed memory working set per namespace/node (demo data).
+# HELP node_namespace_pod_container:container_memory_working_set_bytes Recording rule: memory working set per pod/container (demo data).
 # TYPE node_namespace_pod_container:container_memory_working_set_bytes gauge
-node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-1"} 6442450944
-node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1"} 8589934592
+# Per-pod+container rows (not just a node-level total) so the Efficiency
+# tab's "over-requested"/"waste by namespace" queries - which need to diff
+# usage against kube_pod_container_resource_requests per (cluster, namespace,
+# pod, container) - have something to match against. app/cache are usage
+# well below their requests (see resource_requests below) to give the
+# "over-requested" panels a real, visible example; node-agent/db-migrate/
+# debug-shell stay close to their requests (well-provisioned, no waste).
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-1",pod="app-aws",container="app"} 67108864
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-1",pod="node-agent-0-aws",container="node-agent"} 125829120
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-2",pod="cache-0-aws",container="cache"} 31457280
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-2",pod="db-migrate-1-aws",container="db-migrate"} 125829120
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-3",pod="debug-shell-aws",container="debug-shell"} 62914560
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1",pod="app-gce",container="app"} 67108864
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1",pod="node-agent-0-gce",container="node-agent"} 125829120
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-2",pod="cache-0-gce",container="cache"} 31457280
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-2",pod="db-migrate-1-gce",container="db-migrate"} 125829120
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1",pod="debug-shell-gce",container="debug-shell"} 62914560
 
-# HELP node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate Recording rule: summed CPU usage rate per namespace/node (demo data).
+# HELP node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate Recording rule: CPU usage rate per pod/container (demo data).
 # TYPE node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate gauge
-node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-1"} 3
-node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1"} 4
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-1",pod="app-aws",container="app"} 0.05
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-1",pod="node-agent-0-aws",container="node-agent"} 0.095
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-2",pod="cache-0-aws",container="cache"} 0.03
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-2",pod="db-migrate-1-aws",container="db-migrate"} 0.195
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-aws",namespace="default",node="demo-cluster-aws-node-3",pod="debug-shell-aws",container="debug-shell"} 0.045
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1",pod="app-gce",container="app"} 0.05
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1",pod="node-agent-0-gce",container="node-agent"} 0.095
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-2",pod="cache-0-gce",container="cache"} 0.03
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-2",pod="db-migrate-1-gce",container="db-migrate"} 0.195
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1",pod="debug-shell-gce",container="debug-shell"} 0.045
 
 # HELP ALERTS Firing/pending alert instances (demo data).
 # TYPE ALERTS gauge
@@ -159,10 +231,31 @@ container_fs_usage_bytes{k8s_cluster_name="demo-cluster-gce",k8s_namespace_name=
 kube_pod_container_resource_limits{k8s_cluster_name="demo-cluster-aws",k8s_namespace_name="default",pod="app-0",container="app",resource="ephemeral_storage"} 8589934592
 kube_pod_container_resource_limits{k8s_cluster_name="demo-cluster-gce",k8s_namespace_name="default",pod="app-0",container="app",resource="ephemeral_storage"} 8589934592
 
+# HELP kube_pod_spec_volumes_persistentvolumeclaims_info A pod's PVC volume mount (demo data).
+# TYPE kube_pod_spec_volumes_persistentvolumeclaims_info gauge
+# The Namespace Drilldown's Storage tab (namespaceStorageQueries.ts) joins
+# every PVC-related query through this metric first - it was missing
+# entirely before, so every one of that tab's PVC panels (Storage Class,
+# Volume Bytes/inodes (+ by workload), PVC/PV Status) showed "No data"
+# regardless of the other PVC metrics below already having real values.
+# Mounted on the real "app" workload pod (app-aws/app-gce), not the
+# standalone "app-0" pod the Ephemeral/Throughput/IOPS metrics below use -
+# this makes "data-pvc" attributable to a real, already-established
+# workload via namespace_workload_pod:kube_pod_owner:relabel, which the
+# "by workload" panels need and app-0 (no workload attribution at all)
+# couldn't provide.
+kube_pod_spec_volumes_persistentvolumeclaims_info{cluster="demo-cluster-aws",namespace="default",pod="app-aws",volume="data",persistentvolumeclaim="data-pvc"} 1
+kube_pod_spec_volumes_persistentvolumeclaims_info{cluster="demo-cluster-gce",namespace="default",pod="app-gce",volume="data",persistentvolumeclaim="data-pvc"} 1
+
 # HELP kube_persistentvolumeclaim_info Information about a PVC (demo data).
 # TYPE kube_persistentvolumeclaim_info gauge
-kube_persistentvolumeclaim_info{cluster="demo-cluster-aws",namespace="default",persistentvolumeclaim="data-pvc",storageclass="standard"} 1
-kube_persistentvolumeclaim_info{cluster="demo-cluster-gce",namespace="default",persistentvolumeclaim="data-pvc",storageclass="premium-rwo"} 1
+# volumename links to kube_persistentvolume_status_phase's own
+# "persistentvolume" label below - the Namespace Drilldown Storage tab's "PV
+# Status" query (namespaceStorageQueries.ts) filters on `volumename!=""` to
+# join PVC->PV, so a row missing this label is invisible to it entirely
+# (was missing here before, "PV Status" showed "No data" as a result).
+kube_persistentvolumeclaim_info{cluster="demo-cluster-aws",namespace="default",persistentvolumeclaim="data-pvc",storageclass="standard",volumename="pv-data-pvc"} 1
+kube_persistentvolumeclaim_info{cluster="demo-cluster-gce",namespace="default",persistentvolumeclaim="data-pvc",storageclass="premium-rwo",volumename="pv-data-pvc"} 1
 
 # HELP kube_persistentvolumeclaim_resource_requests_storage_bytes Requested storage of a PVC (demo data).
 # TYPE kube_persistentvolumeclaim_resource_requests_storage_bytes gauge
@@ -203,21 +296,127 @@ kube_persistentvolume_status_phase{cluster="demo-cluster-gce",persistentvolume="
 # TYPE container_fs_reads_bytes_total counter
 container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-0",container="app",device="/dev/sda"} 107374182400
 container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-0",container="app",device="/dev/sda"} 214748364800
+# Per-workload-pod rows (below), on top of the standalone "app-0" pod above -
+# the Namespace Drilldown Storage tab's "Throughput/IOPS by workload" panels
+# join through namespace_workload_pod:kube_pod_owner:relabel, which "app-0"
+# has no row in (it's not one of the 10 established workload pods), so it
+# would otherwise be silently dropped from those two panels specifically
+# (the non-"by workload" Throughput/IOPS panels have no such join and
+# already picked up app-0 fine).
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda"} 10737418240
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda"} 2147483648
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda"} 5368709120
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda"} 536870912
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda"} 52428800
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda"} 10737418240
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda"} 2147483648
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda"} 5368709120
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda"} 536870912
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda"} 52428800
 
 # HELP container_fs_writes_bytes_total Cumulative bytes written to a container's filesystem (demo data).
 # TYPE container_fs_writes_bytes_total counter
 container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-0",container="app",device="/dev/sda"} 53687091200
 container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-0",container="app",device="/dev/sda"} 107374182400
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda"} 5368709120
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda"} 1073741824
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda"} 4294967296
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda"} 314572800
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda"} 20971520
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda"} 5368709120
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda"} 1073741824
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda"} 4294967296
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda"} 314572800
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda"} 20971520
 
 # HELP container_fs_reads_total Cumulative read operations on a container's filesystem (demo data).
 # TYPE container_fs_reads_total counter
 container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="app-0",container="app",device="/dev/sda"} 5000000
 container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="app-0",container="app",device="/dev/sda"} 8000000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda"} 500000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda"} 100000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda"} 250000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda"} 25000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda"} 5000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda"} 500000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda"} 100000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda"} 250000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda"} 25000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda"} 5000
 
 # HELP container_fs_writes_total Cumulative write operations on a container's filesystem (demo data).
 # TYPE container_fs_writes_total counter
 container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="app-0",container="app",device="/dev/sda"} 2000000
 container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="app-0",container="app",device="/dev/sda"} 3500000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda"} 250000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda"} 50000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda"} 200000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda"} 15000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda"} 2000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda"} 250000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda"} 50000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda"} 200000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda"} 15000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda"} 2000
+
+# HELP container_network_receive_bytes_total Cumulative bytes received on a pod's network interface (demo data).
+# TYPE container_network_receive_bytes_total counter
+# HELP container_network_transmit_bytes_total Cumulative bytes transmitted on a pod's network interface (demo data).
+# TYPE container_network_transmit_bytes_total counter
+# HELP container_network_receive_packets_dropped_total Cumulative dropped received packets on a pod's network interface (demo data).
+# TYPE container_network_receive_packets_dropped_total counter
+# HELP container_network_transmit_packets_dropped_total Cumulative dropped transmitted packets on a pod's network interface (demo data).
+# TYPE container_network_transmit_packets_dropped_total counter
+# Namespace Drilldown's Network tab (namespaceNetworkQueries.ts) reads all
+# four of these via rate(...[$__rate_interval]) - same documented limitation
+# as container_fs_{reads,writes}_total above: this demo file is served
+# statically (nginx, not a real exporter that increments over time), so
+# rate() over an unchanging counter always evaluates to 0 and the Bandwidth/
+# Saturation panels render flat at zero here, same as the Storage tab's
+# Throughput/IOPS panels - not a bug, kept at realistic values anyway for
+# anything else that might read the raw counters. cache is the one pod with
+# nonzero drops (both clusters), matching its already-established "less
+# healthy" narrative elsewhere in this file (e.g. its restarts_total row).
+container_network_receive_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",interface="eth0"} 1073741824
+container_network_receive_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",interface="eth0"} 209715200
+container_network_receive_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",interface="eth0"} 524288000
+container_network_receive_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",interface="eth0"} 52428800
+container_network_receive_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",interface="eth0"} 5242880
+container_network_receive_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",interface="eth0"} 1073741824
+container_network_receive_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",interface="eth0"} 209715200
+container_network_receive_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",interface="eth0"} 524288000
+container_network_receive_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",interface="eth0"} 52428800
+container_network_receive_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",interface="eth0"} 5242880
+container_network_transmit_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",interface="eth0"} 858993459
+container_network_transmit_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",interface="eth0"} 157286400
+container_network_transmit_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",interface="eth0"} 471859200
+container_network_transmit_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",interface="eth0"} 41943040
+container_network_transmit_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",interface="eth0"} 3145728
+container_network_transmit_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",interface="eth0"} 858993459
+container_network_transmit_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",interface="eth0"} 157286400
+container_network_transmit_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",interface="eth0"} 471859200
+container_network_transmit_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",interface="eth0"} 41943040
+container_network_transmit_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",interface="eth0"} 3145728
+container_network_receive_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",interface="eth0"} 0
+container_network_receive_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",interface="eth0"} 0
+container_network_receive_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",interface="eth0"} 120
+container_network_receive_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",interface="eth0"} 0
+container_network_receive_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",interface="eth0"} 0
+container_network_receive_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",interface="eth0"} 0
+container_network_receive_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",interface="eth0"} 0
+container_network_receive_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",interface="eth0"} 120
+container_network_receive_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",interface="eth0"} 0
+container_network_receive_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",interface="eth0"} 0
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",interface="eth0"} 0
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",interface="eth0"} 0
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",interface="eth0"} 85
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",interface="eth0"} 0
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",interface="eth0"} 0
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",interface="eth0"} 0
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",interface="eth0"} 0
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",interface="eth0"} 85
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",interface="eth0"} 0
+container_network_transmit_packets_dropped_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",interface="eth0"} 0
 
 # Workloads page demo data: one workload per type in namespace "default",
 # reusing the existing "app" Deployment (pod app-0) and adding a DaemonSet
@@ -244,8 +443,31 @@ namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespa
 namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",workload="cache",workload_type="statefulset"} 1
 namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",workload="db-migrate",workload_type="job"} 1
 namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",workload="db-migrate",workload_type="job"} 1
-namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",workload="debug-shell",workload_type="pod"} 1
-namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",workload="debug-shell",workload_type="pod"} 1
+# debug-shell's workload is its own full pod name (debug-shell-aws/-gce),
+# not a shared "debug-shell" - unlike the controller-owned workloads above
+# (a Deployment/DaemonSet/etc. genuinely has one name shared across
+# clusters), a bare pod has no controller identity to unify around, and its
+# kube_pod_owner{owner_kind=""} row (below) independently derives "workload"
+# from the pod's own name via label_replace - matching that here (rather
+# than the earlier "debug-shell" shorthand) keeps both metrics in agreement.
+# They used to disagree (this row said "debug-shell", kube_pod_owner-derived
+# rows said "debug-shell-aws"/"-gce"), which (a) silently split the
+# Workloads page's debug-shell entry into two partial rows after `merge`
+# (one from ready_pods/desired_pods with Pods data but no CPU/Mem, one from
+# cpu_usage/mem_usage etc with CPU/Mem but no Pods - both are keyed by the
+# now-differing "workload" field, so merge couldn't combine them), and (b)
+# makes namespaceNetworkQueries.ts's "by workload" queries hard-fail with
+# Prometheus's "many-to-many matching not allowed" the moment their `* on
+# (cluster,namespace,pod) group_left(workload,workload_type)` join sees two
+# differently-labeled rows for the same pod on the right-hand side.
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",workload="debug-shell-aws",workload_type="pod"} 1
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",workload="debug-shell-gce",workload_type="pod"} 1
+# canary-rollout-aws DOES get a row here (unlike the other 3 problem pods
+# below) - the Efficiency tab's "containers without resource requests" table
+# joins via a plain `* on (...) group_left (...)` with no "unless"-based
+# fallback branch, so an unmatched pod would silently vanish from that table
+# rather than showing up as intended.
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="canary-rollout-aws",workload="canary-rollout",workload_type="pod"} 1
 
 # HELP kube_pod_owner Information about the Pod's owner (demo data).
 # TYPE kube_pod_owner gauge
@@ -370,9 +592,12 @@ container_memory_working_set_bytes{job="kubelet",metrics_path="/metrics/cadvisor
 #   - netsplit-node-gce: Unknown phase (node lost contact with the API server)
 #   - evicted-batch-aws: Evicted (node ran out of ephemeral storage)
 #   - broken-image-gce: ImagePullBackOff (a mistyped image tag)
-# These 4 aren't in namespace_workload_pod:kube_pod_owner:relabel above, so
-# the issue queries' "unless" OR-branch (for pods without workload
-# attribution) is what picks them up - no separate relabel row needed.
+# None of these 4 are in namespace_workload_pod:kube_pod_owner:relabel above
+# for the Overview tab's own issue queries - each has an "unless" OR-branch
+# (for pods without workload attribution) that picks them up without one.
+# canary-rollout-aws is the one exception: it DOES get a relabel row (see
+# below), needed separately for the Efficiency tab's "no resource requests"
+# table, whose join has no such OR-branch fallback.
 #
 # HELP kube_pod_info Information about a pod (demo data).
 # TYPE kube_pod_info gauge
@@ -455,6 +680,10 @@ kube_pod_container_status_restarts_total{cluster="demo-cluster-aws",namespace="d
 kube_pod_container_status_restarts_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent"} 0
 kube_pod_container_status_restarts_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache"} 0
 kube_pod_container_status_restarts_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache"} 4
+# canary-rollout-aws deliberately has no matching kube_pod_container_resource_requests
+# row below - the Efficiency tab's "containers without resource requests" panels need
+# a real example of a container that's missing requests entirely.
+kube_pod_container_status_restarts_total{cluster="demo-cluster-aws",namespace="default",pod="canary-rollout-aws",container="canary"} 0
 
 # HELP kube_deployment_status_condition Current condition of a deployment (demo data).
 # TYPE kube_deployment_status_condition gauge

@@ -19,6 +19,8 @@ datasources:
     jsonData:
       timeField: '@timestamp'
       esVersion: '8.0.0'
+      logMessageField: 'message'
+      logLevelField: 'log.level'
 
   - name: RQLite (Demo)
     type: g42-rqlite-datasource

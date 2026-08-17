@@ -12,6 +12,7 @@ export const CLUSTER_VARIABLE_NAME = 'cluster';
 export const NAMESPACE_VARIABLE_NAME = 'namespace';
 export const WORKLOAD_VARIABLE_NAME = 'workload';
 export const NODES_VARIABLE_NAME = 'nodes';
+export const POD_VARIABLE_NAME = 'pod';
 export const SEVERITY_VARIABLE_NAME = 'severity';
 export const ALERTNAME_VARIABLE_NAME = 'alertname';
 
@@ -162,6 +163,28 @@ export function createNodesFilterVariable(clusterRegex: string, options: { isMul
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, NODES_VARIABLE_NAME);
+}
+
+// Same "literal cluster/namespace inlined, no scene-level variable to
+// reference" reasoning as createNodesFilterVariable - the Namespace
+// Drilldown's CPU tab is scoped to a single cluster+namespace via its own
+// drilldown route params, not a picker.
+export function createPodFilterVariable(clusterRegex: string, namespaceRegex: string, options: { isMulti?: boolean } = {}) {
+  const isMulti = options.isMulti ?? true;
+  const variable = new QueryVariable({
+    name: POD_VARIABLE_NAME,
+    label: 'Pod',
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    query: {
+      refId: 'podVariableQuery',
+      query: `label_values(kube_pod_info{cluster="${clusterRegex}", namespace="${namespaceRegex}"}, pod)`,
+    },
+    isMulti,
+    includeAll: isMulti,
+    allValue: isMulti ? '.+' : undefined,
+    value: isMulti ? '$__all' : '',
+  });
+  return syncValueFromUrlOnActivation(variable, POD_VARIABLE_NAME);
 }
 
 export function createSeverityFilterVariable(options: { isMulti?: boolean } = {}) {

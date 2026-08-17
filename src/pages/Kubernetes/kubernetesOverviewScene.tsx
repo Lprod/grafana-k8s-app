@@ -10,6 +10,7 @@ import {
   SceneObjectState,
   SceneQueryRunner,
   SceneReactObject,
+  VizPanel,
 } from '@grafana/scenes';
 import { BarGaugeDisplayMode, BigValueColorMode, BigValueGraphMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { FieldColorModeId } from '@grafana/data';
@@ -17,6 +18,7 @@ import { Combobox, ComboboxOption, Icon } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { CLUSTER_VARIABLE_NAME, THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 import { SectionHeading } from '../../scenes/clustersApp';
+import { PanelLinkTitleItem } from '../../scenes/panelLinks';
 import {
   deployedContainerImagesQuery,
   IssueQueryDef,
@@ -72,7 +74,11 @@ function buildTopStatPanel(title: string, expr: string, linkUrl?: string) {
   if (linkUrl) {
     builder.setOverrides((b) => b.matchFieldsWithName('Value').overrideLinks([{ title: `View ${title}`, url: linkUrl }]));
   }
-  return builder.build();
+  const panel = builder.build();
+  if (linkUrl) {
+    panel.setState({ titleItems: <PanelLinkTitleItem title={`View ${title}`} url={linkUrl} /> });
+  }
+  return panel;
 }
 
 // Shared, single query runner behind the "Detail view" table at the bottom
@@ -93,16 +99,27 @@ interface DetailViewSelectionState extends SceneObjectState {
 class DetailViewSelection extends SceneObjectBase<DetailViewSelectionState> {
   static Component = DetailViewSelectionRenderer;
   private queryRunner: SceneQueryRunner;
+  private detailTable: VizPanel;
 
-  constructor(state: DetailViewSelectionState, queryRunner: SceneQueryRunner) {
+  constructor(state: DetailViewSelectionState, queryRunner: SceneQueryRunner, detailTable: VizPanel) {
     super(state);
     this.queryRunner = queryRunner;
+    this.detailTable = detailTable;
   }
 
   select(key: KubernetesIssueKey) {
     const def = kubernetesIssueQueries[key];
     this.queryRunner.setState({ queries: [{ refId: 'detail', expr: def.expr, format: 'table', instant: true }] });
     this.queryRunner.runQueries();
+    // Swaps the whole-panel empty-result message to match the newly
+    // selected issue (e.g. "No containers have been OOMKilled.") instead of
+    // leaving whichever issue's text was set when the table was first built.
+    this.detailTable.setState({
+      fieldConfig: {
+        ...this.detailTable.state.fieldConfig,
+        defaults: { ...this.detailTable.state.fieldConfig.defaults, noValue: def.noValueText },
+      },
+    });
     this.setState({ selectedKey: key });
   }
 }
@@ -212,9 +229,13 @@ export function getKubernetesOverviewScene() {
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [{ refId: 'detail', expr: kubernetesIssueQueries[initialKey].expr, format: 'table', instant: true }],
   });
-  const detailView = new DetailViewSelection({ selectedKey: initialKey }, detailQueryRunner);
+  const detailTable = PanelBuilders.table()
+    .setTitle('Issue details')
+    .setData(detailQueryRunner)
+    .setNoValue(kubernetesIssueQueries[initialKey].noValueText)
+    .build();
 
-  const detailTable = PanelBuilders.table().setTitle('Issue details').setData(detailQueryRunner).build();
+  const detailView = new DetailViewSelection({ selectedKey: initialKey }, detailQueryRunner, detailTable);
 
   const imagesRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },

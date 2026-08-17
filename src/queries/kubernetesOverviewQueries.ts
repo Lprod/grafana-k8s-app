@@ -112,24 +112,33 @@ export type KubernetesTopStatKey = keyof typeof kubernetesTopStatQueries;
 export interface IssueQueryDef {
   title: string;
   expr: string;
+  // Shown by the shared Detail view table (kubernetesOverviewScene.tsx)
+  // instead of the generic "No data" box when this issue's query returns no
+  // rows - phrased as the reassuring fact ("no containers are affected"),
+  // not as an error, since a zero-row result here is the healthy case.
+  noValueText: string;
 }
 
 export const kubernetesAvailabilityQueries: Record<string, IssueQueryDef> = {
   zero_replica_deployments: {
     title: 'Zero replica deployments',
     expr: `sort_desc((max by (cluster, namespace, deployment, asserts_env) (kube_deployment_status_replicas_available{cluster=~".+", namespace=~".+"}) == 0) and on (cluster, namespace, deployment, asserts_env)(max by (cluster, namespace, deployment, asserts_env) (kube_deployment_spec_replicas{cluster=~".+", namespace=~".+"}) > 0))`,
+    noValueText: 'No deployments with zero available replicas.',
   },
   deployment_rollout_issues: {
     title: 'Deployment rollout issues',
     expr: `sort_desc(label_replace(max by (cluster, namespace, deployment, condition, reason, asserts_env) (label_replace(kube_deployment_status_condition{cluster=~".+", namespace=~".+", condition=~"Progressing", status=~"false"} == 1, "condition", "Not Progressing", "condition", ".*") or label_replace(kube_deployment_status_condition{cluster=~".+", namespace=~".+", condition=~"ReplicaFailure", status=~"true"} == 1, "condition", "Replica Failure", "condition", ".*")), "workload", "$1", "deployment", "(.*)") * on (cluster, namespace, workload) group_left (workload_type) max by (cluster, namespace, workload, workload_type) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+", workload_type=~"deployment"}))`,
+    noValueText: 'No deployments with rollout issues.',
   },
   nodes_not_ready: {
     title: 'Nodes not ready',
     expr: `sort_desc(max by (cluster, node, status) (kube_node_status_condition{cluster=~".+", condition=~"Ready", status=~"false|unknown"} == 1))`,
+    noValueText: 'All nodes are ready.',
   },
   pods_not_ready: {
     title: 'Pods not ready',
     expr: `(((max by (cluster, namespace, pod, asserts_env) (kube_pod_status_condition{cluster=~".+", namespace=~".+", condition=~"Ready", status=~"false"} == 1)) and on (cluster, namespace, pod, asserts_env)(max by (cluster, namespace, pod, asserts_env) (kube_pod_status_phase{cluster=~".+", namespace=~".+", phase=~"Running"}))) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}) or (((max by (cluster, namespace, pod, asserts_env) (kube_pod_status_condition{cluster=~".+", namespace=~".+", condition=~"Ready", status=~"false"} == 1)) and on (cluster, namespace, pod, asserts_env)(max by (cluster, namespace, pod, asserts_env) (kube_pod_status_phase{cluster=~".+", namespace=~".+", phase=~"Running"}))) unless on (cluster, namespace, pod)(namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}))`,
+    noValueText: 'All running pods are ready.',
   },
 };
 
@@ -137,18 +146,22 @@ export const kubernetesStabilityQueries: Record<string, IssueQueryDef> = {
   restarting_containers: {
     title: 'Restarting containers',
     expr: `sort_desc(((round(max by (cluster, namespace, pod, container, asserts_env) (increase(kube_pod_container_status_restarts_total{cluster=~".+", namespace=~".+"}[1h]))) > 2) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}) or ((round(max by (cluster, namespace, pod, container, asserts_env) (increase(kube_pod_container_status_restarts_total{cluster=~".+", namespace=~".+"}[1h]))) > 2) unless on (cluster, namespace, pod)(namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"})))`,
+    noValueText: 'No containers have restarted more than twice in the last hour.',
   },
   oomkilled_containers: {
     title: 'OOMKilled containers',
     expr: `((max by (cluster, namespace, pod, container, asserts_env) (kube_pod_container_status_last_terminated_reason{cluster=~".+", namespace=~".+", reason=~"OOMKilled"}) == 1) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}) or ((max by (cluster, namespace, pod, container, asserts_env) (kube_pod_container_status_last_terminated_reason{cluster=~".+", namespace=~".+", reason=~"OOMKilled"}) == 1) unless on (cluster, namespace, pod)(namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}))`,
+    noValueText: 'No containers have been OOMKilled.',
   },
   pending_pods: {
     title: 'Pending pods',
     expr: `((max by (cluster, namespace, pod, asserts_env) (kube_pod_status_phase{cluster=~".+", namespace=~".+", phase=~"Pending"}) == 1) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}) or ((max by (cluster, namespace, pod, asserts_env) (kube_pod_status_phase{cluster=~".+", namespace=~".+", phase=~"Pending"}) == 1) unless on (cluster, namespace, pod)(namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}))`,
+    noValueText: 'No pods are stuck in Pending.',
   },
   image_pull_errors: {
     title: 'Image pull errors',
     expr: `((max by (cluster, namespace, pod, container, asserts_env, reason) (kube_pod_container_status_waiting_reason{cluster=~".+", namespace=~".+", reason=~"ImagePullBackOff|ErrImagePull"} == 1)) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}) or ((max by (cluster, namespace, pod, container, asserts_env, reason) (kube_pod_container_status_waiting_reason{cluster=~".+", namespace=~".+", reason=~"ImagePullBackOff|ErrImagePull"} == 1)) unless on (cluster, namespace, pod)(namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}))`,
+    noValueText: 'No containers have image pull errors.',
   },
 };
 
@@ -156,18 +169,22 @@ export const kubernetesInfrastructureQueries: Record<string, IssueQueryDef> = {
   node_pressure: {
     title: 'Node pressure',
     expr: `sort_desc(max by (cluster, node, condition) (kube_node_status_condition{cluster=~".+", condition=~"MemoryPressure|DiskPressure|PIDPressure", status=~"true"} == 1))`,
+    noValueText: 'No nodes are under memory, disk, or PID pressure.',
   },
   evicted_pods: {
     title: 'Evicted pods',
     expr: `((max by (cluster, namespace, pod, asserts_env) (kube_pod_status_reason{cluster=~".+", namespace=~".+", reason=~"Evicted"}) == 1) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}) or ((max by (cluster, namespace, pod, asserts_env) (kube_pod_status_reason{cluster=~".+", namespace=~".+", reason=~"Evicted"}) == 1) unless on (cluster, namespace, pod)(namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}))`,
+    noValueText: 'No pods have been evicted.',
   },
   pods_unknown_phase: {
     title: 'Pods unknown phase',
     expr: `((max by (cluster, namespace, pod, asserts_env) (kube_pod_status_phase{cluster=~".+", namespace=~".+", phase=~"Unknown"}) == 1) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}) or ((max by (cluster, namespace, pod, asserts_env) (kube_pod_status_phase{cluster=~".+", namespace=~".+", phase=~"Unknown"}) == 1) unless on (cluster, namespace, pod)(namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}))`,
+    noValueText: 'No pods are in an unknown phase.',
   },
   unschedulable_nodes: {
     title: 'Unschedulable nodes',
     expr: `sort_desc(max by (cluster, node) (kube_node_spec_unschedulable{cluster=~".+", node=~".+"} == 1))`,
+    noValueText: 'All nodes are schedulable.',
   },
 };
 

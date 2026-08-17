@@ -96,7 +96,12 @@ function NamespaceQuotaCardRenderer({ model }: SceneComponentProps<NamespaceQuot
       tabIndex={0}
       onClick={() => window.location.assign(simulatorUrl)}
       onKeyDown={(e) => e.key === 'Enter' && window.location.assign(simulatorUrl)}
-      style={{ cursor: 'pointer' }}
+      // height:100% + a column flex layout so that, when the parent
+      // SceneFlexItem stretches this card taller than its own natural
+      // content height (to match a taller sibling card, e.g. the "Namespace
+      // information" InfoCard), the help text anchors to the bottom of the
+      // box instead of leaving dead space below it.
+      style={{ cursor: 'pointer', height: '100%', display: 'flex', flexDirection: 'column' }}
     >
       <div className={styles.summaryHeader}>
         <span className={styles.summaryLabel}>{title}</span>
@@ -109,7 +114,12 @@ function NamespaceQuotaCardRenderer({ model }: SceneComponentProps<NamespaceQuot
           <div className={`${styles.summaryProgressFill} ${progressStatusClass(styles, status)}`} style={{ width: progressWidth }} />
         </div>
       )}
-      <span className={styles.summaryHelp}>{helpText}</span>
+      {/* marginTop:'auto' (overriding summaryHelp's own fixed marginTop)
+          pushes this to the bottom of the now-stretched flex column instead
+          of leaving blank space below it. */}
+      <span className={styles.summaryHelp} style={{ marginTop: 'auto' }}>
+        {helpText}
+      </span>
     </div>
   );
 }
