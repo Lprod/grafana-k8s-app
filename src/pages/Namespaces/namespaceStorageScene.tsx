@@ -1,6 +1,6 @@
-import { EmbeddedScene, PanelBuilders, SceneFlexItem, SceneFlexLayout, SceneQueryRunner, SceneVariableSet, VariableValueControl } from '@grafana/scenes';
+import { EmbeddedScene, PanelBuilders, SceneFlexItem, SceneFlexLayout, SceneQueryRunner } from '@grafana/scenes';
 import { GraphThresholdsStyleMode, LegendDisplayMode, ThresholdsMode } from '@grafana/schema';
-import { substituteClusterNamespacePod } from '../../queries/namespaceQueries';
+import { substituteClusterAndNamespace } from '../../queries/namespaceQueries';
 import {
   namespaceEphemeralVolumeUsageQuery,
   namespaceIopsByWorkloadQueries,
@@ -16,7 +16,7 @@ import {
   namespaceThroughputQueries,
 } from '../../queries/namespaceStorageQueries';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
-import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
+import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 
 // Same green/orange/red capacity thresholds as clustersApp.tsx's own
 // pvcCapacityThresholds (Cluster Storage tab's "by namespace (avg)" panels)
@@ -33,8 +33,7 @@ const pvcCapacityThresholds = {
 };
 
 export function getNamespaceStorageScene(clusterRegex: string, namespaceRegex: string) {
-  const podRegex = `\${${POD_VARIABLE_NAME}:regex}`;
-  const substitute = (expr: string) => substituteClusterNamespacePod(expr, clusterRegex, namespaceRegex, podRegex);
+  const substitute = (expr: string) => substituteClusterAndNamespace(expr, clusterRegex, namespaceRegex);
 
   const ephemeralUsageRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -167,7 +166,7 @@ export function getNamespaceStorageScene(clusterRegex: string, namespaceRegex: s
     .setTitle('Throughput')
     .setUnit('Bps')
     .setData(throughputRunner)
-    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'bottom', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
@@ -183,7 +182,7 @@ export function getNamespaceStorageScene(clusterRegex: string, namespaceRegex: s
     .setTitle('Throughput by workload')
     .setUnit('Bps')
     .setData(throughputByWorkloadRunner)
-    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'bottom', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
@@ -199,7 +198,7 @@ export function getNamespaceStorageScene(clusterRegex: string, namespaceRegex: s
     .setTitle('IOPS')
     .setUnit('iops')
     .setData(iopsRunner)
-    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'bottom', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
@@ -215,20 +214,14 @@ export function getNamespaceStorageScene(clusterRegex: string, namespaceRegex: s
     .setTitle('IOPS by workload')
     .setUnit('iops')
     .setData(iopsByWorkloadRunner)
-    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
+    .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'bottom', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
     .build();
 
   return new EmbeddedScene({
-    $variables: new SceneVariableSet({ variables: [createPodFilterVariable(clusterRegex, namespaceRegex)] }),
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
-        new SceneFlexItem({
-          width: 220,
-          ySizing: 'content',
-          body: new VariableValueControl({ variableName: POD_VARIABLE_NAME }),
-        }),
         new SceneFlexItem({ height: 300, body: ephemeralUsagePanel }),
         new SceneFlexItem({ height: 300, body: pvcStorageClassPanel }),
         new SceneFlexLayout({

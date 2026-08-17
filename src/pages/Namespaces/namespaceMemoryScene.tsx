@@ -10,7 +10,7 @@ import {
 } from '@grafana/scenes';
 import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { FieldColorModeId } from '@grafana/data';
-import { substituteClusterAndNamespace, substituteClusterNamespacePod } from '../../queries/namespaceQueries';
+import { substituteClusterAndNamespace } from '../../queries/namespaceQueries';
 import { namespaceWorkloadsTableQueries } from '../../queries/namespaceOverviewQueries';
 import {
   namespaceMemoryDistributionQuery,
@@ -21,7 +21,7 @@ import {
 } from '../../queries/namespaceMemoryQueries';
 import { attachPercentField, requestUsageCell, usageTierCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
-import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
+import { THANOS_VARIABLE_NAME, WORKLOAD_VARIABLE_NAME, createWorkloadFilterVariable } from '../../variables/datasourceVariables';
 
 // Same green-baseline/red-if-any thresholds as namespaceCpuScene.tsx's own
 // alertsThresholds - redeclared locally rather than imported, matching this
@@ -72,8 +72,8 @@ function buildMemoryStatPanel(title: string, expr: string, unit: string, thresho
 }
 
 export function getNamespaceMemoryScene(clusterRegex: string, namespaceRegex: string) {
-  const podRegex = `\${${POD_VARIABLE_NAME}:regex}`;
-  const substitute = (expr: string) => substituteClusterNamespacePod(expr, clusterRegex, namespaceRegex, podRegex);
+  const workloadRegex = `\${${WORKLOAD_VARIABLE_NAME}:regex}`;
+  const substitute = (expr: string) => substituteClusterAndNamespace(expr, clusterRegex, namespaceRegex).replaceAll('$workload', workloadRegex);
 
   const statPanels = memoryStatPanelDefs.map((def) =>
     buildMemoryStatPanel(def.title, substitute(namespaceMemoryStatQueries[def.key]), def.unit, def.thresholds)
@@ -180,6 +180,18 @@ export function getNamespaceMemoryScene(clusterRegex: string, namespaceRegex: st
     $data: tableRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // The Workloads table's own "workload" field isn't filterable via a
+      // PromQL selector (workloadTableQueries doesn't take one) - row-filtered
+      // client-side instead, same filterByValue pattern as the Workloads
+      // page's own Workload filter (workloadsPage.tsx).
+      {
+        id: 'filterByValue',
+        options: {
+          filters: [{ fieldName: 'workload', config: { id: 'regex', options: { value: workloadRegex } } }],
+          type: 'include',
+          match: 'any',
+        },
+      },
       attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
       attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
       attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
@@ -230,19 +242,19 @@ export function getNamespaceMemoryScene(clusterRegex: string, namespaceRegex: st
     .build();
 
   return new EmbeddedScene({
-    $variables: new SceneVariableSet({ variables: [createPodFilterVariable(clusterRegex, namespaceRegex)] }),
+    $variables: new SceneVariableSet({ variables: [createWorkloadFilterVariable({ clusterRegex, namespaceRegex })] }),
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
+        new SceneFlexItem({
+          width: 220,
+          ySizing: 'content',
+          body: new VariableValueControl({ variableName: WORKLOAD_VARIABLE_NAME }),
+        }),
         new SceneFlexLayout({
           direction: 'row',
           ySizing: 'content',
           children: statPanels.map((panel) => new SceneFlexItem({ height: 120, body: panel })),
-        }),
-        new SceneFlexItem({
-          width: 220,
-          ySizing: 'content',
-          body: new VariableValueControl({ variableName: POD_VARIABLE_NAME }),
         }),
         new SceneFlexLayout({
           direction: 'row',

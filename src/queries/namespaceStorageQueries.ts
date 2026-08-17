@@ -2,22 +2,25 @@
 // (src/pages/Namespaces/namespaceStorageScene.tsx), pasted verbatim from
 // Grafana's own Kubernetes Monitoring app (play.grafana.org) - same
 // literal-translation convention as namespaceCpuQueries.ts/
-// namespaceMemoryQueries.ts/namespaceNetworkQueries.ts. Only Ephemeral
-// Volume Usage and the Throughput/IOPS "by workload" queries reference a
-// `$pod` placeholder - every PVC-related query (Storage Class, Volume
-// Bytes/inodes, PVC/PV Status) has none, since a PersistentVolumeClaim
-// isn't filtered by which pod currently mounts it in these queries. Kept as
-// given even where a query's `cluster`/`namespace` filter operator (`=` vs
-// `=~`) differs from its sibling - e.g. Throughput by workload uses `=` but
-// IOPS by workload uses `=~`, both inside the workload-attribution join and
-// the outer rate() selector.
+// namespaceMemoryQueries.ts/namespaceNetworkQueries.ts. Kept as given even
+// where a query's `cluster`/`namespace` filter operator (`=` vs `=~`)
+// differs from its sibling - e.g. Throughput by workload uses `=` but IOPS
+// by workload uses `=~`, both inside the workload-attribution join and the
+// outer rate() selector.
+//
+// The tab has no Pod filter (removed - every `pod=~"$pod"` matcher this
+// tab's queries used to carry, on Ephemeral Volume Usage and the
+// Throughput/IOPS "by workload" pair, was stripped so they cover every pod
+// unconditionally instead); every PVC-related query (Storage Class, Volume
+// Bytes/inodes, PVC/PV Status) never had one, since a PersistentVolumeClaim
+// isn't filtered by which pod currently mounts it in these queries.
 
 export const FS_DEVICE_REGEX = '(/dev.+)|mmcblk.p.+|nvme.+|rbd.+|sd.+|vd.+|xvd.+|dm-.+|dasd.+';
 
-export const namespaceEphemeralVolumeUsageQuery = `container_fs_usage_bytes{k8s_cluster_name="$cluster", k8s_namespace_name="$namespace", container!="POD", pod=~"$pod"}
+export const namespaceEphemeralVolumeUsageQuery = `container_fs_usage_bytes{k8s_cluster_name="$cluster", k8s_namespace_name="$namespace", container!="POD"}
 / on(pod, container, k8s_namespace_name) group_left
   max by (pod, container, k8s_namespace_name) (
-    kube_pod_container_resource_limits{k8s_cluster_name="$cluster", k8s_namespace_name="$namespace", resource="ephemeral_storage", pod=~"$pod"})`;
+    kube_pod_container_resource_limits{k8s_cluster_name="$cluster", k8s_namespace_name="$namespace", resource="ephemeral_storage"})`;
 
 export const namespacePvcStorageClassQuery = `count by (storageclass) (
         group by (cluster, namespace, pod, persistentvolumeclaim, volume) (
@@ -204,18 +207,18 @@ export const namespaceIopsQueries = {
 };
 
 // Same bare-pod/static-pod/replicaset/attributed-workload fallback chain as
-// namespaceNetworkQueries.ts's workloadAttributionFragment, but with a
-// `pod=~"$pod"` filter baked into every branch (Throughput/IOPS by workload
-// take a Pod picker, unlike the Network tab's "by workload" queries).
-function workloadAttributionWithPodFragment(operator: '=' | '=~'): string {
+// namespaceNetworkQueries.ts's workloadAttributionFragment (this tab has no
+// Pod filter either, since the Pod filter was removed from the Storage tab
+// entirely).
+function workloadAttributionFragment(operator: '=' | '=~'): string {
   return `
-          namespace_workload_pod:kube_pod_owner:relabel{cluster${operator}"$cluster", namespace${operator}"$namespace", workload_type=~".+", workload!="", pod=~"$pod"}
+          namespace_workload_pod:kube_pod_owner:relabel{cluster${operator}"$cluster", namespace${operator}"$namespace", workload_type=~".+", workload!=""}
 
           OR
 
           label_replace(
             label_replace(
-              namespace_workload_pod:kube_pod_owner:relabel{cluster${operator}"$cluster", namespace${operator}"$namespace", workload_type=~".+", workload="", pod=~"$pod"}
+              namespace_workload_pod:kube_pod_owner:relabel{cluster${operator}"$cluster", namespace${operator}"$namespace", workload_type=~".+", workload=""}
             , "workload", "$1", "pod", "(.+)-(.+)")
           , "workload_type", "replicaset", "", "")
 
@@ -223,7 +226,7 @@ function workloadAttributionWithPodFragment(operator: '=' | '=~'): string {
 
           label_replace(
             label_replace(
-              kube_pod_owner{cluster${operator}"$cluster", namespace${operator}"$namespace", pod=~"$pod", owner_kind=""}
+              kube_pod_owner{cluster${operator}"$cluster", namespace${operator}"$namespace", owner_kind=""}
             , "workload", "$1", "pod", "(.+)")
           , "workload_type", "pod", "", "")
 
@@ -231,34 +234,34 @@ function workloadAttributionWithPodFragment(operator: '=' | '=~'): string {
 
           label_replace(
             label_replace(
-              kube_pod_owner{cluster${operator}"$cluster", namespace${operator}"$namespace", pod=~"$pod", owner_kind="Node"}
+              kube_pod_owner{cluster${operator}"$cluster", namespace${operator}"$namespace", owner_kind="Node"}
             , "workload", "$1", "pod", "(.+)")
           , "workload_type", "staticpod", "", "")
       `;
 }
 
 export const namespaceThroughputByWorkloadQueries = {
-  rx: `sum by (workload, workload_type) (sum by (cluster, namespace, pod, workload, workload_type) (sum by (cluster, namespace, pod) (rate(container_fs_reads_bytes_total{cluster="$cluster", namespace="$namespace", device=~"${FS_DEVICE_REGEX}", pod=~"$pod"}[$__rate_interval]))
+  rx: `sum by (workload, workload_type) (sum by (cluster, namespace, pod, workload, workload_type) (sum by (cluster, namespace, pod) (rate(container_fs_reads_bytes_total{cluster="$cluster", namespace="$namespace", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))
             * on (cluster, namespace, pod) group_left(workload, workload_type)
             group by (cluster, namespace, pod, workload, workload_type)  (
-${workloadAttributionWithPodFragment('=')}
+${workloadAttributionFragment('=')}
         )))`,
-  tx: `-sum by (workload, workload_type) (sum by (cluster, namespace, pod, workload, workload_type) (sum by (cluster, namespace, pod) (rate(container_fs_writes_bytes_total{cluster="$cluster", namespace="$namespace", device=~"${FS_DEVICE_REGEX}", pod=~"$pod"}[$__rate_interval]))
+  tx: `-sum by (workload, workload_type) (sum by (cluster, namespace, pod, workload, workload_type) (sum by (cluster, namespace, pod) (rate(container_fs_writes_bytes_total{cluster="$cluster", namespace="$namespace", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))
             * on (cluster, namespace, pod) group_left(workload, workload_type)
             group by (cluster, namespace, pod, workload, workload_type)  (
-${workloadAttributionWithPodFragment('=')}
+${workloadAttributionFragment('=')}
         )))`,
 };
 
 export const namespaceIopsByWorkloadQueries = {
-  rx: `sum by (cluster, namespace, workload, workload_type) (sum by (cluster, namespace, pod, workload, workload_type) (sum by (cluster, namespace, pod) (rate(container_fs_reads_total{cluster=~"$cluster", namespace=~"$namespace", device=~"${FS_DEVICE_REGEX}", pod=~"$pod"}[$__rate_interval]))
+  rx: `sum by (cluster, namespace, workload, workload_type) (sum by (cluster, namespace, pod, workload, workload_type) (sum by (cluster, namespace, pod) (rate(container_fs_reads_total{cluster=~"$cluster", namespace=~"$namespace", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))
             * on (cluster, namespace, pod) group_left(workload, workload_type)
             group by (cluster, namespace, pod, workload, workload_type)  (
-${workloadAttributionWithPodFragment('=~')}
+${workloadAttributionFragment('=~')}
         )))`,
-  tx: `-sum by (workload, workload_type) (sum by (cluster, namespace, pod, workload, workload_type) (sum by (cluster, namespace, pod) (rate(container_fs_writes_total{cluster=~"$cluster", namespace=~"$namespace", device=~"${FS_DEVICE_REGEX}", pod=~"$pod"}[$__rate_interval]))
+  tx: `-sum by (workload, workload_type) (sum by (cluster, namespace, pod, workload, workload_type) (sum by (cluster, namespace, pod) (rate(container_fs_writes_total{cluster=~"$cluster", namespace=~"$namespace", device=~"${FS_DEVICE_REGEX}"}[$__rate_interval]))
             * on (cluster, namespace, pod) group_left(workload, workload_type)
             group by (cluster, namespace, pod, workload, workload_type)  (
-${workloadAttributionWithPodFragment('=~')}
+${workloadAttributionFragment('=~')}
         )))`,
 };

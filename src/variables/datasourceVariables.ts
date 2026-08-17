@@ -223,8 +223,16 @@ export function createAlertnameFilterVariable(options: { isMulti?: boolean } = {
   return syncValueFromUrlOnActivation(variable, ALERTNAME_VARIABLE_NAME);
 }
 
-export function createWorkloadFilterVariable(options: { isMulti?: boolean } = {}) {
+// clusterRegex/namespaceRegex default to referencing the scene-level
+// "cluster"/"namespace" variables, but pages without those (e.g. the
+// Namespace Drilldown's CPU/Memory tabs, scoped to a single cluster+
+// namespace via the drilldown route) can pass literal overrides - same
+// "optional literal override" pattern as createNamespaceFilterVariable's
+// own clusterRegex option.
+export function createWorkloadFilterVariable(options: { isMulti?: boolean; clusterRegex?: string; namespaceRegex?: string } = {}) {
   const isMulti = options.isMulti ?? true;
+  const clusterRegex = options.clusterRegex ?? `\${${CLUSTER_VARIABLE_NAME}:regex}`;
+  const namespaceRegex = options.namespaceRegex ?? `\${${NAMESPACE_VARIABLE_NAME}:regex}`;
   // kube_pod_owner{owner_name=...} (the previous source here) only carries
   // owner_name for pods WITHOUT an owner (bare pods) - every other workload
   // type gets its "workload" label from a different source metric via
@@ -255,13 +263,7 @@ export function createWorkloadFilterVariable(options: { isMulti?: boolean } = {}
       .map((line) => line.replace(/#.*$/, '').trim())
       .filter(Boolean)
       .join(' ');
-  const readyPodsExpr = toSingleLinePromQL(
-    substituteClusterAndNamespace(
-      workloadTableQueries.ready_pods,
-      `\${${CLUSTER_VARIABLE_NAME}:regex}`,
-      `\${${NAMESPACE_VARIABLE_NAME}:regex}`
-    )
-  );
+  const readyPodsExpr = toSingleLinePromQL(substituteClusterAndNamespace(workloadTableQueries.ready_pods, clusterRegex, namespaceRegex));
   const variable = new QueryVariable({
     name: WORKLOAD_VARIABLE_NAME,
     label: 'Workload',
