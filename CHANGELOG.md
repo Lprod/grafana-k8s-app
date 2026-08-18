@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.4
+
+- Namespace Drilldown's Overview, CPU, and Memory tabs: the Workload column in each tab's "Workloads" table now links to the Workload Drilldown, same as the top-level Workloads table's own Workload column already did. `getNamespaceCpuScene`/`getNamespaceMemoryScene` now take the raw `cluster`/`namespace` values (not just their regex-escaped forms) to build the link.
+
 ## 1.9.3
 
 - Fixed the Namespace Drilldown's "workloads:" info card row showing "–" since v1.9.2's EgressIP simplification: the "egress ip" row now goes to RQLite via a Mixed datasource, so Thanos receives the "info" query alone in its own sub-request again (Mixed dispatches each target to its own datasource's own request) - Prometheus only disambiguates a value field to `Value #<refId>` when a request has more than one query, so it's back to the bare `Value` name it had before "egress ip" shared a request with it.

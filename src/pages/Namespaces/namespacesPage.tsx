@@ -75,6 +75,7 @@ import {
 
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
+const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const RESOURCE_SIMULATOR_URL = `${PLUGIN_BASE_URL}/${ROUTES.ResourceSimulator}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
@@ -543,6 +544,12 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
         .matchFieldsWithName('workload')
         .overrideDisplayName('Workload')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          {
+            title: 'View workload',
+            url: `${WORKLOADS_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/\${__data.fields.workload_type}/\${__value.text}\${__url.params}`,
+          },
+        ])
         .matchFieldsWithName('workload_type')
         .overrideDisplayName('Type')
         .overrideCustomFieldConfig('align', 'left')
@@ -793,8 +800,8 @@ function getNamespaceDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; n
 
   const tabDefs: NamespaceTabDef[] = [
     { slug: 'overview', title: 'Overview', getScene: () => getNamespaceOverviewScene(cluster, namespace, clusterRegex, namespaceRegex, baseUrl) },
-    { slug: 'cpu', title: 'CPU', getScene: () => getNamespaceCpuScene(clusterRegex, namespaceRegex) },
-    { slug: 'memory', title: 'Memory', getScene: () => getNamespaceMemoryScene(clusterRegex, namespaceRegex) },
+    { slug: 'cpu', title: 'CPU', getScene: () => getNamespaceCpuScene(cluster, namespace, clusterRegex, namespaceRegex) },
+    { slug: 'memory', title: 'Memory', getScene: () => getNamespaceMemoryScene(cluster, namespace, clusterRegex, namespaceRegex) },
     { slug: 'network', title: 'Network', getScene: () => getNamespaceNetworkScene(clusterRegex, namespaceRegex) },
     { slug: 'storage', title: 'Storage', getScene: () => getNamespaceStorageScene(clusterRegex, namespaceRegex) },
     { slug: 'logs', title: 'Logs', getScene: () => getNamespaceLogsScene(cluster, namespace) },

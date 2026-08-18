@@ -10,6 +10,7 @@ import {
 } from '@grafana/scenes';
 import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { FieldColorModeId } from '@grafana/data';
+import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { substituteClusterAndNamespace } from '../../queries/namespaceQueries';
 import { namespaceWorkloadsTableQueries } from '../../queries/namespaceOverviewQueries';
 import {
@@ -22,6 +23,8 @@ import {
 import { attachPercentField, requestUsageCell, usageTierCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME, WORKLOAD_VARIABLE_NAME, createWorkloadFilterVariable } from '../../variables/datasourceVariables';
+
+const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 
 // Same green-baseline/red-if-any thresholds as namespaceCpuScene.tsx's own
 // alertsThresholds - redeclared locally rather than imported, matching this
@@ -71,7 +74,7 @@ function buildMemoryStatPanel(title: string, expr: string, unit: string, thresho
     .build();
 }
 
-export function getNamespaceMemoryScene(clusterRegex: string, namespaceRegex: string) {
+export function getNamespaceMemoryScene(cluster: string, namespace: string, clusterRegex: string, namespaceRegex: string) {
   const workloadRegex = `\${${WORKLOAD_VARIABLE_NAME}:regex}`;
   const substitute = (expr: string) => substituteClusterAndNamespace(expr, clusterRegex, namespaceRegex).replaceAll('$workload', workloadRegex);
 
@@ -220,6 +223,12 @@ export function getNamespaceMemoryScene(clusterRegex: string, namespaceRegex: st
         .matchFieldsWithName('workload')
         .overrideDisplayName('Workload')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          {
+            title: 'View workload',
+            url: `${WORKLOADS_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/\${__data.fields.workload_type}/\${__value.text}\${__url.params}`,
+          },
+        ])
         .matchFieldsWithName('workload_type')
         .overrideDisplayName('Type')
         .overrideCustomFieldConfig('align', 'left')
