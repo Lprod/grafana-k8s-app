@@ -548,6 +548,38 @@ kube_statefulset_status_replicas_ready{cluster="demo-cluster-gce",namespace="def
 kube_statefulset_replicas{cluster="demo-cluster-aws",namespace="default",statefulset="cache"} 2
 kube_statefulset_replicas{cluster="demo-cluster-gce",namespace="default",statefulset="cache"} 3
 
+# Workload Drilldown Overview tab's "create date" row (demo data) - the
+# standard kube-state-metrics "<kind>_created" metric (creationTimestamp,
+# Unix seconds) for each workload kind, added for the same app/node-agent/
+# cache/db-migrate/debug-shell entities the rest of this file already models,
+# not new synthetic ones. Static, relative-to-editing-time timestamps (chosen
+# before db-migrate's own kube_job_status_start_time above) - same staleness
+# caveat as every other fixed timestamp in this file.
+# HELP kube_deployment_created Unix creation timestamp (demo data).
+# TYPE kube_deployment_created gauge
+kube_deployment_created{cluster="demo-cluster-aws",namespace="default",deployment="app"} 1769683149
+kube_deployment_created{cluster="demo-cluster-gce",namespace="default",deployment="app"} 1769683149
+
+# HELP kube_daemonset_created Unix creation timestamp (demo data).
+# TYPE kube_daemonset_created gauge
+kube_daemonset_created{cluster="demo-cluster-aws",namespace="default",daemonset="node-agent"} 1774003149
+kube_daemonset_created{cluster="demo-cluster-gce",namespace="default",daemonset="node-agent"} 1774003149
+
+# HELP kube_statefulset_created Unix creation timestamp (demo data).
+# TYPE kube_statefulset_created gauge
+kube_statefulset_created{cluster="demo-cluster-aws",namespace="default",statefulset="cache"} 1778323149
+kube_statefulset_created{cluster="demo-cluster-gce",namespace="default",statefulset="cache"} 1778323149
+
+# HELP kube_job_created Unix creation timestamp (demo data).
+# TYPE kube_job_created gauge
+kube_job_created{cluster="demo-cluster-aws",namespace="default",job_name="db-migrate"} 1786959549
+kube_job_created{cluster="demo-cluster-gce",namespace="default",job_name="db-migrate"} 1786959549
+
+# HELP kube_pod_created Unix creation timestamp (demo data).
+# TYPE kube_pod_created gauge
+kube_pod_created{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws"} 1761043149
+kube_pod_created{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce"} 1761043149
+
 # "All Jobs" page's Jobs tab demo data (demo data) - extends the existing
 # db-migrate Job (below) with the owner/start/completion metrics its own
 # queries read, rather than reusing infra-check/user-check (whose

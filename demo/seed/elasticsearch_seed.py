@@ -44,6 +44,20 @@ event_reasons = [
     "Killing",
 ]
 
+# Workload Drilldown Overview tab's "Logs / Events" section (see
+# buildWorkloadLogsLevelQueries/buildWorkloadEventsLevelQueries in
+# namespaceOverviewQueries.ts) filters on orchestrator.namespace/
+# orchestrator.resource.name - most log/event documents don't carry a
+# dedicated "workload" field, so the workload-scoped queries match on the
+# resource (pod) name prefix instead. Reuses the same pod names the
+# Prometheus side of this demo already models (namespace_workload_pod:
+# kube_pod_owner:relabel in demo/kube-metrics/metrics) so a workload's logs/
+# events line up with its own metrics.
+workload_pod_names = {
+    "demo-cluster-aws": ["app-aws", "node-agent-0-aws", "cache-0-aws", "db-migrate-1-aws", "debug-shell-aws"],
+    "demo-cluster-gce": ["app-gce", "node-agent-0-gce", "cache-0-gce", "db-migrate-1-gce", "debug-shell-gce"],
+}
+
 print(f"Waiting for Elasticsearch at {ES_URL}...")
 while True:
     try:
@@ -61,23 +75,22 @@ while True:
 # Logs/Events panels' whole "group by term" query shape. Set explicitly
 # before any document using these fields is indexed, since a field's
 # mapping can't be changed after the fact, only added to.
+demo_logs_mapping_properties = {
+    "logmgmt": {"properties": {"kind": {"type": "keyword"}, "category": {"type": "keyword"}}},
+    "k8s": {
+        "properties": {
+            "cluster": {"properties": {"name": {"type": "keyword"}}},
+            "namespace": {"properties": {"name": {"type": "keyword"}}},
+        }
+    },
+    "log": {"properties": {"level": {"type": "keyword"}}},
+    "event": {"properties": {"type": {"type": "keyword"}, "reason": {"type": "keyword"}}},
+    "orchestrator": {"properties": {"namespace": {"type": "keyword"}, "resource": {"properties": {"name": {"type": "keyword"}}}}},
+}
+
 mapping_req = urllib.request.Request(
     f"{ES_URL}/demo-logs-000001/_mapping",
-    data=json.dumps(
-        {
-            "properties": {
-                "logmgmt": {"properties": {"kind": {"type": "keyword"}, "category": {"type": "keyword"}}},
-                "k8s": {
-                    "properties": {
-                        "cluster": {"properties": {"name": {"type": "keyword"}}},
-                        "namespace": {"properties": {"name": {"type": "keyword"}}},
-                    }
-                },
-                "log": {"properties": {"level": {"type": "keyword"}}},
-                "event": {"properties": {"type": {"type": "keyword"}, "reason": {"type": "keyword"}}},
-            }
-        }
-    ).encode("utf-8"),
+    data=json.dumps({"properties": demo_logs_mapping_properties}).encode("utf-8"),
     method="PUT",
     headers={"Content-Type": "application/json"},
 )
@@ -90,23 +103,7 @@ except urllib.error.HTTPError as e:
     if e.code == 404:
         create_req = urllib.request.Request(
             f"{ES_URL}/demo-logs-000001",
-            data=json.dumps(
-                {
-                    "mappings": {
-                        "properties": {
-                            "logmgmt": {"properties": {"kind": {"type": "keyword"}, "category": {"type": "keyword"}}},
-                            "k8s": {
-                                "properties": {
-                                    "cluster": {"properties": {"name": {"type": "keyword"}}},
-                                    "namespace": {"properties": {"name": {"type": "keyword"}}},
-                                }
-                            },
-                            "log": {"properties": {"level": {"type": "keyword"}}},
-                            "event": {"properties": {"type": {"type": "keyword"}, "reason": {"type": "keyword"}}},
-                        }
-                    }
-                }
-            ).encode("utf-8"),
+            data=json.dumps({"mappings": {"properties": demo_logs_mapping_properties}}).encode("utf-8"),
             method="PUT",
             headers={"Content-Type": "application/json"},
         )
@@ -131,10 +128,13 @@ for i in range(200):
 
 for i in range(300):
     ts = now - timedelta(seconds=i * 10)
+    cl = random.choice(clusters)
+    ns = random.choice(namespaces)
     doc = {
         "@timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "logmgmt": {"kind": "openshift", "category": "log"},
-        "k8s": {"cluster": {"name": random.choice(clusters)}, "namespace": {"name": random.choice(namespaces)}},
+        "k8s": {"cluster": {"name": cl}, "namespace": {"name": ns}},
+        "orchestrator": {"namespace": ns, "resource": {"name": random.choice(workload_pod_names[cl])}},
         "log": {"level": random.choice(log_levels)},
         "message": random.choice(messages),
     }
@@ -143,10 +143,13 @@ for i in range(300):
 
 for i in range(150):
     ts = now - timedelta(seconds=i * 20)
+    cl = random.choice(clusters)
+    ns = random.choice(namespaces)
     doc = {
         "@timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "logmgmt": {"kind": "openshift", "category": "event"},
-        "k8s": {"cluster": {"name": random.choice(clusters)}, "namespace": {"name": random.choice(namespaces)}},
+        "k8s": {"cluster": {"name": cl}, "namespace": {"name": ns}},
+        "orchestrator": {"namespace": ns, "resource": {"name": random.choice(workload_pod_names[cl])}},
         "event": {"type": random.choice(event_types), "reason": random.choice(event_reasons)},
         "message": random.choice(event_reasons),
     }

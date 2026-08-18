@@ -1,5 +1,5 @@
 import React from 'react';
-import { getValueFormat, GrafanaTheme2 } from '@grafana/data';
+import { DataFrame, getValueFormat, GrafanaTheme2 } from '@grafana/data';
 import { SceneComponentProps, SceneObjectBase, SceneObjectState, sceneGraph } from '@grafana/scenes';
 import { Alert, Icon, useStyles2, useTheme2 } from '@grafana/ui';
 import { css } from '@emotion/css';
@@ -11,9 +11,15 @@ import { formatDisplay } from './tableCells';
 
 export interface InfoCardRow {
   label: string;
-  fieldName: string;
+  // Either fieldName or render should be given - fieldName looks the value
+  // up in the card's own $data by name; render is for a row whose value is
+  // already known outright (e.g. cluster/namespace, taken straight from a
+  // drilldown's route params) or combines several fields (e.g. "ready /
+  // desired" replicas), so it gets every frame directly instead.
+  fieldName?: string;
   unit?: string;
   decimals?: number;
+  render?: (frames: DataFrame[]) => string;
   // If set, the value is rendered as a link. Plain <a href> navigation gets
   // intercepted by Grafana's app shell for SPA routing, which can drop query
   // params when the destination page has its own same-named scene variable
@@ -79,6 +85,13 @@ function formatRowValue(row: InfoCardRow, raw: unknown): string {
   return String(raw);
 }
 
+// Searches every frame, not just the first - lets a card mix rows from
+// several queries (e.g. the namespace info query plus a separate EgressIP
+// query) without needing to join/merge them into one frame first.
+export function findFieldAcrossFrames(frames: DataFrame[], fieldName: string) {
+  return frames.map((frame) => frame.fields.find((f) => f.name === fieldName)).find(Boolean);
+}
+
 export class InfoCard extends SceneObjectBase<InfoCardState> {
   static Component = InfoCardRenderer;
 }
@@ -92,12 +105,9 @@ function InfoCardRenderer({ model }: SceneComponentProps<InfoCard>) {
   return (
     <div className={styles.card}>
       {rows.map((row) => {
-        // Searches every frame, not just the first - lets a card mix rows
-        // from several queries (e.g. the namespace info query plus a
-        // separate EgressIP query) without needing to join/merge them into
-        // one frame first.
-        const field = frames.map((frame) => frame.fields.find((f) => f.name === row.fieldName)).find(Boolean);
-        const value = formatRowValue(row, field?.values[0]);
+        const value = row.render
+          ? row.render(frames)
+          : formatRowValue(row, row.fieldName ? findFieldAcrossFrames(frames, row.fieldName)?.values[0] : undefined);
         return (
           <div className={styles.row} key={row.label}>
             <div className={styles.label}>{row.label}</div>
@@ -252,6 +262,11 @@ function healthBannerStyles(theme: GrafanaTheme2) {
 
 interface NamespaceHealthBannerState extends SceneObjectState {
   alertsUrl: string;
+  // Lets the Workload Drilldown reuse this same banner (and its underlying
+  // alerts-by-severity mechanism) with its own wording ("Workload is
+  // healthy" etc.) instead of duplicating the whole component - defaults to
+  // 'Namespace' for the existing namespace usage.
+  subject?: string;
 }
 
 export class NamespaceHealthBanner extends SceneObjectBase<NamespaceHealthBannerState> {
@@ -259,7 +274,7 @@ export class NamespaceHealthBanner extends SceneObjectBase<NamespaceHealthBanner
 }
 
 function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceHealthBanner>) {
-  const { alertsUrl } = model.useState();
+  const { alertsUrl, subject = 'Namespace' } = model.useState();
   const { data } = sceneGraph.getData(model).useState();
   const theme = useTheme2();
   const styles = useStyles2(healthBannerStyles);
@@ -268,12 +283,12 @@ function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceH
   const severity: 'success' | 'warning' | 'error' = total === 0 ? 'success' : hasCritical ? 'error' : 'warning';
   const message =
     total === 0
-      ? 'Namespace is healthy'
+      ? `${subject} is healthy`
       : hasCritical
-        ? 'Namespace has critical alerts firing'
+        ? `${subject} has critical alerts firing`
         : hasWarning
-          ? 'Namespace has warning alerts firing'
-          : 'Namespace has alerts firing';
+          ? `${subject} has warning alerts firing`
+          : `${subject} has alerts firing`;
   const iconName = severity === 'error' ? 'exclamation-circle' : severity === 'warning' ? 'exclamation-triangle' : 'check';
   const color = theme.colors[severity];
 

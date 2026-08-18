@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   EmbeddedScene,
   FieldConfigOverridesBuilder,
   PanelBuilders,
-  QueryVariable,
   SceneAppPage,
   SceneAppPageLike,
-  sceneGraph,
   SceneControlsSpacer,
   SceneDataTransformer,
   SceneFlexItem,
@@ -20,20 +18,18 @@ import {
   SceneVariableSet,
   VariableValueControl,
 } from '@grafana/scenes';
-import { FieldColorModeId, rangeUtil, VariableHide } from '@grafana/data';
-import { LegendDisplayMode, LogsSortOrder, StackingMode, TableCellDisplayMode, ThresholdsMode, VisibilityMode } from '@grafana/schema';
-import { Badge, InlineSwitch, useTheme2 } from '@grafana/ui';
+import { FieldColorModeId, VariableHide } from '@grafana/data';
+import { LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode, VisibilityMode } from '@grafana/schema';
+import { Badge, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildNamespacesListTargets, namespaceTableQueries, substituteClusterAndNamespace } from '../../queries/namespaceQueries';
 import {
+  buildEgressIpQueryTarget,
   buildNamespaceAlertsSeverityQuery,
-  buildNamespaceApplicationQuery,
-  buildNamespaceEgressIpQuery,
   buildNamespaceEventsLevelQueries,
   buildNamespaceEventsQuery,
   buildNamespaceLogsLevelQueries,
   buildNamespaceLogsQuery,
-  buildNamespaceSubstageQuery,
   namespaceCpuOptimizationQueries,
   namespaceEventTypeDefs,
   namespaceLogLevelDefs,
@@ -43,9 +39,8 @@ import {
   NAMESPACE_LEVEL_OTHER_COLOR,
   NamespaceOptimizationQueryKey,
   NamespaceWorkloadsQueryKey,
-  parseOpenshiftClusterCoordinates,
 } from '../../queries/namespaceOverviewQueries';
-import { infraDatasource } from '../../queries/datasources';
+import { mixedDatasource } from '../../queries/datasources';
 import { simulatorQuotaQuery } from '../../queries/resourceSimulator';
 import {
   UsageIcon,
@@ -57,6 +52,8 @@ import {
   usageTierCell,
 } from '../../scenes/tableCells';
 import { InfoCard, NamespaceHealthBanner } from '../../scenes/clusterOverviewCards';
+import { LogsEventsLevelToggle } from '../../scenes/logsEventsLevelToggle';
+import { LogsTabLevelToggle, buildLogPanel } from '../../scenes/logPanels';
 import { getNamespaceCpuScene } from './namespaceCpuScene';
 import { getNamespaceMemoryScene } from './namespaceMemoryScene';
 import { getNamespaceNetworkScene } from './namespaceNetworkScene';
@@ -304,54 +301,6 @@ function NamespacePageTitle({ title, cluster }: { title: string; cluster: string
   );
 }
 
-// Toggles both the Logs and Events bar charts between their normal query
-// and a "warn/error only" variant, AND keeps their date_histogram interval
-// following the timepicker (floored at 1m - see buildElasticsearchLevelQuery
-// in namespaceOverviewQueries.ts for why that's computed here in JS rather
-// than left to the datasource). Bypasses Scenes' variable-interpolation
-// machinery entirely for the toggle - CustomVariable's CSV/"label : value"
-// option parser isn't a good fit for Lucene clauses full of colons and
-// parens - so this just swaps each SceneQueryRunner's own `queries` state
-// directly and calls `runQueries()` to force the re-fetch (setState alone
-// doesn't trigger one; that only happens automatically for
-// *variable-driven* query changes).
-function LogsEventsLevelToggle({
-  logsRunner,
-  eventsRunner,
-  cluster,
-  namespace,
-}: {
-  logsRunner: SceneQueryRunner;
-  eventsRunner: SceneQueryRunner;
-  cluster: string;
-  namespace: string;
-}) {
-  const [onlyWarnError, setOnlyWarnError] = useState(false);
-  const timeRange = sceneGraph.getTimeRange(logsRunner).useState().value;
-
-  useEffect(() => {
-    // resolution 50 (not the ~100+ a timeseries panel would target): a Bar
-    // Chart draws each time bucket as its own labeled category, so fewer,
-    // wider buckets keep the x-axis legible at this panel's width.
-    const interval = rangeUtil.calculateInterval(timeRange, 50, '1m').interval;
-    logsRunner.setState({ queries: buildNamespaceLogsLevelQueries(cluster, namespace, onlyWarnError, interval) as any });
-    logsRunner.runQueries();
-    eventsRunner.setState({ queries: buildNamespaceEventsLevelQueries(namespace, onlyWarnError, interval) as any });
-    eventsRunner.runQueries();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeRange.from.valueOf(), timeRange.to.valueOf(), onlyWarnError]);
-
-  return (
-    <InlineSwitch
-      transparent
-      showLabel
-      label="Only warn/error"
-      value={onlyWarnError}
-      onChange={(e) => setOnlyWarnError(e.currentTarget.checked)}
-    />
-  );
-}
-
 // Shared series styling for the "Namespace optimization" CPU/Memory charts:
 // Capacity (the resourcequota hard ceiling) is a solid red line; Limits a
 // dashed red line; Requests a dashed orange line; Allocation (requests,
@@ -403,53 +352,26 @@ function buildNamespaceOptimizationPanel(
 }
 
 function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRegex: string, namespaceRegex: string, baseUrl: string) {
-  // `environment_debeka_de` (the label the EgressIP query below filters on)
-  // is the namespace's "<application>-<substage>" application coordinates,
-  // not always the same as the k8s namespace name - resolved via the org's
-  // RQLite CMDB from the cluster's own datacenter coordinates, embedded in
-  // its name. Falls back to the namespace name directly (the old behavior)
-  // when the cluster name doesn't follow that scheme - this demo's own
-  // "demo-cluster-aws"/"demo-cluster-gce" names don't, so the fallback is
-  // what's exercised here.
-  const clusterCoordinates = parseOpenshiftClusterCoordinates(cluster);
-  const applicationVariableName = 'namespaceApplication';
-  const substageVariableName = 'namespaceSubstage';
+  // EgressIP now comes straight from the RQLite CMDB, keyed by the plain k8s
+  // namespace name alone - no more cluster-name datacenter-coordinate
+  // parsing or an application/substage indirection (see buildEgressIpQuery's
+  // own comment). Combined into the same info card as the "cluster"/
+  // "workloads" rows via a Mixed-datasource query (Thanos + RQLite in one
+  // $data), so this stays one card instead of splitting into two.
   const rqliteDatasourceVariable = createRqliteDatasourceVariable();
   rqliteDatasourceVariable.setState({ hide: VariableHide.hideVariable });
-  const rqliteVariables = clusterCoordinates
-    ? [
-        rqliteDatasourceVariable,
-        new QueryVariable({
-          name: applicationVariableName,
-          datasource: infraDatasource(),
-          query: buildNamespaceApplicationQuery(namespace, clusterCoordinates),
-          hide: VariableHide.hideVariable,
-        }),
-        new QueryVariable({
-          name: substageVariableName,
-          datasource: infraDatasource(),
-          query: buildNamespaceSubstageQuery(namespace, clusterCoordinates),
-          hide: VariableHide.hideVariable,
-        }),
-      ]
-    : [];
-  const environmentDebekaDe = clusterCoordinates ? `\${${applicationVariableName}}-\${${substageVariableName}}` : namespaceRegex;
 
   const infoRunner = new SceneQueryRunner({
-    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    datasource: mixedDatasource(),
     queries: [
       {
         refId: 'info',
+        datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
         expr: substituteClusterAndNamespace(namespaceTableQueries.info, clusterRegex, namespaceRegex),
         format: 'table',
         instant: true,
       },
-      {
-        refId: 'egressip',
-        expr: buildNamespaceEgressIpQuery(clusterRegex, environmentDebekaDe),
-        format: 'table',
-        instant: true,
-      },
+      buildEgressIpQueryTarget(namespace) as any,
     ],
   });
 
@@ -465,7 +387,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
         fieldName: 'Value #info',
         href: `${PLUGIN_BASE_URL}/${ROUTES.Workloads}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}`,
       },
-      { label: 'egress ip:', fieldName: 'egressip_assigned_0' },
+      { label: 'egress ip:', fieldName: 'egressip' },
     ],
   });
 
@@ -735,7 +657,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
   eventsPanel.setState({ titleItems: <PanelLinkTitleItem title="View Events" url={`${baseUrl}/events`} /> });
 
   return new EmbeddedScene({
-    $variables: new SceneVariableSet({ variables: rqliteVariables }),
+    $variables: new SceneVariableSet({ variables: [rqliteDatasourceVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -780,7 +702,14 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
         new SceneFlexItem({
           ySizing: 'content',
           body: new SceneReactObject({
-            reactNode: <LogsEventsLevelToggle logsRunner={logsRunner} eventsRunner={eventsRunner} cluster={cluster} namespace={namespace} />,
+            reactNode: (
+              <LogsEventsLevelToggle
+                logsRunner={logsRunner}
+                eventsRunner={eventsRunner}
+                buildLogsQueries={(onlyWarnError, interval) => buildNamespaceLogsLevelQueries(cluster, namespace, onlyWarnError, interval)}
+                buildEventsQueries={(onlyWarnError, interval) => buildNamespaceEventsLevelQueries(namespace, onlyWarnError, interval)}
+              />
+            ),
           }),
         }),
         new SceneFlexLayout({
@@ -795,35 +724,6 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
   });
 }
 
-// Shared "only warn/error" toggle for the dedicated Logs/Events tabs' single
-// Log panel each - simpler than the Overview tab's LogsEventsLevelToggle
-// above: a Log panel needs no date_histogram interval (it lists individual
-// documents, not per-bucket counts), so there's no live-time-range effect to
-// run here, just a straight query-string swap on toggle.
-function LogsTabLevelToggle({ runner, buildQuery }: { runner: SceneQueryRunner; buildQuery: (onlyWarnError: boolean) => string }) {
-  const [onlyWarnError, setOnlyWarnError] = useState(false);
-
-  const toggle = (checked: boolean) => {
-    setOnlyWarnError(checked);
-    runner.setState({ queries: [{ refId: 'logs', query: buildQuery(checked), metrics: [{ id: '1', type: 'logs' }], bucketAggs: [] }] as any });
-    runner.runQueries();
-  };
-
-  return (
-    <InlineSwitch transparent showLabel label="Only warn/error" value={onlyWarnError} onChange={(e) => toggle(e.currentTarget.checked)} />
-  );
-}
-
-function buildNamespaceLogPanel(title: string, runner: SceneQueryRunner) {
-  return PanelBuilders.logs()
-    .setTitle(title)
-    .setData(runner)
-    .setOption('sortOrder', LogsSortOrder.Descending)
-    .setOption('showTime', true)
-    .setOption('wrapLogMessage', true)
-    .build();
-}
-
 function getNamespaceLogsScene(cluster: string, namespace: string) {
   const logsRunner = new SceneQueryRunner({
     datasource: { uid: `\${${LOGS_DATASOURCE_VARIABLE_NAME}}` },
@@ -831,7 +731,7 @@ function getNamespaceLogsScene(cluster: string, namespace: string) {
       { refId: 'logs', query: buildNamespaceLogsQuery(cluster, namespace, false), metrics: [{ id: '1', type: 'logs' }], bucketAggs: [] },
     ] as any,
   });
-  const logsPanel = buildNamespaceLogPanel('Logs', logsRunner);
+  const logsPanel = buildLogPanel('Logs', logsRunner);
 
   return new EmbeddedScene({
     body: new SceneFlexLayout({
@@ -856,7 +756,7 @@ function getNamespaceEventsScene(namespace: string) {
       { refId: 'logs', query: buildNamespaceEventsQuery(namespace, false), metrics: [{ id: '1', type: 'logs' }], bucketAggs: [] },
     ] as any,
   });
-  const eventsPanel = buildNamespaceLogPanel('Events', eventsRunner);
+  const eventsPanel = buildLogPanel('Events', eventsRunner);
 
   return new EmbeddedScene({
     body: new SceneFlexLayout({

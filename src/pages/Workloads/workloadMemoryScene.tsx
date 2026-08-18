@@ -1,0 +1,232 @@
+import {
+  EmbeddedScene,
+  FieldConfigOverridesBuilder,
+  PanelBuilders,
+  SceneDataTransformer,
+  SceneFlexItem,
+  SceneFlexLayout,
+  SceneQueryRunner,
+  SceneVariableSet,
+} from '@grafana/scenes';
+import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
+import { FieldColorModeId, VariableHide } from '@grafana/data';
+import {
+  workloadMemoryDistributionQuery,
+  workloadMemoryOverviewUsageQueries,
+  workloadMemoryPodAlignmentQuery,
+  workloadMemoryPodsTableQueries,
+  workloadMemoryStatQueries,
+  WorkloadMemoryOverviewUsageKey,
+  WorkloadMemoryPodsTableQueryKey,
+  WorkloadMemoryStatKey,
+} from '../../queries/workloadMemoryQueries';
+import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
+import { usageThresholds } from '../../scenes/tableCells';
+import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
+import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
+
+// Same green-baseline/red-if-any thresholds as the Overview/CPU tabs' own
+// alertsThresholds - redeclared locally rather than imported, matching this
+// codebase's established "every page/tab file redeclares its own small
+// constants" convention (see namespaceMemoryScene.tsx's own copy).
+const alertsThresholds = {
+  mode: ThresholdsMode.Absolute,
+  steps: [
+    { color: 'green', value: -Infinity },
+    { color: 'red', value: 1 },
+  ],
+};
+
+// Same series styling as namespaceMemoryScene.tsx's own
+// applyMemoryUsageSeriesOverrides - redeclared locally for the same reason.
+function applyMemoryUsageSeriesOverrides(b: FieldConfigOverridesBuilder<any>) {
+  return b
+    .matchFieldsByQuery('limits')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'red' })
+    .overrideCustomFieldConfig('lineStyle', { fill: 'dash' })
+    .matchFieldsByQuery('requests')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'orange' })
+    .overrideCustomFieldConfig('lineStyle', { fill: 'dash' })
+    .matchFieldsByQuery('usage')
+    .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'blue' });
+}
+
+const memoryStatPanelDefs: Array<{ key: WorkloadMemoryStatKey; title: string; unit: string; thresholds: typeof alertsThresholds }> = [
+  { key: 'alertsFiring', title: 'Alerts: Firing (p95)', unit: 'short', thresholds: alertsThresholds },
+  { key: 'schedulingRequestsSet', title: 'Scheduling: Containers with Memory requests set (p95)', unit: 'percentunit', thresholds: usageThresholds },
+  { key: 'alignmentUsageRequests', title: 'Alignment: Usage/Requests (p95)', unit: 'percentunit', thresholds: usageThresholds },
+];
+
+function buildMemoryStatPanel(title: string, expr: string, unit: string, thresholds: typeof alertsThresholds) {
+  const runner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [{ refId: 'value', expr }],
+  });
+  return PanelBuilders.stat()
+    .setTitle(title)
+    .setUnit(unit)
+    .setThresholds(thresholds)
+    .setOption('colorMode', BigValueColorMode.Value)
+    .setOption('graphMode', BigValueGraphMode.Area)
+    .setData(runner)
+    .build();
+}
+
+export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: string, workloadRegex: string, workload: string) {
+  // Hidden pod variable - same reasoning as the Overview/CPU tabs' own (see
+  // getWorkloadOverviewScene in workloadsPage.tsx): every $pod-referencing
+  // query below needs to resolve to "every pod belonging to this workload",
+  // but there's no picker to expose it through since each tab is its own
+  // EmbeddedScene (no $variables inherited from a sibling tab's scene).
+  const podVariable = createPodFilterVariable(clusterRegex, namespaceRegex, { workload });
+  podVariable.setState({ hide: VariableHide.hideVariable });
+  const podToken = `\${${POD_VARIABLE_NAME}:regex}`;
+  const substitute = (expr: string) => substituteWorkloadTokens(expr, clusterRegex, namespaceRegex, workloadRegex, podToken);
+
+  const statPanels = memoryStatPanelDefs.map((def) =>
+    buildMemoryStatPanel(def.title, substitute(workloadMemoryStatQueries[def.key]), def.unit, def.thresholds)
+  );
+
+  const overviewUsageLegends: Record<WorkloadMemoryOverviewUsageKey, string> = {
+    limits: 'Sum of container memory limits',
+    requests: 'Sum of container memory requests',
+    usage: 'Sum of container memory usage',
+  };
+  const overviewUsageRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: (Object.keys(workloadMemoryOverviewUsageQueries) as WorkloadMemoryOverviewUsageKey[]).map((key) => ({
+      refId: key,
+      expr: substitute(workloadMemoryOverviewUsageQueries[key]),
+      legendFormat: overviewUsageLegends[key],
+    })),
+  });
+  const overviewUsagePanel = PanelBuilders.timeseries()
+    .setTitle('Overview: Usage (memory bytes)')
+    .setUnit('bytes')
+    .setData(overviewUsageRunner)
+    .setOverrides(applyMemoryUsageSeriesOverrides)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    .setHeaderActions(new PanelTimeRangeCompare())
+    .build();
+
+  const distributionRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [{ refId: 'distribution', expr: substitute(workloadMemoryDistributionQuery), legendFormat: '{{workload_type}}/{{pod}}' }],
+  });
+  const distributionPanel = PanelBuilders.timeseries()
+    .setTitle('Distribution: Pod usage (bytes, stacked)')
+    .setUnit('bytes')
+    .setData(distributionRunner)
+    .setCustomFieldConfig('stacking', { mode: StackingMode.Normal })
+    .setCustomFieldConfig('lineWidth', 2)
+    .setCustomFieldConfig('fillOpacity', 60)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    .setHeaderActions(new PanelTimeRangeCompare())
+    .build();
+
+  const podAlignmentRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [{ refId: 'alignment', expr: substitute(workloadMemoryPodAlignmentQuery), legendFormat: '{{workload_type}}/{{pod}}' }],
+  });
+  const podAlignmentPanel = PanelBuilders.timeseries()
+    .setTitle('Alignment: Pod Usage/Requests (%)')
+    .setUnit('percentunit')
+    .setData(podAlignmentRunner)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
+    .setHeaderActions(new PanelTimeRangeCompare())
+    .build();
+
+  // "Pods" table - POD/TYPE/REQUESTS/USAGE (P95)/USAGE/CAPACITY (P95, %).
+  // Only "timeline" carries workload/workload_type/image_spec - "merge"
+  // matches rows by the fields common to every query instead, (cluster,
+  // namespace, pod, container) - see workloadMemoryQueries.ts's own comment.
+  const tableRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: (Object.keys(workloadMemoryPodsTableQueries) as WorkloadMemoryPodsTableQueryKey[]).map((key) => ({
+      refId: key,
+      expr: substitute(workloadMemoryPodsTableQueries[key]),
+      format: 'table' as const,
+      instant: true,
+    })),
+  });
+
+  const tableData = new SceneDataTransformer({
+    $data: tableRunner,
+    transformations: [
+      { id: 'merge', options: {} },
+      {
+        id: 'organize',
+        options: {
+          excludeByName: {
+            Time: true,
+            cluster: true,
+            namespace: true,
+            workload: true,
+            container: true,
+            image_spec: true,
+            'Value #timeline': true,
+          },
+          indexByName: {
+            pod: 0,
+            workload_type: 1,
+            'Value #requests': 2,
+            'Value #memAgg': 3,
+            'Value #memAggPercent': 4,
+          },
+          renameByName: {},
+        },
+      },
+    ],
+  });
+
+  const table = PanelBuilders.table()
+    .setTitle('Pods')
+    .setData(tableData)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('pod')
+        .overrideDisplayName('POD')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('workload_type')
+        .overrideDisplayName('TYPE')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #requests')
+        .overrideDisplayName('REQUESTS')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #memAgg')
+        .overrideDisplayName('USAGE (P95)')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #memAggPercent')
+        .overrideDisplayName('USAGE/CAPACITY (P95, %)')
+        .overrideUnit('percentunit')
+        .overrideThresholds(usageThresholds)
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
+    )
+    .build();
+
+  return new EmbeddedScene({
+    $variables: new SceneVariableSet({ variables: [podVariable] }),
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: statPanels.map((panel) => new SceneFlexItem({ height: 120, body: panel })),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          children: [
+            new SceneFlexItem({ height: 300, body: overviewUsagePanel }),
+            new SceneFlexItem({ height: 300, body: distributionPanel }),
+            new SceneFlexItem({ height: 300, body: podAlignmentPanel }),
+          ],
+        }),
+        new SceneFlexItem({ height: 400, body: table }),
+      ],
+    }),
+  });
+}

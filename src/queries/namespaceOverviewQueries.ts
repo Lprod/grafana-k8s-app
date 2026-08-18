@@ -1,5 +1,6 @@
 // PromQL queries for the namespace drilldown Overview tab.
 import { workloadTableQueries } from './workloadQueries';
+import { infraDatasource } from './datasources';
 
 // Namespaces have no synthetic health-probe CronJobs like clusters do (see
 // buildClusterHealthQuery in clusterOverviewQueries.ts), so "health" here is
@@ -11,74 +12,45 @@ export function buildNamespaceAlertsSeverityQuery(clusterRegex: string, namespac
   return `count by (severity) (ALERTS{alertstate="firing", cluster="${clusterRegex}", namespace="${namespaceRegex}", alertname!~"ArgoCDSyncAlert"})`;
 }
 
-// OVN-Kubernetes' EgressIP info metric lives under a fixed "monitoring-addons"
-// namespace label - the actual namespace being viewed is matched via a
-// separate "environment_debeka_de" label instead. The IP itself has no
-// dedicated value field (standard Prometheus "info metric" pattern) - it's
-// the "egressip_assigned_0" label on the series, which the table-format
-// response turns into its own column.
-//
-// `environment_debeka_de` is "<application>-<substage>" (the namespace's
-// *application coordinates*), not the k8s namespace name itself - these
-// usually match but not always. `environmentDebekaDe` is passed in already
-// resolved: either literal Grafana variable-interpolation tokens
-// (`${application}-${substage}`, when the RQLite lookup below could run) or
-// the plain namespace as a same-as-before fallback when it couldn't - see
-// getNamespaceOverviewScene in namespacesPage.tsx.
-export function buildNamespaceEgressIpQuery(clusterRegex: string, environmentDebekaDe: string): string {
-  return `ovn_egressip_info{namespace="monitoring-addons", cluster="${clusterRegex}", environment_debeka_de="${environmentDebekaDe}"}`;
-}
-
-export interface OpenshiftClusterCoordinates {
-  dcArea: string;
-  dcTenant: string;
-  dcCluster: string;
-}
-
-// The k8s cluster name embeds datacenter coordinates as
-// "openshift-<dc_cluster>-<dc_tenant>-<dc_area>" - extracted so the RQLite
-// application/substage lookup queries below can filter on them. Real prod
-// cluster names follow this scheme; this demo's own "demo-cluster-aws"/
-// "demo-cluster-gce" names don't, so this returns undefined there and
-// getNamespaceOverviewScene falls back to the namespace-name-only EgressIP
-// query instead of attempting the RQLite lookup.
-export function parseOpenshiftClusterCoordinates(cluster: string): OpenshiftClusterCoordinates | undefined {
-  const areaMatch = cluster.match(/openshift-[^-]+-[^-]+-([^-]+)/);
-  const tenantMatch = cluster.match(/openshift-[^-]+-([^-]+)-[^-]+/);
-  const clusterMatch = cluster.match(/openshift-([^-]+)-[^-]+-[^-]+/);
-  if (!areaMatch || !tenantMatch || !clusterMatch) {
-    return undefined;
-  }
-  return { dcArea: areaMatch[1], dcTenant: tenantMatch[1], dcCluster: clusterMatch[1] };
-}
-
-// Escapes a value going into a single-quoted SQL string literal - the
-// namespace name is the only piece of these queries that isn't already a
-// regex-derived, dash-and-alphanumeric-only coordinate.
+// Escapes a value going into a single-quoted SQL string literal.
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");
 }
 
-function namespaceCoordinatesWhereClause(namespace: string, coordinates: OpenshiftClusterCoordinates): string {
-  return `r.infra_type = 'ocp_namespace' AND r.state = 'present' AND r.infra_key LIKE '${escapeSqlLiteral(namespace)}' AND r.area LIKE '${escapeSqlLiteral(coordinates.dcArea)}' AND r.tenant LIKE '${escapeSqlLiteral(coordinates.dcTenant)}' AND json_extract(r.result, '$.cluster') LIKE '${escapeSqlLiteral(coordinates.dcCluster)}'`;
+// EgressIP lookup, simplified: a direct RQLite CMDB query keyed by the plain
+// k8s namespace name alone - no more cluster-name datacenter-coordinate
+// parsing or an application/substage indirection through OVN's own
+// `environment_debeka_de` label (that whole mechanism, and the Prometheus
+// `ovn_egressip_info` query it fed, is gone). `r.result` is a JSON blob per
+// resource row; the egress IP lives at its `$.egressip` path.
+export function buildEgressIpQuery(namespace: string): string {
+  return `SELECT json_extract(r.result, '$.egressip') AS egressip FROM resource r WHERE r.infra_key IN ('${escapeSqlLiteral(namespace)}') AND json_extract(r.result, '$.egressip') IS NOT NULL AND json_extract(r.result, '$.egressip') != '' ORDER BY r.infra_key`;
 }
 
-// The org's CMDB (RQLite) resolves a namespace's real "application"/
-// "substage" application coordinates from its datacenter coordinates - used
-// as hidden QueryVariables (see getNamespaceOverviewScene) rather than run
-// as a panel query, since only the single resolved value is needed.
-export function buildNamespaceApplicationQuery(namespace: string, coordinates: OpenshiftClusterCoordinates): string {
-  return `SELECT r.application
-FROM resource r JOIN coordinates c ON r.application = c.application AND r.substage = c.substage AND r.area = c.area AND r.tenant = c.tenant
-LEFT JOIN itsm_service i ON c.itsm_service_name = i.name
-WHERE ${namespaceCoordinatesWhereClause(namespace, coordinates)}`;
-}
-
-export function buildNamespaceSubstageQuery(namespace: string, coordinates: OpenshiftClusterCoordinates): string {
-  return `SELECT r.substage
-FROM resource r JOIN coordinates c ON r.application = c.application AND r.substage = c.substage AND r.area = c.area AND r.tenant = c.tenant
-LEFT JOIN itsm_service i ON c.itsm_service_name = i.name
-WHERE ${namespaceCoordinatesWhereClause(namespace, coordinates)}`;
+// Full query target for the panel above - shaped to match g42-rqlite-datasource's
+// own Panel JSON model exactly (confirmed against a real panel built with its
+// query editor in "code" mode): `rawSql` is the field the editor itself
+// writes the SQL into, and the builder-mode scaffolding fields
+// (table/columns/whereClause/groupBy/orderBy/limit/offset/timeColumns) are
+// carried along even though they're unused in code mode - `editorMode:
+// 'code'` is what tells the plugin to read `rawSql` directly rather than try
+// to construct SQL from those (here: empty) builder fields.
+export function buildEgressIpQueryTarget(namespace: string) {
+  return {
+    refId: 'egressip',
+    datasource: infraDatasource(),
+    rawSql: buildEgressIpQuery(namespace),
+    format: 'table',
+    editorMode: 'code',
+    table: '',
+    columns: [],
+    whereClause: [],
+    groupBy: [],
+    orderBy: [],
+    limit: '',
+    offset: '',
+    timeColumns: ['time'],
+  };
 }
 
 // "Namespace optimization" charts on the Overview tab: capacity/limits/
@@ -327,4 +299,63 @@ export function buildNamespaceEventsLevelQueries(namespace: string, onlyWarnErro
   }
 
   return queries;
+}
+
+// Workload Drilldown Overview tab's own Logs/Events bar charts - same
+// per-canonical-level query-per-series structure as
+// buildNamespaceLogsLevelQueries/buildNamespaceEventsLevelQueries above, with
+// an extra orchestrator.resource.name wildcard clause (most log/event
+// documents don't carry a dedicated "workload" field of their own, so this
+// matches on the resource name prefix instead) scoping down to just this one
+// workload.
+export function buildWorkloadLogsLevelQueries(cluster: string, namespace: string, workload: string, onlyWarnError: boolean, interval: string) {
+  const base = (extra: string) =>
+    `(logmgmt.kind:openshift AND NOT logmgmt.category:event AND k8s.cluster.name:(${escapeLucene(cluster)}) AND k8s.namespace.name:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(workload)}*) AND ${extra})`;
+
+  const defs = onlyWarnError ? filterLevelDefsWarnErrorOnly(namespaceLogLevelDefs) : namespaceLogLevelDefs;
+  const queries = defs.map((d) => buildElasticsearchLevelQuery(d.canonical, base(luceneOrClause('log.level', d.variants)), d.canonical, interval));
+
+  if (!onlyWarnError) {
+    queries.push(
+      buildElasticsearchLevelQuery(NAMESPACE_LEVEL_OTHER, base(luceneNotAnyClause('log.level', namespaceLogLevelDefs)), NAMESPACE_LEVEL_OTHER, interval)
+    );
+  }
+
+  return queries;
+}
+
+// Same "no cluster filter, orchestrator.namespace instead of
+// k8s.namespace.name" asymmetry as buildNamespaceEventsLevelQueries above -
+// given verbatim per the original request, not "fixed" to match Logs' style.
+export function buildWorkloadEventsLevelQueries(namespace: string, workload: string, onlyWarnError: boolean, interval: string) {
+  const base = (extra: string) =>
+    `(logmgmt.kind:openshift AND logmgmt.category:event AND orchestrator.namespace:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(workload)}*) AND ${extra})`;
+
+  const defs = onlyWarnError ? filterLevelDefsWarnErrorOnly(namespaceEventTypeDefs) : namespaceEventTypeDefs;
+  const queries = defs.map((d) => buildElasticsearchLevelQuery(d.canonical, base(luceneOrClause('event.type', d.variants)), d.canonical, interval));
+
+  if (!onlyWarnError) {
+    queries.push(
+      buildElasticsearchLevelQuery(NAMESPACE_LEVEL_OTHER, base(luceneNotAnyClause('event.type', namespaceEventTypeDefs)), NAMESPACE_LEVEL_OTHER, interval)
+    );
+  }
+
+  return queries;
+}
+
+// Raw log-line queries for the Workload Drilldown's own dedicated Logs/
+// Events tabs - same shape as buildNamespaceLogsQuery/buildNamespaceEventsQuery
+// above (a single query, no bucketAggs), with the same
+// orchestrator.resource.name wildcard clause buildWorkloadLogsLevelQueries/
+// buildWorkloadEventsLevelQueries already use to scope the Overview tab's
+// bar charts down to one workload.
+export function buildWorkloadLogsQuery(cluster: string, namespace: string, workload: string, onlyWarnError: boolean): string {
+  return `logmgmt.kind:openshift AND NOT logmgmt.category:event AND k8s.cluster.name:(${escapeLucene(cluster)}) AND k8s.namespace.name:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(workload)}*)${buildLevelRestrictionClause('log.level', namespaceLogLevelDefs, onlyWarnError)}`;
+}
+
+// Same "no cluster filter, orchestrator.namespace instead of
+// k8s.namespace.name" asymmetry as buildWorkloadEventsLevelQueries above -
+// given verbatim per the original request.
+export function buildWorkloadEventsQuery(namespace: string, workload: string, onlyWarnError: boolean): string {
+  return `logmgmt.kind:openshift AND logmgmt.category:event AND orchestrator.namespace:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(workload)}*)${buildLevelRestrictionClause('event.type', namespaceEventTypeDefs, onlyWarnError)}`;
 }

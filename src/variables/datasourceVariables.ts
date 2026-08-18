@@ -169,16 +169,27 @@ export function createNodesFilterVariable(clusterRegex: string, options: { isMul
 // reference" reasoning as createNodesFilterVariable - the Namespace
 // Drilldown's CPU tab is scoped to a single cluster+namespace via its own
 // drilldown route params, not a picker.
-export function createPodFilterVariable(clusterRegex: string, namespaceRegex: string, options: { isMulti?: boolean } = {}) {
+//
+// `workload` (exact name, not a regex) narrows this further to just one
+// workload's own pods, via the same namespace_workload_pod:kube_pod_owner:relabel
+// join workloadTableQueries.ts's own ready_pods/desired_pods use - kube_pod_info
+// (the plain namespace-wide query below) has no "workload" label of its own.
+// The Workload Drilldown Overview tab uses this to build a hidden pod
+// variable (every pod belonging to its one workload) rather than a picker.
+export function createPodFilterVariable(
+  clusterRegex: string,
+  namespaceRegex: string,
+  options: { isMulti?: boolean; workload?: string } = {}
+) {
   const isMulti = options.isMulti ?? true;
+  const query = options.workload
+    ? `label_values(namespace_workload_pod:kube_pod_owner:relabel{cluster="${clusterRegex}", namespace="${namespaceRegex}", workload="${options.workload}"}, pod)`
+    : `label_values(kube_pod_info{cluster="${clusterRegex}", namespace="${namespaceRegex}"}, pod)`;
   const variable = new QueryVariable({
     name: POD_VARIABLE_NAME,
     label: 'Pod',
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    query: {
-      refId: 'podVariableQuery',
-      query: `label_values(kube_pod_info{cluster="${clusterRegex}", namespace="${namespaceRegex}"}, pod)`,
-    },
+    query: { refId: 'podVariableQuery', query },
     isMulti,
     includeAll: isMulti,
     allValue: isMulti ? '.+' : undefined,
