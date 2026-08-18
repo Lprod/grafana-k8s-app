@@ -64,6 +64,7 @@ import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds } from 
 import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
+const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
 const pvcCapacityThresholds = {
@@ -603,7 +604,7 @@ function buildEfficiencyStatPanel(title: string, expr: string) {
     .build();
 }
 
-function getClusterCpuScene(clusterRegex: string) {
+function getClusterCpuScene(cluster: string, clusterRegex: string) {
   const namespaceRegex = `\${${NAMESPACE_VARIABLE_NAME}:regex}`;
   const nodeRegex = `\${${NODES_VARIABLE_NAME}:regex}`;
 
@@ -732,6 +733,9 @@ function getClusterCpuScene(clusterRegex: string) {
         .matchFieldsWithName('namespace')
         .overrideDisplayName('Namespace')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          { title: 'View namespace', url: `${NAMESPACES_URL}/${encodeURIComponent(cluster)}/\${__value.text}\${__url.params}` },
+        ])
         .matchFieldsWithName('Value #cpu_usage')
         .overrideDisplayName('CPU Usage (p95)')
         .overrideUnit('cores')
@@ -963,7 +967,7 @@ function getClusterCpuScene(clusterRegex: string) {
   });
 }
 
-function getClusterMemoryScene(clusterRegex: string) {
+function getClusterMemoryScene(cluster: string, clusterRegex: string) {
   const namespaceRegex = `\${${NAMESPACE_VARIABLE_NAME}:regex}`;
   const nodeRegex = `\${${NODES_VARIABLE_NAME}:regex}`;
 
@@ -1092,6 +1096,9 @@ function getClusterMemoryScene(clusterRegex: string) {
         .matchFieldsWithName('namespace')
         .overrideDisplayName('Namespace')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          { title: 'View namespace', url: `${NAMESPACES_URL}/${encodeURIComponent(cluster)}/\${__value.text}\${__url.params}` },
+        ])
         .matchFieldsWithName('Value #mem_usage')
         .overrideDisplayName('Usage (P95)')
         .overrideUnit('bytes')
@@ -1734,8 +1741,8 @@ function getClusterDetailPage(routeMatch: SceneRouteMatch<{ cluster: string }>, 
 
   const tabDefs: ClusterTabDef[] = [
     { slug: 'overview', title: 'Overview', getScene: () => getClusterOverviewScene(cluster, clusterRegex) },
-    { slug: 'cpu', title: 'CPU', getScene: () => getClusterCpuScene(clusterRegex) },
-    { slug: 'memory', title: 'Memory', getScene: () => getClusterMemoryScene(clusterRegex) },
+    { slug: 'cpu', title: 'CPU', getScene: () => getClusterCpuScene(cluster, clusterRegex) },
+    { slug: 'memory', title: 'Memory', getScene: () => getClusterMemoryScene(cluster, clusterRegex) },
     { slug: 'network', title: 'Network', getScene: () => getClusterNetworkScene(clusterRegex) },
     { slug: 'storage', title: 'Storage', getScene: () => getClusterStorageScene(clusterRegex) },
   ];

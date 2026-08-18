@@ -381,10 +381,13 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
       { label: 'cluster:', fieldName: 'cluster', href: `${CLUSTERS_URL}/${encodeURIComponent(cluster)}` },
       {
         label: 'workloads:',
-        // Prometheus datasource only names the value field bare "Value"
-        // when a request has exactly one query - with the egressip query
-        // added alongside "info" below, it disambiguates to "Value #info".
-        fieldName: 'Value #info',
+        // Prometheus only disambiguates to "Value #info" when it receives
+        // more than one query in the SAME request. Now that "egressip" goes
+        // to RQLite via a Mixed datasource, Thanos gets the "info" query
+        // dispatched alone (Mixed fans each target out to its own
+        // datasource's own sub-request) - so this is back to the bare
+        // "Value" name, the same as before "egressip" existed on this card.
+        fieldName: 'Value',
         href: `${PLUGIN_BASE_URL}/${ROUTES.Workloads}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}`,
       },
       { label: 'egress ip:', fieldName: 'egressip' },
