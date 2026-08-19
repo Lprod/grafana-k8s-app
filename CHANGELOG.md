@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.11
+
+- Fixed the Workload/Pod Drilldown health banners showing an unlogically high "N firing alerts" count: `alertsSeverityCounts` sums the first numeric field off *every* frame it's given, but since 1.10.7/1.10.8 the same `healthRunner` also carries `ready`/`desired` (Workload) or `phase` (Pod) refIds for the pod-readiness severity check added then - those numbers were silently being added straight into the alert count/severity instead of just the real 'alerts' refId. Now scoped to `refId === 'alerts'` only, same as `NodeHealthBanner`'s own alert-frame filtering already did.
+- Fixed the Pod Drilldown's health banner action button linking to the Alerts page without `var-pod` set, leaving the Pod filter empty after clicking through.
+- Simplified the Node Drilldown's health banner alert count (`buildNodeAlertsSeverityQuery`) to a plain `node` label match instead of also OR-ing in pod-scoped alerts attributed to the node via a `kube_pod_info` join: the banner's own action button links to the Alerts page with just `var-nodes=<node>` in the URL, and that page's Node filter can only do the same plain match (no way to replicate a join from a URL param) - the richer banner count disagreed with what the linked-to page could actually show, e.g. "3 firing alerts" on the banner and an empty table after clicking through.
+
 ## 1.10.10
 
 - Fixed every filter variable's "All" value (`allValue`) app-wide: `.+` requires at least one character, so `label=~"$var:regex"` silently excluded any series missing that label entirely even with "All" selected - confirmed live against Prometheus, a plain `node=~".+"` filter dropped a pod-scoped alert with no "node" label. Switched to `.*` (zero or more), which matches those too. Most likely explanation for the Alerts page's reported "any filter besides Cluster returns nothing" - `severity`/`namespace` aren't guaranteed present on every alert (some cluster/node-level or custom-rule alerts lack them), so narrowing to a real cluster+namespace could still zero out if the remaining alerts happened to lack a severity label, even though nothing was wrong with the cluster/namespace selection itself.

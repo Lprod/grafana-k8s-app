@@ -57,6 +57,7 @@ import {
   CLUSTER_VARIABLE_NAME,
   LOGS_DATASOURCE_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
+  POD_VARIABLE_NAME,
   THANOS_VARIABLE_NAME,
   createLogsDatasourceVariable,
   createThanosDatasourceVariable,
@@ -195,7 +196,7 @@ function getPodOverviewScene(
   const healthBanner = new NamespaceHealthBanner({
     $data: healthRunner,
     subject: 'Pod',
-    alertsUrl: `${PLUGIN_BASE_URL}/${ROUTES.Alerts}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}`,
+    alertsUrl: `${PLUGIN_BASE_URL}/${ROUTES.Alerts}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}&var-${POD_VARIABLE_NAME}=${encodeURIComponent(pod)}`,
   });
 
   // format: 'table' on every query below - without it, the Prometheus

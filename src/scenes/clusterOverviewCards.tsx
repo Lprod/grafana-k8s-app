@@ -329,7 +329,16 @@ function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceH
   const theme = useTheme2();
   const styles = useStyles2(healthBannerStyles);
   const frames = data?.series ?? [];
-  const { total, hasCritical, hasWarning } = alertsSeverityCounts(frames);
+  // alertsSeverityCounts sums the first numeric field off every frame it's
+  // given - correct when this banner's $data only ever held the 'alerts'
+  // query, but the Workload/Pod Drilldown's own healthRunner now also
+  // shares this $data with 'ready'/'desired' (or 'phase') refIds for
+  // podReadinessSeverity/podPhaseSeverity below. Passing the unfiltered
+  // frames here would add those pod-readiness numbers straight into the
+  // alert count/severity - same refId-scoping NodeHealthBanner's own
+  // alertFrames already does.
+  const alertFrames = frames.filter((f) => f.refId === 'alerts');
+  const { total, hasCritical, hasWarning } = alertsSeverityCounts(alertFrames);
   const alertSeverity: BannerSeverity = hasCritical ? 'error' : hasWarning ? 'warning' : total > 0 ? 'info' : 'success';
   // Workload usage sets 'ready'/'desired' refIds, Pod usage sets a 'phase'
   // one, Namespace usage sets neither - mutually exclusive per page, so

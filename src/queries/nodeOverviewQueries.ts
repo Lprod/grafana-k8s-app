@@ -25,18 +25,22 @@ export function buildNodeConditionQuery(clusterRegex: string, node: string): str
   )`;
 }
 
-// Same node-alerts-or-pod-alerts-on-that-node join as nodeTableQueries.alerts
-// (nodeQueries.ts), narrowed to one exact node and grouped by severity
-// instead of a plain count, to match every other health banner's own
-// alerts-by-severity shape (buildNamespaceAlertsSeverityQuery etc.).
+// Deliberately just a direct "node" label match - grouped by severity to
+// match every other health banner's own alerts-by-severity shape
+// (buildNamespaceAlertsSeverityQuery etc.). A previous version of this also
+// OR'd in pod-scoped alerts attributed to this node via a join against
+// kube_pod_info (same idea as nodeTableQueries.alerts, nodeQueries.ts) -
+// dropped here because this banner's own action button links straight to
+// the Alerts page with just `var-nodes=<node>` in the URL, and that page's
+// own Node filter (alertsPage.ts) can only do a plain "node" label match
+// too, with no way to replicate the join from a URL param - the richer
+// count made the banner and the page it links to disagree, showing e.g.
+// "3 firing alerts" on the banner and an empty table after clicking
+// through. Matching the simpler, actually-linkable query keeps the two
+// consistent, even though it now misses pod-only alerts running on this
+// node.
 export function buildNodeAlertsSeverityQuery(clusterRegex: string, node: string): string {
-  return `count by (severity) (
-    ALERTS{alertstate="firing", cluster="${clusterRegex}", node="${node}", alertname!~"ArgoCDSyncAlert"}
-    OR
-    max by (cluster, namespace, pod, severity) (ALERTS{alertstate="firing", cluster="${clusterRegex}", pod!="", alertname!~"ArgoCDSyncAlert"})
-    * on (cluster, namespace, pod) group_left (node)
-    max by (cluster, namespace, pod, node) (kube_pod_info{cluster="${clusterRegex}", node="${node}"})
-  )`;
+  return `count by (severity) (ALERTS{alertstate="firing", cluster="${clusterRegex}", node="${node}", alertname!~"ArgoCDSyncAlert"})`;
 }
 
 // kube_node_info's own labels - internal_ip/os_image/kernel_version/
