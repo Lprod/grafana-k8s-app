@@ -85,8 +85,13 @@ export function buildWorkloadCreatedQuery(workloadType: string, clusterRegex: st
   const entry = CREATED_METRIC_BY_TYPE[workloadType] ?? CREATED_METRIC_BY_TYPE.deployment;
   // *1000: kube-state-metrics reports Unix seconds, Grafana's dateTimeFromNow
   // unit (same as the All Jobs page's LAST SUCCEEDED/LAST SCHEDULE columns)
-  // expects milliseconds.
-  return `max(${entry.metric}{cluster="${clusterRegex}", namespace="${namespaceRegex}", ${entry.label}="${workload}"}) * 1000`;
+  // expects milliseconds. last_over_time(...[$__range:]) - same defensive
+  // wrapping as every other single-sample instant lookup in this file (e.g.
+  // workloadPodsTableQueries.info) - a plain instant query can miss the most
+  // recent scrape/evaluation cycle and return no data at all for a value
+  // that barely ever changes, showing the InfoCard's "–" fallback even
+  // though the object obviously exists.
+  return `max(last_over_time(${entry.metric}{cluster="${clusterRegex}", namespace="${namespaceRegex}", ${entry.label}="${workload}"}[$__range])) * 1000`;
 }
 
 // Substitutes the literal $cluster/$namespace/$workload/$pod placeholders

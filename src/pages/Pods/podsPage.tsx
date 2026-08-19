@@ -343,8 +343,18 @@ function getPodOverviewScene(
           replaceFields: false,
         },
       },
+      {
+        id: 'calculateField',
+        options: {
+          mode: 'binary',
+          binary: { left: 'Value #memUsage', operator: '/', right: 'Value #memLimits' },
+          alias: 'mem_limits_percent',
+          replaceFields: false,
+        },
+      },
       attachPercentField('Value #cpuRequests', 'cpu_requests_percent'),
       attachPercentField('Value #memRequests', 'mem_requests_percent'),
+      attachPercentField('Value #memLimits', 'mem_limits_percent'),
       {
         id: 'organize',
         options: {
@@ -356,6 +366,7 @@ function getPodOverviewScene(
             'Value #info': true,
             cpu_requests_percent: true,
             mem_requests_percent: true,
+            mem_limits_percent: true,
           },
           indexByName: {
             container: 0,
@@ -407,6 +418,7 @@ function getPodOverviewScene(
         .overrideDisplayName('MEMORY LIMITS')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: requestUsageCell() } as any)
     )
     .build();
 

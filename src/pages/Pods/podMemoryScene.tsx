@@ -152,7 +152,17 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
           replaceFields: false,
         },
       },
+      {
+        id: 'calculateField',
+        options: {
+          mode: 'binary',
+          binary: { left: 'Value #memUsage', operator: '/', right: 'Value #memLimits' },
+          alias: 'mem_limits_percent',
+          replaceFields: false,
+        },
+      },
       attachPercentField('Value #memRequests', 'mem_requests_percent'),
+      attachPercentField('Value #memLimits', 'mem_limits_percent'),
       {
         id: 'organize',
         options: {
@@ -163,6 +173,7 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
             pod: true,
             'Value #info': true,
             mem_requests_percent: true,
+            mem_limits_percent: true,
           },
           indexByName: {
             container: 0,
@@ -201,6 +212,7 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
         .overrideDisplayName('MEMORY LIMITS')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: requestUsageCell() } as any)
     )
     .build();
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.6
+
+- Added MEMORY LIMITS % to the Pod Drilldown's "Containers" table (Overview and Memory tabs), same value+percent+bar treatment as MEMORY/CPU REQUESTS.
+- Workloads list table now excludes `workload_type: "job"` rows: Jobs are short-lived/completed-once objects whose replica/resource columns don't mean the same thing here as a long-running Deployment/StatefulSet/DaemonSet's, and only cluttered the list. Filtered client-side (`filterByValue`) the same way the workload-name filter already is, since `workload_type` is synthesized by the query's own `label_replace` calls, not a raw metric label a PromQL selector could filter on directly.
+- Hardened the Workload Overview info card's "create date" query (`buildWorkloadCreatedQuery`) with `last_over_time(...[$__range])`, same defensive wrapping as every other single-sample instant lookup in this file - a plain instant query can miss the most recent scrape/evaluation cycle and return no data at all, showing "–" even though the object obviously exists.
+
 ## 1.10.5
 
 - Fixed the Pod Drilldown's "Containers" table (Overview/CPU/Memory tabs): the CPU/MEMORY REQUESTS columns were plain values with no percent badge or color, same gap as the Workload Drilldown's own Pods tables fixed in 1.10.4. `podContainersTableQueries` only returns plain usage/requests values (no dedicated percent query), so usage-as-%-of-requests is now computed client-side (`calculateField`) and folded into the REQUESTS cell via `attachPercentField`/`requestUsageCell`, same value+percent+bar convention as everywhere else in the app.

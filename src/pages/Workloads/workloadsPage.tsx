@@ -147,6 +147,22 @@ function getWorkloadsListScene() {
           match: 'any',
         },
       },
+      // Jobs are short-lived/completed-once objects - their replica count
+      // (ready/desired) and resource columns don't mean the same thing here
+      // as a long-running Deployment/StatefulSet/DaemonSet's, and cluttered
+      // this list without adding anything actionable. Excluded the same way
+      // as the workload-name filter above, since "workload_type" is another
+      // field synthesized by this query's own label_replace calls
+      // (workloadQueries.ts), not a raw metric label a PromQL selector could
+      // filter on directly.
+      {
+        id: 'filterByValue',
+        options: {
+          filters: [{ fieldName: 'workload_type', config: { id: 'equal', options: { value: 'job' } } }],
+          type: 'exclude',
+          match: 'any',
+        },
+      },
       // Stashes "Value #desired_pods" onto "Value #ready_pods" (see
       // attachDesiredPodsField's own comment for why), so the raw
       // "Value #desired_pods" field/column can be fully dropped below
