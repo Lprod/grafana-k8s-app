@@ -20,6 +20,7 @@ export function getKubernetesAlertsScene() {
     .setData(runner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   return new EmbeddedScene({

@@ -144,13 +144,14 @@ export const workloadMemoryOptimizationQueries = {
 export type WorkloadMemoryOptimizationKey = keyof typeof workloadMemoryOptimizationQueries;
 
 // "Pods" table (Overview tab) - one row per pod belonging to this workload.
-// Pasted verbatim, including memRequests/memLimits' `max by (..., container)`
-// grouping (not summed away to one value per pod like their cpu siblings do
-// via an outer `sum by (resource)`/`sum(...)`) - in practice this still
-// yields one row per pod as long as each pod has a single container, which
-// holds for every workload this demo/most real single-container workloads
-// model; not "fixed" to force a summed-per-pod value the given query doesn't
-// actually compute.
+// memRequests/memLimits sum away their inner `max by (..., container)`
+// grouping via an outer `sum by (cluster, namespace, pod)`, same as their cpu
+// sibling (cpuRequests) and the Node Drilldown's own pods table
+// (nodePodsTableQueries) - a multi-container pod would otherwise contribute
+// one row per container to the table's "merge" transformation (memRequests/
+// memLimits are the only queries in this set that carry a "container"
+// dimension the others don't), fanning out every other column's value across
+// N duplicate rows instead of yielding one row per pod.
 export const workloadPodsTableQueries = {
   // Takes the most recent entry of each pod (ip/uid can change over time),
   // joined against its workload attribution and its most recent phase.
@@ -175,8 +176,8 @@ export const workloadPodsTableQueries = {
   * on(namespace,pod)
     group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace", pod=~"$pod"}
 ) by (pod)`,
-  memRequests: `last_over_time((max by (cluster, namespace, pod, container) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}))[$__range:])`,
-  memLimits: `last_over_time((max by (cluster, namespace, pod, container) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}))[$__range:])`,
+  memRequests: `sum by (cluster, namespace, pod) (last_over_time((max by (cluster, namespace, pod, container) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}))[$__range:]))`,
+  memLimits: `sum by (cluster, namespace, pod) (last_over_time((max by (cluster, namespace, pod, container) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}))[$__range:]))`,
 };
 
 export type WorkloadPodsTableQueryKey = keyof typeof workloadPodsTableQueries;

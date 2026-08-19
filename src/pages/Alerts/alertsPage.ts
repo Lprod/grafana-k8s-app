@@ -73,6 +73,7 @@ function getAlertsScene() {
     .setUnit('short')
     .setData(firingByClusterRunner)
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const firingByNamespaceRunner = new SceneQueryRunner({
@@ -91,6 +92,7 @@ function getAlertsScene() {
     .setUnit('short')
     .setData(firingByNamespaceRunner)
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const severityRunner = new SceneQueryRunner({
@@ -109,6 +111,7 @@ function getAlertsScene() {
     .setUnit('short')
     .setData(severityRunner)
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const alertsTableRunner = new SceneQueryRunner({

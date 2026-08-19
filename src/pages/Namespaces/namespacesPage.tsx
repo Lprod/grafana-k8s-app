@@ -349,6 +349,7 @@ function buildNamespaceOptimizationPanel(
     .setOverrides(applyNamespaceOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 }
 

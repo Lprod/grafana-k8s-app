@@ -107,6 +107,7 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
     .setOverrides(applyMemoryUsageSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const distributionRunner = new SceneQueryRunner({
@@ -122,6 +123,7 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
     .setCustomFieldConfig('fillOpacity', 60)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const podAlignmentRunner = new SceneQueryRunner({
@@ -134,6 +136,7 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
     .setData(podAlignmentRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   // "Pods" table - POD/TYPE/REQUESTS/USAGE (P95)/USAGE/CAPACITY (P95, %).

@@ -45,6 +45,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setUnit('percentunit')
     .setData(ephemeralUsageRunner)
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const pvcStorageClassRunner = new SceneQueryRunner({
@@ -57,6 +58,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setUnit('short')
     .setData(pvcStorageClassRunner)
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const pvcVolumeBytesRunner = new SceneQueryRunner({
@@ -74,6 +76,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setData(pvcVolumeBytesRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const pvcVolumeBytesByWorkloadRunner = new SceneQueryRunner({
@@ -91,6 +94,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setData(pvcVolumeBytesByWorkloadRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const pvcVolumeInodesRunner = new SceneQueryRunner({
@@ -107,6 +111,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setData(pvcVolumeInodesRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const pvcVolumeInodesByWorkloadRunner = new SceneQueryRunner({
@@ -124,6 +129,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setData(pvcVolumeInodesByWorkloadRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'right', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const pvcStatusRunner = new SceneQueryRunner({
@@ -136,6 +142,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setUnit('short')
     .setData(pvcStatusRunner)
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const pvStatusRunner = new SceneQueryRunner({
@@ -148,6 +155,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setUnit('short')
     .setData(pvStatusRunner)
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const throughputRunner = new SceneQueryRunner({
@@ -164,6 +172,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setData(throughputRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'bottom', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const throughputByPodRunner = new SceneQueryRunner({
@@ -180,6 +189,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setData(throughputByPodRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'bottom', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const iopsRunner = new SceneQueryRunner({
@@ -196,6 +206,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setData(iopsRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'bottom', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const iopsByPodRunner = new SceneQueryRunner({
@@ -212,6 +223,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .setData(iopsByPodRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.List, placement: 'bottom', calcs: ['lastNotNull'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   return new EmbeddedScene({

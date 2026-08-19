@@ -386,6 +386,7 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
     .setOverrides(applyNodeOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const memoryLegends: Record<NodeMemoryOptimizationKey, string> = {
@@ -409,6 +410,7 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
     .setOverrides(applyNodeOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   // "Pods" table - one row per pod scheduled on this node. No Pod picker on

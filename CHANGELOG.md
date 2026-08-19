@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.1
+
+- Fixed the Workload Overview tab's "Pods" table showing far more rows than actual pods for workloads with multi-container pods: `memRequests`/`memLimits` in `workloadPodsTableQueries` (`workloadOverviewQueries.ts`) grouped by `(cluster, namespace, pod, container)` without summing across containers, unlike their `cpuRequests` sibling - the table's "merge" transformation then fanned out one row per container instead of one row per pod, repeating every other column's value on each. Both now wrapped in an outer `sum by (cluster, namespace, pod)`.
+- Pod Drilldown's "Containers" table (Overview/CPU/Memory tabs) rebuilt on a new `podContainersTableQueries` (`podOverviewQueries.ts`): plain per-container instant values instead of reusing the Workload Drilldown's pod-level `quantile_over_time(0.95, ...)` queries, which carried no `container` dimension of their own and so repeated one inflated pod-level P95 number on every container row instead of a real per-container breakdown. New columns: CONTAINER, IMAGE_SPEC, CPU USAGE, CPU REQUESTS (CPU tab/Overview), MEMORY USAGE, MEMORY REQUESTS, MEMORY LIMITS (Memory tab/Overview) - plain values, no more request/percent bar cells on this table.
+- All `PanelBuilders.timeseries()` panels app-wide (98 panels across 19 files) now set "Connect null values" to Always (`spanNulls: true`), matching the reference Kubernetes dashboards' own line behavior across scrape gaps.
+
 ## 1.10.0
 
 - Added the Pod Drilldown page (`getPodDetailPage` in `src/pages/Pods/podsPage.tsx`), reached from the Workload Drilldown Overview tab's own Pods table - pod name + an orange "pod" badge title, "in cluster X" subtitle linking back to the Clusters Drilldown, and all seven tabs (Overview, CPU, Memory, Network, Storage, Logs, Events) built out with real content. CPU/Memory/Network/Storage reuse the Workload Drilldown's own queries verbatim (every one already carried a `pod=~"$pod"` filter) - `$pod` is substituted with this page's own single, already-known pod name directly instead of a live "every pod in the workload" variable, so no hidden Pod variable is needed at this level. Logs/Events reuse the same per-canonical-level Elasticsearch query shape as the Namespace/Workload Drilldowns, scoped by the pod's exact name (`orchestrator.resource.name`) instead of a workload-name wildcard prefix.

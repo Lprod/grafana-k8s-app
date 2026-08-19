@@ -1,18 +1,17 @@
 import { EmbeddedScene, FieldConfigOverridesBuilder, PanelBuilders, SceneDataTransformer, SceneFlexItem, SceneFlexLayout, SceneQueryRunner } from '@grafana/scenes';
-import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
+import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, ThresholdsMode } from '@grafana/schema';
 import { FieldColorModeId } from '@grafana/data';
 import {
   workloadMemoryDistributionQuery,
   workloadMemoryOverviewUsageQueries,
   workloadMemoryPodAlignmentQuery,
-  workloadMemoryPodsTableQueries,
   workloadMemoryStatQueries,
   WorkloadMemoryOverviewUsageKey,
-  WorkloadMemoryPodsTableQueryKey,
   WorkloadMemoryStatKey,
 } from '../../queries/workloadMemoryQueries';
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
-import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
+import { podContainersTableQueries } from '../../queries/podOverviewQueries';
+import { usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 
@@ -89,6 +88,7 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
     .setOverrides(applyMemoryUsageSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const distributionRunner = new SceneQueryRunner({
@@ -104,6 +104,7 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
     .setCustomFieldConfig('fillOpacity', 60)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const podAlignmentRunner = new SceneQueryRunner({
@@ -116,35 +117,28 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
     .setData(podAlignmentRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
-  // "Containers" table merges by (cluster, namespace, pod, container) - same
-  // as the Workload Drilldown's own (see workloadMemoryQueries.ts), which
-  // means one level deeper this naturally becomes a per-container breakdown
-  // of this single pod rather than collapsing to one row, unlike the CPU
-  // table's own pod-only merge key. "timeline" already carries container/
-  // image_spec (unlike the CPU table's own version, which needed swapping
-  // for podContainerInfoQuery) - those two are now kept/shown instead of
-  // excluded.
+  // "Containers" table - one row per container in this pod, queried directly
+  // at container granularity (podContainersTableQueries, shared with the Pod
+  // Drilldown's own Overview tab and its CPU tab sibling - see that
+  // constant's own comment in podOverviewQueries.ts). Only the
+  // Memory-relevant subset of that query set is used here.
   const tableRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: (Object.keys(workloadMemoryPodsTableQueries) as WorkloadMemoryPodsTableQueryKey[]).map((key) => ({
-      refId: key,
-      expr: substitute(workloadMemoryPodsTableQueries[key]),
-      format: 'table' as const,
-      instant: true,
-    })),
+    queries: [
+      { refId: 'info', expr: substitute(podContainersTableQueries.info), format: 'table' as const, instant: true },
+      { refId: 'memUsage', expr: substitute(podContainersTableQueries.memUsage), format: 'table' as const, instant: true },
+      { refId: 'memRequests', expr: substitute(podContainersTableQueries.memRequests), format: 'table' as const, instant: true },
+      { refId: 'memLimits', expr: substitute(podContainersTableQueries.memLimits), format: 'table' as const, instant: true },
+    ],
   });
 
   const tableData = new SceneDataTransformer({
     $data: tableRunner,
     transformations: [
       { id: 'merge', options: {} },
-      // Combines REQUESTS with its own usage-as-%-of-requests value into one
-      // value+percent+bar cell (requestUsageCell) instead of two separate
-      // columns - same pattern as the Namespaces/Workloads list tables and
-      // the Workload Overview tab's own Pods table.
-      attachPercentField('Value #requests', 'Value #memAggPercent'),
       {
         id: 'organize',
         options: {
@@ -152,17 +146,15 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
             Time: true,
             cluster: true,
             namespace: true,
-            workload: true,
-            workload_type: true,
             pod: true,
-            'Value #timeline': true,
-            'Value #memAggPercent': true,
+            'Value #info': true,
           },
           indexByName: {
             container: 0,
             image_spec: 1,
-            'Value #requests': 2,
-            'Value #memAgg': 3,
+            'Value #memUsage': 2,
+            'Value #memRequests': 3,
+            'Value #memLimits': 4,
           },
           renameByName: {},
         },
@@ -176,21 +168,21 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
     .setOverrides((b) =>
       b
         .matchFieldsWithName('container')
-        .overrideDisplayName('CONTAINERS')
+        .overrideDisplayName('CONTAINER')
         .overrideCustomFieldConfig('align', 'left')
         .matchFieldsWithName('image_spec')
         .overrideDisplayName('IMAGE_SPEC')
         .overrideCustomFieldConfig('align', 'left')
-        .matchFieldsWithName('Value #requests')
-        .overrideDisplayName('REQUESTS')
+        .matchFieldsWithName('Value #memUsage')
+        .overrideDisplayName('MEMORY USAGE')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', {
-          type: TableCellDisplayMode.Custom,
-          cellComponent: requestUsageCell(),
-        } as any)
-        .matchFieldsWithName('Value #memAgg')
-        .overrideDisplayName('USAGE (P95)')
+        .matchFieldsWithName('Value #memRequests')
+        .overrideDisplayName('MEMORY REQUESTS')
+        .overrideUnit('bytes')
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #memLimits')
+        .overrideDisplayName('MEMORY LIMITS')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
     )

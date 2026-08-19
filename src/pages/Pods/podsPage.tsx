@@ -19,7 +19,7 @@ import {
   PanelBuilders,
 } from '@grafana/scenes';
 import { FieldColorModeId, GrafanaTheme2 } from '@grafana/data';
-import { LegendDisplayMode, StackingMode, TableCellDisplayMode, VisibilityMode } from '@grafana/schema';
+import { LegendDisplayMode, StackingMode, VisibilityMode } from '@grafana/schema';
 import { Badge, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import {
@@ -28,7 +28,8 @@ import {
   buildPodRestartsQuery,
   buildPodStartTimeQuery,
   buildPodStatusQuery,
-  podContainerInfoQuery,
+  podContainersTableQueries,
+  PodContainersTableQueryKey,
 } from '../../queries/podOverviewQueries';
 import {
   buildPodEventsLevelQueries,
@@ -47,13 +48,10 @@ import {
   WorkloadCpuOptimizationKey,
   WorkloadMemoryOptimizationKey,
 } from '../../queries/workloadOverviewQueries';
-import { workloadCpuPodsTableQueries } from '../../queries/workloadCpuQueries';
-import { workloadMemoryPodsTableQueries } from '../../queries/workloadMemoryQueries';
 import { InfoCard, NamespaceHealthBanner, findFieldAcrossFrames } from '../../scenes/clusterOverviewCards';
 import { LogsEventsLevelToggle } from '../../scenes/logsEventsLevelToggle';
 import { LogsTabLevelToggle, buildLogPanel } from '../../scenes/logPanels';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
-import { attachPercentField, requestUsageCell } from '../../scenes/tableCells';
 import {
   CLUSTER_VARIABLE_NAME,
   LOGS_DATASOURCE_VARIABLE_NAME,
@@ -271,6 +269,7 @@ function getPodOverviewScene(
     .setOverrides(applyPodOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const memoryLegends: Record<WorkloadMemoryOptimizationKey, string> = {
@@ -294,33 +293,30 @@ function getPodOverviewScene(
     .setOverrides(applyPodOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
-  // "Containers" table - the CPU tab's and Memory tab's own "Containers"
-  // tables combined into one (CONTAINERS/IMAGE_SPEC identity + CPU/Memory
-  // REQUESTS+USAGE side by side), same idea as the Workload Overview tab's
-  // own "Pods" table combining that page's CPU/Memory tabs' columns. Reuses
-  // podContainerInfoQuery for identity and the exact same CPU/Memory table
-  // queries the CPU/Memory tabs themselves use for the numbers.
+  // "Containers" table - one row per container in the pod, queried directly
+  // at container granularity (podContainersTableQueries) rather than reusing
+  // the CPU/Memory tabs' own pod-level p95 queries - see that constant's own
+  // comment (podOverviewQueries.ts) for why those don't fit a per-container
+  // breakdown. All 6 queries share only the "container" field (the others
+  // carry no cluster/namespace/pod label of their own once aggregated `by
+  // (container)`), so "merge" matches rows on that alone.
   const containersRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [
-      { refId: 'timeline', expr: substitute(podContainerInfoQuery), format: 'table' as const, instant: true },
-      { refId: 'cpuRequests', expr: substitute(workloadCpuPodsTableQueries.requests), format: 'table' as const, instant: true },
-      { refId: 'cpuUsage', expr: substitute(workloadCpuPodsTableQueries.cpuAgg), format: 'table' as const, instant: true },
-      { refId: 'cpuRequestsPercent', expr: substitute(workloadCpuPodsTableQueries.cpuAggPercent), format: 'table' as const, instant: true },
-      { refId: 'memRequests', expr: substitute(workloadMemoryPodsTableQueries.requests), format: 'table' as const, instant: true },
-      { refId: 'memUsage', expr: substitute(workloadMemoryPodsTableQueries.memAgg), format: 'table' as const, instant: true },
-      { refId: 'memRequestsPercent', expr: substitute(workloadMemoryPodsTableQueries.memAggPercent), format: 'table' as const, instant: true },
-    ],
+    queries: (Object.keys(podContainersTableQueries) as PodContainersTableQueryKey[]).map((key) => ({
+      refId: key,
+      expr: substitute(podContainersTableQueries[key]),
+      format: 'table' as const,
+      instant: true,
+    })),
   });
 
   const containersData = new SceneDataTransformer({
     $data: containersRunner,
     transformations: [
       { id: 'merge', options: {} },
-      attachPercentField('Value #cpuRequests', 'Value #cpuRequestsPercent'),
-      attachPercentField('Value #memRequests', 'Value #memRequestsPercent'),
       {
         id: 'organize',
         options: {
@@ -328,21 +324,17 @@ function getPodOverviewScene(
             Time: true,
             cluster: true,
             namespace: true,
-            workload: true,
-            workload_type: true,
             pod: true,
-            join_key: true,
-            'Value #timeline': true,
-            'Value #cpuRequestsPercent': true,
-            'Value #memRequestsPercent': true,
+            'Value #info': true,
           },
           indexByName: {
             container: 0,
             image_spec: 1,
-            'Value #cpuRequests': 2,
-            'Value #cpuUsage': 3,
-            'Value #memRequests': 4,
-            'Value #memUsage': 5,
+            'Value #cpuUsage': 2,
+            'Value #cpuRequests': 3,
+            'Value #memUsage': 4,
+            'Value #memRequests': 5,
+            'Value #memLimits': 6,
           },
           renameByName: {},
         },
@@ -356,35 +348,31 @@ function getPodOverviewScene(
     .setOverrides((b) =>
       b
         .matchFieldsWithName('container')
-        .overrideDisplayName('CONTAINERS')
+        .overrideDisplayName('CONTAINER')
         .overrideCustomFieldConfig('align', 'left')
         .matchFieldsWithName('image_spec')
         .overrideDisplayName('IMAGE_SPEC')
         .overrideCustomFieldConfig('align', 'left')
-        .matchFieldsWithName('Value #cpuRequests')
-        .overrideDisplayName('CPU REQUESTS (CORES)')
+        .matchFieldsWithName('Value #cpuUsage')
+        .overrideDisplayName('CPU USAGE')
         .overrideUnit('cores')
         .overrideDecimals(2)
         .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', {
-          type: TableCellDisplayMode.Custom,
-          cellComponent: requestUsageCell(),
-        } as any)
-        .matchFieldsWithName('Value #cpuUsage')
-        .overrideDisplayName('CPU USAGE (P95)')
+        .matchFieldsWithName('Value #cpuRequests')
+        .overrideDisplayName('CPU REQUESTS')
         .overrideUnit('cores')
         .overrideDecimals(2)
+        .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('Value #memUsage')
+        .overrideDisplayName('MEMORY USAGE')
+        .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
         .matchFieldsWithName('Value #memRequests')
         .overrideDisplayName('MEMORY REQUESTS')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', {
-          type: TableCellDisplayMode.Custom,
-          cellComponent: requestUsageCell(),
-        } as any)
-        .matchFieldsWithName('Value #memUsage')
-        .overrideDisplayName('MEMORY USAGE (P95)')
+        .matchFieldsWithName('Value #memLimits')
+        .overrideDisplayName('MEMORY LIMITS')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
     )

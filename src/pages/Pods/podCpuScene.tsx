@@ -1,18 +1,17 @@
 import { EmbeddedScene, FieldConfigOverridesBuilder, PanelBuilders, SceneDataTransformer, SceneFlexItem, SceneFlexLayout, SceneQueryRunner } from '@grafana/scenes';
-import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
+import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, ThresholdsMode } from '@grafana/schema';
 import { FieldColorModeId } from '@grafana/data';
 import {
   workloadCpuDistributionQuery,
   workloadCpuOverviewUsageQueries,
   workloadCpuPodAlignmentQuery,
-  workloadCpuPodsTableQueries,
   workloadCpuStatQueries,
   WorkloadCpuOverviewUsageKey,
   WorkloadCpuStatKey,
 } from '../../queries/workloadCpuQueries';
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
-import { podContainerInfoQuery } from '../../queries/podOverviewQueries';
-import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
+import { podContainersTableQueries } from '../../queries/podOverviewQueries';
+import { usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 
@@ -97,6 +96,7 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
     .setOverrides(applyCpuUsageSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const distributionRunner = new SceneQueryRunner({
@@ -112,6 +112,7 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
     .setCustomFieldConfig('fillOpacity', 60)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const podAlignmentRunner = new SceneQueryRunner({
@@ -124,26 +125,22 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
     .setData(podAlignmentRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
-  // "Containers" table - one row per container in this pod. "timeline" is
-  // swapped from workloadCpuPodsTableQueries' own version (which only ever
-  // carried cluster/namespace/workload/workload_type/pod - no container
-  // dimension at all, since the Workload Drilldown's own CPU table lists
-  // pods, not containers) for podContainerInfoQuery, which additionally
-  // carries container/image_spec - the CONTAINERS/IMAGE_SPEC columns below.
-  // requests/cpuAgg/cpuAggPercent are otherwise unchanged from the Workload
-  // Drilldown's own CPU table - they're already pod-level sums (no container
-  // dimension of their own), so a pod with more than one container would
-  // still only show that one summed value repeated per container row; every
-  // container in this demo has exactly one anyway.
+  // "Containers" table - one row per container in this pod, queried directly
+  // at container granularity (podContainersTableQueries, shared with the Pod
+  // Drilldown's own Overview tab - see that constant's own comment in
+  // podOverviewQueries.ts for why the Workload Drilldown's pod-level p95
+  // queries don't fit a per-container breakdown). Only the CPU-relevant
+  // subset of that query set is used here - the same set's memUsage/
+  // memRequests/memLimits are this tab's Memory-tab sibling's job.
   const tableRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
-      { refId: 'timeline', expr: substitute(podContainerInfoQuery), format: 'table' as const, instant: true },
-      { refId: 'requests', expr: substitute(workloadCpuPodsTableQueries.requests), format: 'table' as const, instant: true },
-      { refId: 'cpuAgg', expr: substitute(workloadCpuPodsTableQueries.cpuAgg), format: 'table' as const, instant: true },
-      { refId: 'cpuAggPercent', expr: substitute(workloadCpuPodsTableQueries.cpuAggPercent), format: 'table' as const, instant: true },
+      { refId: 'info', expr: substitute(podContainersTableQueries.info), format: 'table' as const, instant: true },
+      { refId: 'cpuUsage', expr: substitute(podContainersTableQueries.cpuUsage), format: 'table' as const, instant: true },
+      { refId: 'cpuRequests', expr: substitute(podContainersTableQueries.cpuRequests), format: 'table' as const, instant: true },
     ],
   });
 
@@ -151,11 +148,6 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
     $data: tableRunner,
     transformations: [
       { id: 'merge', options: {} },
-      // Combines REQUESTS with its own usage-as-%-of-requests value into one
-      // value+percent+bar cell (requestUsageCell) instead of two separate
-      // columns - same pattern as the Namespaces/Workloads list tables and
-      // the Workload Overview tab's own Pods table.
-      attachPercentField('Value #requests', 'Value #cpuAggPercent'),
       {
         id: 'organize',
         options: {
@@ -163,18 +155,14 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
             Time: true,
             cluster: true,
             namespace: true,
-            workload: true,
-            workload_type: true,
             pod: true,
-            join_key: true,
-            'Value #timeline': true,
-            'Value #cpuAggPercent': true,
+            'Value #info': true,
           },
           indexByName: {
             container: 0,
             image_spec: 1,
-            'Value #requests': 2,
-            'Value #cpuAgg': 3,
+            'Value #cpuUsage': 2,
+            'Value #cpuRequests': 3,
           },
           renameByName: {},
         },
@@ -188,22 +176,18 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
     .setOverrides((b) =>
       b
         .matchFieldsWithName('container')
-        .overrideDisplayName('CONTAINERS')
+        .overrideDisplayName('CONTAINER')
         .overrideCustomFieldConfig('align', 'left')
         .matchFieldsWithName('image_spec')
         .overrideDisplayName('IMAGE_SPEC')
         .overrideCustomFieldConfig('align', 'left')
-        .matchFieldsWithName('Value #requests')
-        .overrideDisplayName('REQUESTS (CORES)')
+        .matchFieldsWithName('Value #cpuUsage')
+        .overrideDisplayName('CPU USAGE')
         .overrideUnit('cores')
         .overrideDecimals(2)
         .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', {
-          type: TableCellDisplayMode.Custom,
-          cellComponent: requestUsageCell(),
-        } as any)
-        .matchFieldsWithName('Value #cpuAgg')
-        .overrideDisplayName('USAGE (P95)')
+        .matchFieldsWithName('Value #cpuRequests')
+        .overrideDisplayName('CPU REQUESTS')
         .overrideUnit('cores')
         .overrideDecimals(2)
         .overrideCustomFieldConfig('align', 'left')

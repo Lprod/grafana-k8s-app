@@ -27,6 +27,7 @@ function buildRxTxPanel(title: string, unit: string, rxExpr: string, txExpr: str
     .setData(runner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'p90', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 }
 

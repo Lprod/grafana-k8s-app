@@ -49,3 +49,25 @@ export function buildPodNodeQuery(clusterRegex: string, namespaceRegex: string, 
 // carried container/image_spec at all, only cluster/namespace/workload/
 // workload_type/pod.
 export const podContainerInfoQuery = `group by (cluster, namespace, pod, container, workload, workload_type, image_spec) (kube_pod_container_info{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"} / on (cluster, namespace, pod) group_left(workload,workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace", pod=~"$pod", workload=~"$workload"}))`;
+
+// "Containers" table (Overview tab) - one row per container in the pod,
+// queried directly at container granularity (plain instant values, no
+// quantile_over_time(0.95) range aggregation). Deliberately not the CPU/
+// Memory tabs' own pod-level p95 queries (workloadCpuPodsTableQueries.cpuAgg
+// / workloadMemoryPodsTableQueries.memAgg): those compute the *pod's total*
+// p95 usage and, having no "container" dimension of their own, repeat that
+// one pod-level number on every container row instead of breaking it down
+// per container - inflated and misleading for a multi-metric container
+// listing. This mirrors the reference Kubernetes dashboards' own Containers
+// table instead: current per-container usage/requests/limits, `pod="$pod"`
+// exact match since the Pod Drilldown already knows one literal pod.
+export const podContainersTableQueries = {
+  info: `last_over_time((max by (cluster, namespace, pod, container, image_spec) (kube_pod_container_info{pod="$pod", cluster="$cluster", namespace="$namespace"}))[$__range:])`,
+  cpuUsage: `sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="$cluster", namespace="$namespace", pod="$pod", container!=""}) by (container)`,
+  cpuRequests: `sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="$cluster", namespace="$namespace", pod="$pod", container!=""}) by (container)`,
+  memUsage: `sum(container_memory_working_set_bytes{job="kubelet", metrics_path="/metrics/cadvisor", cluster="$cluster", namespace="$namespace", pod="$pod", container!="", image!=""}) by (container)`,
+  memRequests: `sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="$cluster", namespace="$namespace", pod="$pod"}) by (container)`,
+  memLimits: `sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="$cluster", namespace="$namespace", pod="$pod"}) by (container)`,
+};
+
+export type PodContainersTableQueryKey = keyof typeof podContainersTableQueries;

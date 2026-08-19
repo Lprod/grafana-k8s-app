@@ -106,6 +106,7 @@ export function getNamespaceCpuScene(cluster: string, namespace: string, cluster
     .setOverrides(applyCpuUsageSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const distributionRunner = new SceneQueryRunner({
@@ -122,6 +123,7 @@ export function getNamespaceCpuScene(cluster: string, namespace: string, cluster
     .setCustomFieldConfig('fillOpacity', 60)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const workloadAlignmentRunner = new SceneQueryRunner({
@@ -135,6 +137,7 @@ export function getNamespaceCpuScene(cluster: string, namespace: string, cluster
     .setData(workloadAlignmentRunner)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['p95'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   // Same combined value+percent+bar cells as the Namespaces list page and

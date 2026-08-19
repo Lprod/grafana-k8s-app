@@ -487,6 +487,7 @@ function getWorkloadOverviewScene(
     .setOverrides(applyWorkloadOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   const memoryLegends: Record<WorkloadMemoryOptimizationKey, string> = {
@@ -510,6 +511,7 @@ function getWorkloadOverviewScene(
     .setOverrides(applyWorkloadOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
     .build();
 
   // "Pods" table - one row per pod belonging to this workload. All 7
