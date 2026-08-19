@@ -192,7 +192,25 @@ export function createPodFilterVariable(
     query: { refId: 'podVariableQuery', query },
     isMulti,
     includeAll: isMulti,
-    allValue: isMulti ? '.+' : undefined,
+    // A hardcoded ".+" allValue makes "${pod:regex}" match *every* pod in the
+    // namespace once "All" is selected, regardless of what the query above
+    // actually returned - fine for the no-workload case (every caller today
+    // always passes `workload`, so this branch is currently unused, but kept
+    // for a hypothetical future namespace-wide picker), but it silently
+    // defeats the workload-scoped query's own filtering: every CPU/Memory/
+    // Network/Storage/Overview tab's hidden pod variable defaults to "All"
+    // (`value: '$__all'` below), so every one of their $pod-filtered queries
+    // was actually matching every pod in the *namespace*, not just this
+    // workload's own pods - the Overview/Memory tabs' own "Pods" tables
+    // showed it directly since their non-workload-joined queries (cpuUsage,
+    // memUsage, memRequests, memLimits, infoWaiting) have no other filter to
+    // fall back on; the CPU tab's own table only looked correct because its
+    // queries also carry a redundant `* on (...) group_left(...)
+    // namespace_workload_pod:kube_pod_owner:relabel{...workload=~"$workload"}`
+    // join of their own, masking the broken variable. Leaving `allValue`
+    // undefined here makes Grafana build "All" from the query's own
+    // (already workload-scoped) result list instead.
+    allValue: isMulti && !options.workload ? '.+' : undefined,
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, POD_VARIABLE_NAME);

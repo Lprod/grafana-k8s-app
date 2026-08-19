@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.2
+
+- Fixed the real root cause behind the Workload Drilldown's CPU/Memory/Overview tabs showing pods from *other* workloads in the same namespace (not just the current one): `createPodFilterVariable` (`datasourceVariables.ts`), the hidden `pod` variable every one of those tabs builds via `{ workload }`, hardcoded `allValue: '.+'` - so with the variable's default "All" selection, `${pod:regex}` resolved to a match-everything wildcard regardless of the variable's own workload-scoped query, silently defeating it. The CPU tab's own "Pods" table happened to still look correct because its queries carry a redundant `namespace_workload_pod:kube_pod_owner:relabel{...workload=~"$workload"}` join of their own; the Memory tab's and the Overview tab's non-joined queries (`requests`/`memAgg`/`memAggPercent`, `cpuUsage`/`memUsage`/`memRequests`/`memLimits`/`infoWaiting`) had nothing else to fall back on and returned every pod in the namespace instead. `allValue` is now only set for the (currently unused) non-workload-scoped case, so "All" is built from the variable's own already-workload-scoped result list.
+- Fixed a layout gap between the timeseries panels and the "Pods"/"Containers" table on the Workload and Pod Drilldowns' CPU and Memory tabs: the middle 3-panel row was missing `ySizing: 'content'` on its `SceneFlexLayout` (present on every other row, and already correct on the Namespace Drilldown's equivalent tabs), so it stretched to fill the column's remaining height instead of sizing to its own 300px panels, pushing the table down.
+
 ## 1.10.1
 
 - Fixed the Workload Overview tab's "Pods" table showing far more rows than actual pods for workloads with multi-container pods: `memRequests`/`memLimits` in `workloadPodsTableQueries` (`workloadOverviewQueries.ts`) grouped by `(cluster, namespace, pod, container)` without summing across containers, unlike their `cpuRequests` sibling - the table's "merge" transformation then fanned out one row per container instead of one row per pod, repeating every other column's value on each. Both now wrapped in an outer `sum by (cluster, namespace, pod)`.

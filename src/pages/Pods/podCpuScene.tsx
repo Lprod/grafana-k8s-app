@@ -205,6 +205,7 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
         }),
         new SceneFlexLayout({
           direction: 'row',
+          ySizing: 'content',
           children: [
             new SceneFlexItem({ height: 300, body: overviewUsagePanel }),
             new SceneFlexItem({ height: 300, body: distributionPanel }),

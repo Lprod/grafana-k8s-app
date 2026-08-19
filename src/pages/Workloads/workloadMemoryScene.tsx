@@ -222,6 +222,7 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
         }),
         new SceneFlexLayout({
           direction: 'row',
+          ySizing: 'content',
           children: [
             new SceneFlexItem({ height: 300, body: overviewUsagePanel }),
             new SceneFlexItem({ height: 300, body: distributionPanel }),

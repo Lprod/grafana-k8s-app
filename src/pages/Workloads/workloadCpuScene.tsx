@@ -224,6 +224,7 @@ export function getWorkloadCpuScene(clusterRegex: string, namespaceRegex: string
         }),
         new SceneFlexLayout({
           direction: 'row',
+          ySizing: 'content',
           children: [
             new SceneFlexItem({ height: 300, body: overviewUsagePanel }),
             new SceneFlexItem({ height: 300, body: distributionPanel }),
