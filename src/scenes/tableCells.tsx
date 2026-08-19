@@ -215,24 +215,25 @@ export function attachDesiredPodsField(readyFieldName: string, desiredFieldName:
 // desired" cell with a proportional colored bar underneath - matching
 // Grafana Play's Workloads "Pods" column.
 //
-// Unlike the usage-tier coloring elsewhere in this codebase (low is orange/
-// underused, high is red/near-capacity), readiness is the opposite sense:
-// ready caught up to (or past, e.g. mid-rollout) desired is healthy/green,
-// short of desired is red. Plain colors rather than usageTierFromFraction,
-// which encodes the other scale.
+// Three states, not two: every pod ready (ready >= desired, including a
+// mid-rollout surge past it) is green and full; some but not all ready is
+// yellow, filled to the actual ready/desired fraction; none ready at all -
+// including a genuine 0/0 (scaled to zero) - is red and *fully* filled
+// rather than empty, so a completely down workload reads as maximally
+// alarming instead of looking like an empty/neutral bar.
 export function readyDesiredPodsCell() {
   return function ReadyDesiredPodsCell({ rowIndex, field, value }: CustomCellRendererProps) {
     const theme = useTheme2();
     const ready = typeof value === 'number' ? value : Number(value ?? 0);
     const desiredValues = field.config?.custom?.[DESIRED_PODS_KEY] as Array<number | null | undefined> | undefined;
     const desired = (desiredValues?.[rowIndex] as number | undefined) ?? 0;
-    const fraction = desired > 0 ? Math.min(ready / desired, 1) : ready > 0 ? 1 : 0;
+    const fraction = ready === 0 ? 1 : desired > 0 ? Math.min(ready / desired, 1) : 1;
     const color =
-      desired === 0 && ready === 0
-        ? theme.visualization.getColorByName('grey')
+      ready === 0
+        ? theme.visualization.getColorByName('red')
         : ready >= desired
           ? theme.visualization.getColorByName('green')
-          : theme.visualization.getColorByName('red');
+          : theme.visualization.getColorByName('yellow');
 
     return (
       <div

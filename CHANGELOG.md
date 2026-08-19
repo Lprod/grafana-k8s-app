@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.7
+
+- Workloads list table's "Pods" gauge (`readyDesiredPodsCell`) now has three states instead of two: all pods ready is green and full, some but not all ready is yellow and filled to the actual ready/desired fraction, and zero ready (including a genuine 0/0, scaled to zero) is red and *fully* filled instead of empty/grey - a completely down workload now reads as maximally alarming instead of looking neutral.
+- Workloads list table also excludes `workload_type: "cronjob"`/`"configmap"` rows now, alongside `"job"` from 1.10.6.
+- Workload Drilldown's health banner now factors pod readiness into its severity, not just real alerts: not all pods ready is a warning (yellow), zero ready is critical (red) - combined with the existing alert-severity coloring (now with a proper blue "info" tier for info-only alerts, previously indistinguishable from warning) by taking whichever is more severe. A workload with unready pods but no real alerts now reads "is not healthy" with a non-zero count on the action button instead of looking healthy.
+
 ## 1.10.6
 
 - Added MEMORY LIMITS % to the Pod Drilldown's "Containers" table (Overview and Memory tabs), same value+percent+bar treatment as MEMORY/CPU REQUESTS.

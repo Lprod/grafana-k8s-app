@@ -147,18 +147,18 @@ function getWorkloadsListScene() {
           match: 'any',
         },
       },
-      // Jobs are short-lived/completed-once objects - their replica count
-      // (ready/desired) and resource columns don't mean the same thing here
-      // as a long-running Deployment/StatefulSet/DaemonSet's, and cluttered
-      // this list without adding anything actionable. Excluded the same way
-      // as the workload-name filter above, since "workload_type" is another
-      // field synthesized by this query's own label_replace calls
-      // (workloadQueries.ts), not a raw metric label a PromQL selector could
-      // filter on directly.
+      // Jobs/CronJobs/ConfigMaps are short-lived/completed-once or not even
+      // pod-owning objects - their replica count (ready/desired) and
+      // resource columns don't mean the same thing here as a long-running
+      // Deployment/StatefulSet/DaemonSet's, and only cluttered this list.
+      // Excluded the same way as the workload-name filter above, since
+      // "workload_type" is another field synthesized by this query's own
+      // label_replace calls (workloadQueries.ts), not a raw metric label a
+      // PromQL selector could filter on directly.
       {
         id: 'filterByValue',
         options: {
-          filters: [{ fieldName: 'workload_type', config: { id: 'equal', options: { value: 'job' } } }],
+          filters: [{ fieldName: 'workload_type', config: { id: 'regex', options: { value: '^(job|cronjob|configmap)$' } } }],
           type: 'exclude',
           match: 'any',
         },
@@ -467,9 +467,21 @@ function getWorkloadOverviewScene(
     ],
   });
 
+  // 'ready'/'desired' alongside 'alerts' - same refId-filtered multi-query
+  // pattern as NodeHealthBanner's own conditions+alerts runner. Lets the
+  // banner factor pod readiness into its severity (not all pods ready is a
+  // warning, none ready is critical) on top of real alerts, without
+  // reaching into a different scene object's own $data - reuses the exact
+  // same ready/desired expressions the info card's rightRunner above
+  // already built, just as a second runner instance (SceneQueryRunner
+  // objects can't be shared as $data between two scene objects).
   const healthRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'alerts', expr: buildWorkloadAlertsSeverityQuery(clusterRegex, namespaceRegex, workload, workloadType), instant: true }],
+    queries: [
+      { refId: 'alerts', expr: buildWorkloadAlertsSeverityQuery(clusterRegex, namespaceRegex, workload, workloadType), instant: true },
+      { refId: 'ready', expr: ready, instant: true },
+      { refId: 'desired', expr: desired, instant: true },
+    ],
   });
 
   const healthBanner = new NamespaceHealthBanner({

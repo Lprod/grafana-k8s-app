@@ -269,6 +269,28 @@ function healthBannerStyles(theme: GrafanaTheme2) {
   };
 }
 
+const SEVERITY_RANK = { success: 0, info: 1, warning: 2, error: 3 } as const;
+type BannerSeverity = keyof typeof SEVERITY_RANK;
+
+// Reads the Workload Drilldown's own 'ready'/'desired' refIds (see
+// buildWorkloadReadyDesiredQueries) off this banner's $data, if present -
+// Namespace/Pod usages never add those refIds, so this stays a no-op (null)
+// for them, same as NodeHealthBanner's own refId-filtered lookup pattern.
+// Not all pods ready is a warning; zero ready (including a genuine 0/0,
+// scaled to zero) is treated the same as a critical alert - a fully-down
+// workload shouldn't read as merely "warning".
+function podReadinessSeverity(frames: DataFrame[]): BannerSeverity | null {
+  const readyValue = frames.find((f) => f.refId === 'ready')?.fields.find((f) => f.type === 'number')?.values[0];
+  const desiredValue = frames.find((f) => f.refId === 'desired')?.fields.find((f) => f.type === 'number')?.values[0];
+  if (typeof readyValue !== 'number' || typeof desiredValue !== 'number') {
+    return null;
+  }
+  if (readyValue === 0) {
+    return 'error';
+  }
+  return readyValue < desiredValue ? 'warning' : null;
+}
+
 interface NamespaceHealthBannerState extends SceneObjectState {
   alertsUrl: string;
   // Lets the Workload Drilldown reuse this same banner (and its underlying
@@ -287,25 +309,29 @@ function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceH
   const { data } = sceneGraph.getData(model).useState();
   const theme = useTheme2();
   const styles = useStyles2(healthBannerStyles);
-  const { total, hasCritical, hasWarning } = alertsSeverityCounts(data?.series ?? []);
+  const frames = data?.series ?? [];
+  const { total, hasCritical, hasWarning } = alertsSeverityCounts(frames);
+  const alertSeverity: BannerSeverity = hasCritical ? 'error' : hasWarning ? 'warning' : total > 0 ? 'info' : 'success';
+  const podsSeverity = podReadinessSeverity(frames);
+  const severity = podsSeverity && SEVERITY_RANK[podsSeverity] > SEVERITY_RANK[alertSeverity] ? podsSeverity : alertSeverity;
 
-  const severity: 'success' | 'warning' | 'error' = total === 0 ? 'success' : hasCritical ? 'error' : 'warning';
-  const message =
-    total === 0
-      ? `${subject} is healthy`
-      : hasCritical
-        ? `${subject} has critical alerts firing`
-        : hasWarning
-          ? `${subject} has warning alerts firing`
-          : `${subject} has alerts firing`;
-  const iconName = severity === 'error' ? 'exclamation-circle' : severity === 'warning' ? 'exclamation-triangle' : 'check';
+  // A workload with unready pods but zero real alerts still needs to read
+  // as "not healthy" and show a non-zero count on the action button - same
+  // combined severity driving both, so they can't disagree with each other.
+  const effectiveTotal = Math.max(total, podsSeverity ? 1 : 0);
+  const effectiveHasCritical = hasCritical || podsSeverity === 'error';
+  const effectiveHasWarning = hasWarning || podsSeverity === 'warning';
+
+  const message = severity === 'success' ? `${subject} is healthy` : `${subject} is not healthy`;
+  const iconName =
+    severity === 'error' ? 'exclamation-circle' : severity === 'warning' ? 'exclamation-triangle' : severity === 'info' ? 'info-circle' : 'check';
   const color = theme.colors[severity];
 
   return (
     <div className={styles.wrapper} style={{ background: color.transparent, borderColor: color.border }} role={severity === 'success' ? 'status' : 'alert'}>
       <Icon name={iconName} size="xl" style={{ color: color.text }} />
       <span className={styles.text}>{message}</span>
-      <AlertsActionButton total={total} hasCritical={hasCritical} hasWarning={hasWarning} alertsUrl={alertsUrl} />
+      <AlertsActionButton total={effectiveTotal} hasCritical={effectiveHasCritical} hasWarning={effectiveHasWarning} alertsUrl={alertsUrl} />
     </div>
   );
 }
