@@ -66,6 +66,7 @@ import { getWorkloadCpuScene } from './workloadCpuScene';
 import { getWorkloadMemoryScene } from './workloadMemoryScene';
 import { getWorkloadNetworkScene } from './workloadNetworkScene';
 import { getWorkloadStorageScene } from './workloadStorageScene';
+import { getPodDetailPage } from '../Pods/podsPage';
 import {
   CLUSTER_VARIABLE_NAME,
   LOGS_DATASOURCE_VARIABLE_NAME,
@@ -616,6 +617,12 @@ function getWorkloadOverviewScene(
         .matchFieldsWithName('pod')
         .overrideDisplayName('POD')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          {
+            title: 'View pod',
+            url: `${WORKLOADS_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/${encodeURIComponent(workloadType)}/${encodeURIComponent(workload)}/pods/\${__value.text}\${__url.params}`,
+          },
+        ])
         .matchFieldsWithName('node')
         .overrideDisplayName('NODE')
         .overrideCustomFieldConfig('align', 'left')
@@ -869,6 +876,19 @@ function getWorkloadDetailPage(
       new SceneRefreshPicker({ refresh: '1m' }),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
+    // Pod Drilldown - nested one level deeper than this page's own tabs
+    // (reached from the Pods table above), not a separate top-level nav
+    // entry of its own. Tabs and drilldowns coexist fine on the same
+    // SceneAppPage - both just add their own routes to this page's own
+    // internal <Routes> (confirmed against @grafana/scenes' compiled
+    // SceneAppPage.js: `if (tabs) {...}` and `if (drilldowns) {...}` are two
+    // independent blocks feeding the same route list).
+    drilldowns: [
+      {
+        routePath: `/pods/:pod/*`,
+        getPage: getPodDetailPage,
+      },
+    ],
   });
 }
 

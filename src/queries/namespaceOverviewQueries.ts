@@ -359,3 +359,55 @@ export function buildWorkloadLogsQuery(cluster: string, namespace: string, workl
 export function buildWorkloadEventsQuery(namespace: string, workload: string, onlyWarnError: boolean): string {
   return `logmgmt.kind:openshift AND logmgmt.category:event AND orchestrator.namespace:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(workload)}*)${buildLevelRestrictionClause('event.type', namespaceEventTypeDefs, onlyWarnError)}`;
 }
+
+// Pod Drilldown Overview tab's own Logs/Events bar charts - same
+// per-canonical-level structure as buildWorkloadLogsLevelQueries/
+// buildWorkloadEventsLevelQueries above, except orchestrator.resource.name
+// matches the pod's own exact name instead of a workload-name wildcard
+// prefix - confirmed against the demo seed data (elasticsearch_seed.py) that
+// this field literally holds pod names, the workload-level wildcard is only
+// there to catch every pod belonging to that workload at once; this page
+// already knows the single pod, so no wildcard is needed.
+export function buildPodLogsLevelQueries(cluster: string, namespace: string, pod: string, onlyWarnError: boolean, interval: string) {
+  const base = (extra: string) =>
+    `(logmgmt.kind:openshift AND NOT logmgmt.category:event AND k8s.cluster.name:(${escapeLucene(cluster)}) AND k8s.namespace.name:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(pod)}) AND ${extra})`;
+
+  const defs = onlyWarnError ? filterLevelDefsWarnErrorOnly(namespaceLogLevelDefs) : namespaceLogLevelDefs;
+  const queries = defs.map((d) => buildElasticsearchLevelQuery(d.canonical, base(luceneOrClause('log.level', d.variants)), d.canonical, interval));
+
+  if (!onlyWarnError) {
+    queries.push(
+      buildElasticsearchLevelQuery(NAMESPACE_LEVEL_OTHER, base(luceneNotAnyClause('log.level', namespaceLogLevelDefs)), NAMESPACE_LEVEL_OTHER, interval)
+    );
+  }
+
+  return queries;
+}
+
+export function buildPodEventsLevelQueries(namespace: string, pod: string, onlyWarnError: boolean, interval: string) {
+  const base = (extra: string) =>
+    `(logmgmt.kind:openshift AND logmgmt.category:event AND orchestrator.namespace:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(pod)}) AND ${extra})`;
+
+  const defs = onlyWarnError ? filterLevelDefsWarnErrorOnly(namespaceEventTypeDefs) : namespaceEventTypeDefs;
+  const queries = defs.map((d) => buildElasticsearchLevelQuery(d.canonical, base(luceneOrClause('event.type', d.variants)), d.canonical, interval));
+
+  if (!onlyWarnError) {
+    queries.push(
+      buildElasticsearchLevelQuery(NAMESPACE_LEVEL_OTHER, base(luceneNotAnyClause('event.type', namespaceEventTypeDefs)), NAMESPACE_LEVEL_OTHER, interval)
+    );
+  }
+
+  return queries;
+}
+
+// Raw log-line queries for the Pod Drilldown's own dedicated Logs/Events
+// tabs - same shape as buildWorkloadLogsQuery/buildWorkloadEventsQuery above,
+// with the exact-pod-name clause buildPodLogsLevelQueries/
+// buildPodEventsLevelQueries already use.
+export function buildPodLogsQuery(cluster: string, namespace: string, pod: string, onlyWarnError: boolean): string {
+  return `logmgmt.kind:openshift AND NOT logmgmt.category:event AND k8s.cluster.name:(${escapeLucene(cluster)}) AND k8s.namespace.name:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(pod)})${buildLevelRestrictionClause('log.level', namespaceLogLevelDefs, onlyWarnError)}`;
+}
+
+export function buildPodEventsQuery(namespace: string, pod: string, onlyWarnError: boolean): string {
+  return `logmgmt.kind:openshift AND logmgmt.category:event AND orchestrator.namespace:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(pod)})${buildLevelRestrictionClause('event.type', namespaceEventTypeDefs, onlyWarnError)}`;
+}

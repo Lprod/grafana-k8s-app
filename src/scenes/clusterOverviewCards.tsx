@@ -26,6 +26,11 @@ export interface InfoCardRow {
   // (see ClusterOverviewLinks in clustersApp.tsx) - so this navigates via
   // window.location instead of href to force a real page load.
   href?: string;
+  // Optional per-row value color (e.g. status/severity tiering) - takes the
+  // same frames render() gets plus the live theme (InfoCard isn't itself a
+  // component per row, so this can't call useTheme2() on its own). Ignored
+  // on href rows, which keep the standard link color.
+  color?: (frames: DataFrame[], theme: GrafanaTheme2) => string | undefined;
 }
 
 interface InfoCardState extends SceneObjectState {
@@ -100,6 +105,7 @@ function InfoCardRenderer({ model }: SceneComponentProps<InfoCard>) {
   const { rows } = model.useState();
   const { data } = sceneGraph.getData(model).useState();
   const styles = useStyles2(infoCardStyles);
+  const theme = useTheme2();
   const frames = data?.series ?? [];
 
   return (
@@ -108,6 +114,7 @@ function InfoCardRenderer({ model }: SceneComponentProps<InfoCard>) {
         const value = row.render
           ? row.render(frames)
           : formatRowValue(row, row.fieldName ? findFieldAcrossFrames(frames, row.fieldName)?.values[0] : undefined);
+        const color = row.color?.(frames, theme);
         return (
           <div className={styles.row} key={row.label}>
             <div className={styles.label}>{row.label}</div>
@@ -116,7 +123,9 @@ function InfoCardRenderer({ model }: SceneComponentProps<InfoCard>) {
                 {value}
               </button>
             ) : (
-              <div className={styles.value}>{value}</div>
+              <div className={styles.value} style={color ? { color } : undefined}>
+                {value}
+              </div>
             )}
           </div>
         );
