@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.8
+
+- Pod Drilldown's health banner now factors the pod's own phase into its severity too, same idea as the Workload Drilldown's ready/desired-based one from 1.10.7: `Pending` is a warning, `Failed`/`Unknown` is critical, combined with the existing alert-severity coloring by taking whichever is more severe - mirrors `podStatusColor`'s own phase tiers already used by the Overview tab's "status:" row.
+
 ## 1.10.7
 
 - Workloads list table's "Pods" gauge (`readyDesiredPodsCell`) now has three states instead of two: all pods ready is green and full, some but not all ready is yellow and filled to the actual ready/desired fraction, and zero ready (including a genuine 0/0, scaled to zero) is red and *fully* filled instead of empty/grey - a completely down workload now reads as maximally alarming instead of looking neutral.

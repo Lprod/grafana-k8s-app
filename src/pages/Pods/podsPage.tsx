@@ -179,9 +179,18 @@ function getPodOverviewScene(
   const namespaceUrl = `${NAMESPACES_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}`;
   const substitute = (expr: string) => substituteWorkloadTokens(expr, clusterRegex, namespaceRegex, workloadRegex, podRegex);
 
+  // 'phase' alongside 'alerts' - same idea as the Workload Drilldown's own
+  // healthRunner (ready/desired refIds), just phase-based since a single
+  // pod has no ready/desired replica count of its own. format: 'table' so
+  // the "phase" label splits into its own field the banner can read by
+  // name (see the leftRunner comment below for why), same query
+  // buildPodStatusQuery already builds for the "status:" info card row.
   const healthRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'alerts', expr: buildPodAlertsSeverityQuery(clusterRegex, namespaceRegex, pod), instant: true }],
+    queries: [
+      { refId: 'alerts', expr: buildPodAlertsSeverityQuery(clusterRegex, namespaceRegex, pod), instant: true },
+      { refId: 'phase', expr: buildPodStatusQuery(clusterRegex, namespaceRegex, pod), instant: true, format: 'table' },
+    ],
   });
   const healthBanner = new NamespaceHealthBanner({
     $data: healthRunner,

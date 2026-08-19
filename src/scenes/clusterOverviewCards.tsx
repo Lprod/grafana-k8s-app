@@ -291,6 +291,25 @@ function podReadinessSeverity(frames: DataFrame[]): BannerSeverity | null {
   return readyValue < desiredValue ? 'warning' : null;
 }
 
+// Reads the Pod Drilldown's own 'phase' refId (see buildPodStatusQuery) off
+// this banner's $data, if present - same idea as podReadinessSeverity above,
+// just for a single pod, which has no ready/desired replica count of its
+// own to compare. Mirrors podStatusColor's own phase tiers (podsPage.tsx):
+// Running/Succeeded is healthy, Pending is a warning (the pod exists but
+// isn't up yet), Failed/Unknown is critical (the pod isn't running at all).
+function podPhaseSeverity(frames: DataFrame[]): BannerSeverity | null {
+  const phase = frames.find((f) => f.refId === 'phase')?.fields.find((f) => f.name === 'phase')?.values[0] as string | undefined;
+  switch (phase) {
+    case 'Pending':
+      return 'warning';
+    case 'Failed':
+    case 'Unknown':
+      return 'error';
+    default:
+      return null;
+  }
+}
+
 interface NamespaceHealthBannerState extends SceneObjectState {
   alertsUrl: string;
   // Lets the Workload Drilldown reuse this same banner (and its underlying
@@ -312,7 +331,10 @@ function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceH
   const frames = data?.series ?? [];
   const { total, hasCritical, hasWarning } = alertsSeverityCounts(frames);
   const alertSeverity: BannerSeverity = hasCritical ? 'error' : hasWarning ? 'warning' : total > 0 ? 'info' : 'success';
-  const podsSeverity = podReadinessSeverity(frames);
+  // Workload usage sets 'ready'/'desired' refIds, Pod usage sets a 'phase'
+  // one, Namespace usage sets neither - mutually exclusive per page, so
+  // whichever one actually finds data wins (the other is always null).
+  const podsSeverity = podReadinessSeverity(frames) ?? podPhaseSeverity(frames);
   const severity = podsSeverity && SEVERITY_RANK[podsSeverity] > SEVERITY_RANK[alertSeverity] ? podsSeverity : alertSeverity;
 
   // A workload with unready pods but zero real alerts still needs to read
