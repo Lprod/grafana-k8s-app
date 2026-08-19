@@ -19,7 +19,7 @@ import {
   PanelBuilders,
 } from '@grafana/scenes';
 import { FieldColorModeId, GrafanaTheme2 } from '@grafana/data';
-import { LegendDisplayMode, StackingMode, VisibilityMode } from '@grafana/schema';
+import { LegendDisplayMode, StackingMode, TableCellDisplayMode, VisibilityMode } from '@grafana/schema';
 import { Badge, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import {
@@ -52,6 +52,7 @@ import { InfoCard, NamespaceHealthBanner, findFieldAcrossFrames } from '../../sc
 import { LogsEventsLevelToggle } from '../../scenes/logsEventsLevelToggle';
 import { LogsTabLevelToggle, buildLogPanel } from '../../scenes/logPanels';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
+import { attachPercentField, requestUsageCell } from '../../scenes/tableCells';
 import {
   CLUSTER_VARIABLE_NAME,
   LOGS_DATASOURCE_VARIABLE_NAME,
@@ -317,6 +318,33 @@ function getPodOverviewScene(
     $data: containersRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // Requests %/color have no dedicated percent queries of their own
+      // (podContainersTableQueries only returns plain usage/requests
+      // values), so computed client-side first, then folded into the
+      // REQUESTS cell via attachPercentField/requestUsageCell - same
+      // value+percent+bar convention as every other Requests column in the
+      // app (Namespaces/Workloads list tables, Workload Drilldown's own
+      // Pods tables).
+      {
+        id: 'calculateField',
+        options: {
+          mode: 'binary',
+          binary: { left: 'Value #cpuUsage', operator: '/', right: 'Value #cpuRequests' },
+          alias: 'cpu_requests_percent',
+          replaceFields: false,
+        },
+      },
+      {
+        id: 'calculateField',
+        options: {
+          mode: 'binary',
+          binary: { left: 'Value #memUsage', operator: '/', right: 'Value #memRequests' },
+          alias: 'mem_requests_percent',
+          replaceFields: false,
+        },
+      },
+      attachPercentField('Value #cpuRequests', 'cpu_requests_percent'),
+      attachPercentField('Value #memRequests', 'mem_requests_percent'),
       {
         id: 'organize',
         options: {
@@ -326,6 +354,8 @@ function getPodOverviewScene(
             namespace: true,
             pod: true,
             'Value #info': true,
+            cpu_requests_percent: true,
+            mem_requests_percent: true,
           },
           indexByName: {
             container: 0,
@@ -363,6 +393,7 @@ function getPodOverviewScene(
         .overrideUnit('cores')
         .overrideDecimals(2)
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: requestUsageCell() } as any)
         .matchFieldsWithName('Value #memUsage')
         .overrideDisplayName('MEMORY USAGE')
         .overrideUnit('bytes')
@@ -371,6 +402,7 @@ function getPodOverviewScene(
         .overrideDisplayName('MEMORY REQUESTS')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: requestUsageCell() } as any)
         .matchFieldsWithName('Value #memLimits')
         .overrideDisplayName('MEMORY LIMITS')
         .overrideUnit('bytes')

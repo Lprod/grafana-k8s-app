@@ -1,5 +1,5 @@
 import { EmbeddedScene, FieldConfigOverridesBuilder, PanelBuilders, SceneDataTransformer, SceneFlexItem, SceneFlexLayout, SceneQueryRunner } from '@grafana/scenes';
-import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, ThresholdsMode } from '@grafana/schema';
+import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { FieldColorModeId } from '@grafana/data';
 import {
   workloadMemoryDistributionQuery,
@@ -11,7 +11,7 @@ import {
 } from '../../queries/workloadMemoryQueries';
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
 import { podContainersTableQueries } from '../../queries/podOverviewQueries';
-import { usageThresholds } from '../../scenes/tableCells';
+import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 
@@ -139,6 +139,20 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
     $data: tableRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // No dedicated percent query in podContainersTableQueries, so
+      // computed client-side and folded into the REQUESTS cell via
+      // attachPercentField/requestUsageCell - same convention as every
+      // other Requests column in the app.
+      {
+        id: 'calculateField',
+        options: {
+          mode: 'binary',
+          binary: { left: 'Value #memUsage', operator: '/', right: 'Value #memRequests' },
+          alias: 'mem_requests_percent',
+          replaceFields: false,
+        },
+      },
+      attachPercentField('Value #memRequests', 'mem_requests_percent'),
       {
         id: 'organize',
         options: {
@@ -148,6 +162,7 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
             namespace: true,
             pod: true,
             'Value #info': true,
+            mem_requests_percent: true,
           },
           indexByName: {
             container: 0,
@@ -181,6 +196,7 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
         .overrideDisplayName('MEMORY REQUESTS')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: requestUsageCell() } as any)
         .matchFieldsWithName('Value #memLimits')
         .overrideDisplayName('MEMORY LIMITS')
         .overrideUnit('bytes')

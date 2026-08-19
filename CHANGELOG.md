@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.5
+
+- Fixed the Pod Drilldown's "Containers" table (Overview/CPU/Memory tabs): the CPU/MEMORY REQUESTS columns were plain values with no percent badge or color, same gap as the Workload Drilldown's own Pods tables fixed in 1.10.4. `podContainersTableQueries` only returns plain usage/requests values (no dedicated percent query), so usage-as-%-of-requests is now computed client-side (`calculateField`) and folded into the REQUESTS cell via `attachPercentField`/`requestUsageCell`, same value+percent+bar convention as everywhere else in the app.
+
 ## 1.10.4
 
 - Fixed the Workload Drilldown's CPU and Memory tabs' own "Pods" table: the REQUESTS column was a plain value with no percent badge or color at all, unlike every other Requests column in the app - `workloadCpuScene.tsx`/`workloadMemoryScene.tsx` never attached `cpuAggPercent`/`memAggPercent` onto it via `attachPercentField`/`requestUsageCell`, instead showing that ratio as a fully separate standalone "USAGE/CAPACITY (P95, %)" column. Now combined into one value+percent+bar cell on REQUESTS, same convention as the Namespaces/Workloads list tables and the Overview tab's own Pods table - the separate column is gone, its value now lives in the REQUESTS cell.

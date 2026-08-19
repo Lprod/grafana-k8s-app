@@ -1,5 +1,5 @@
 import { EmbeddedScene, FieldConfigOverridesBuilder, PanelBuilders, SceneDataTransformer, SceneFlexItem, SceneFlexLayout, SceneQueryRunner } from '@grafana/scenes';
-import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, ThresholdsMode } from '@grafana/schema';
+import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { FieldColorModeId } from '@grafana/data';
 import {
   workloadCpuDistributionQuery,
@@ -11,7 +11,7 @@ import {
 } from '../../queries/workloadCpuQueries';
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
 import { podContainersTableQueries } from '../../queries/podOverviewQueries';
-import { usageThresholds } from '../../scenes/tableCells';
+import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 
@@ -148,6 +148,20 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
     $data: tableRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // No dedicated percent query in podContainersTableQueries, so
+      // computed client-side and folded into the REQUESTS cell via
+      // attachPercentField/requestUsageCell - same convention as every
+      // other Requests column in the app.
+      {
+        id: 'calculateField',
+        options: {
+          mode: 'binary',
+          binary: { left: 'Value #cpuUsage', operator: '/', right: 'Value #cpuRequests' },
+          alias: 'cpu_requests_percent',
+          replaceFields: false,
+        },
+      },
+      attachPercentField('Value #cpuRequests', 'cpu_requests_percent'),
       {
         id: 'organize',
         options: {
@@ -157,6 +171,7 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
             namespace: true,
             pod: true,
             'Value #info': true,
+            cpu_requests_percent: true,
           },
           indexByName: {
             container: 0,
@@ -191,6 +206,7 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
         .overrideUnit('cores')
         .overrideDecimals(2)
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: requestUsageCell() } as any)
     )
     .build();
 
