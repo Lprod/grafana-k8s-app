@@ -310,6 +310,61 @@ function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceH
   );
 }
 
+// Node Health banner: unlike every other health banner here (Cluster's
+// synthetic-probe-based one, Namespace's alerts-severity-based one reused by
+// Workload/Pod), this one's severity comes from kube_node_status_condition
+// (Ready=false/unknown -> error, any *Pressure=true -> warning) - the alerts
+// action button is still there, just fed by a *separate* alerts-by-severity
+// query instead of driving the message too. Both queries share this one
+// banner's own $data (two refIds, 'conditions' and 'alerts') rather than
+// two separate SceneQueryRunners, since giving the same SceneQueryRunner
+// instance as $data to two different scene objects would hit the same
+// silent-reparenting gotcha as sharing any other non-$-prefixed scene object
+// between siblings (see the SceneObjectBase._setParent gotcha elsewhere in
+// this codebase) - one runner, filtered by frame.refId instead.
+interface NodeHealthBannerState extends SceneObjectState {
+  alertsUrl: string;
+}
+
+export class NodeHealthBanner extends SceneObjectBase<NodeHealthBannerState> {
+  static Component = NodeHealthBannerRenderer;
+}
+
+function NodeHealthBannerRenderer({ model }: SceneComponentProps<NodeHealthBanner>) {
+  const { alertsUrl } = model.useState();
+  const { data } = sceneGraph.getData(model).useState();
+  const theme = useTheme2();
+  const styles = useStyles2(healthBannerStyles);
+  const frames = data?.series ?? [];
+  const conditionFrames = frames.filter((f) => f.refId === 'conditions');
+  const alertFrames = frames.filter((f) => f.refId === 'alerts');
+  const { total, hasCritical, hasWarning } = alertsSeverityCounts(alertFrames);
+
+  // A zero-result instant query still comes back as one frame with an empty
+  // fields array (confirmed via /api/ds/query), not zero frames - so this
+  // has to check for a real condition label on that frame, not just "some
+  // frame that isn't the Ready one" (which the empty placeholder frame would
+  // satisfy too, since undefined !== 'Ready').
+  const conditionLabel = (f: (typeof conditionFrames)[number]) => f.fields.find((field) => field.type === 'number')?.labels?.condition;
+  const notReady = conditionFrames.some((f) => conditionLabel(f) === 'Ready');
+  const pressureCondition = conditionFrames
+    .map(conditionLabel)
+    .find((c): c is string => c === 'MemoryPressure' || c === 'DiskPressure' || c === 'PIDPressure');
+
+  const severity: 'success' | 'warning' | 'error' = notReady ? 'error' : pressureCondition ? 'warning' : 'success';
+  const message = notReady ? 'Node is not ready' : pressureCondition ? `Node has ${pressureCondition} pressure` : 'Node is healthy';
+  const iconName = severity === 'error' ? 'exclamation-circle' : severity === 'warning' ? 'exclamation-triangle' : 'check';
+  const color = theme.colors[severity];
+
+  return (
+    <div className={styles.wrapper} style={{ background: color.transparent, borderColor: color.border }} role={severity === 'success' ? 'status' : 'alert'}>
+      <Icon name={iconName} size="xl" style={{ color: color.text }} />
+      <span className={styles.text}>{message}</span>
+      <AlertsActionButton total={total} hasCritical={hasCritical} hasWarning={hasWarning} alertsUrl={alertsUrl} />
+    </div>
+  );
+}
+
 interface ClusterAlertsBadgeState extends SceneObjectState {
   alertsUrl: string;
 }

@@ -66,16 +66,16 @@ namespace_memory:kube_pod_container_resource_requests:sum{cluster="demo-cluster-
 # amount well above the real per-container sum of 1.1 cores/cluster; the
 # Namespaces page's own CPU Requests column (sum(...) by (namespace,cluster))
 # now reflects that real sum instead.
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app"} 0.5
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent"} 0.1
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache"} 0.25
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate"} 0.2
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell"} 0.05
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app"} 0.5
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent"} 0.1
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache"} 0.25
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate"} 0.2
-cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell"} 0.05
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="app-aws",node="demo-cluster-aws-node-1",container="app"} 0.5
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",node="demo-cluster-aws-node-1",container="node-agent"} 0.1
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",node="demo-cluster-aws-node-2",container="cache"} 0.25
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",node="demo-cluster-aws-node-2",container="db-migrate"} 0.2
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",node="demo-cluster-aws-node-3",container="debug-shell"} 0.05
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="app-gce",node="demo-cluster-gce-node-1",container="app"} 0.5
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",node="demo-cluster-gce-node-1",container="node-agent"} 0.1
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",node="demo-cluster-gce-node-2",container="cache"} 0.25
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",node="demo-cluster-gce-node-2",container="db-migrate"} 0.2
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",node="demo-cluster-gce-node-1",container="debug-shell"} 0.05
 
 # HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_requests Recording rule: active-pod memory requests per pod/container (demo data).
 # TYPE cluster:namespace:pod_memory:active:kube_pod_container_resource_requests gauge
@@ -87,16 +87,16 @@ cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="d
 # mirror kube_pod_container_resource_requests{resource="memory"} below 1:1 -
 # replaces the old flat 8GiB/10GiB namespace totals (well above the real
 # per-container sum of ~1GiB/cluster).
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app"} 536870912
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent"} 134217728
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache"} 268435456
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate"} 134217728
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell"} 67108864
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app"} 536870912
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent"} 134217728
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache"} 268435456
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate"} 134217728
-cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell"} 67108864
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="app-aws",node="demo-cluster-aws-node-1",container="app"} 536870912
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",node="demo-cluster-aws-node-1",container="node-agent"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",node="demo-cluster-aws-node-2",container="cache"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",node="demo-cluster-aws-node-2",container="db-migrate"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",node="demo-cluster-aws-node-3",container="debug-shell"} 67108864
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="app-gce",node="demo-cluster-gce-node-1",container="app"} 536870912
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",node="demo-cluster-gce-node-1",container="node-agent"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",node="demo-cluster-gce-node-2",container="cache"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",node="demo-cluster-gce-node-2",container="db-migrate"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",node="demo-cluster-gce-node-1",container="debug-shell"} 67108864
 
 # HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_limits Recording rule: active-pod memory limits per pod/container (demo data).
 # TYPE cluster:namespace:pod_memory:active:kube_pod_container_resource_limits gauge
@@ -106,16 +106,16 @@ cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster
 # Efficiency tab's demo-data notes), memory limits ARE set for every
 # container here, so this metric gets real per-container data rather than
 # staying empty.
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app"} 1073741824
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent"} 268435456
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache"} 536870912
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate"} 268435456
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell"} 134217728
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app"} 1073741824
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent"} 268435456
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache"} 536870912
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate"} 268435456
-cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="app-aws",node="demo-cluster-aws-node-1",container="app"} 1073741824
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",node="demo-cluster-aws-node-1",container="node-agent"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",node="demo-cluster-aws-node-2",container="cache"} 536870912
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",node="demo-cluster-aws-node-2",container="db-migrate"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",node="demo-cluster-aws-node-3",container="debug-shell"} 134217728
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="app-gce",node="demo-cluster-gce-node-1",container="app"} 1073741824
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",node="demo-cluster-gce-node-1",container="node-agent"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",node="demo-cluster-gce-node-2",container="cache"} 536870912
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",node="demo-cluster-gce-node-2",container="db-migrate"} 268435456
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",node="demo-cluster-gce-node-1",container="debug-shell"} 134217728
 
 # HELP node_namespace_pod_container:container_memory_working_set_bytes Recording rule: memory working set per pod/container (demo data).
 # TYPE node_namespace_pod_container:container_memory_working_set_bytes gauge
