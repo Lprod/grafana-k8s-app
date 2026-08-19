@@ -392,7 +392,11 @@ function NodeHealthBannerRenderer({ model }: SceneComponentProps<NodeHealthBanne
   // fields array (confirmed via /api/ds/query), not zero frames - so this
   // has to check for a real condition label on that frame, not just "some
   // frame that isn't the Ready one" (which the empty placeholder frame would
-  // satisfy too, since undefined !== 'Ready').
+  // satisfy too, since undefined !== 'Ready'). buildNodeConditionQuery
+  // already selects only the "bad" status per condition (Ready=false/
+  // unknown, any Pressure=true), so a frame's mere presence here - the
+  // condition label alone, status doesn't need rechecking - means that
+  // condition is currently bad.
   const conditionLabel = (f: (typeof conditionFrames)[number]) => f.fields.find((field) => field.type === 'number')?.labels?.condition;
   const notReady = conditionFrames.some((f) => conditionLabel(f) === 'Ready');
   const pressureCondition = conditionFrames

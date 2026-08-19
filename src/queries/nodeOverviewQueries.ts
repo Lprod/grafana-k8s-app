@@ -5,13 +5,24 @@
 
 // Health banner severity source - kube_node_status_condition, not alerts
 // (the alerts action button in the banner is a separate query, see
-// buildNodeAlertsSeverityQuery below). Same condition set/status values as
-// the Kubernetes home page's own "Nodes not ready"/pressure issue panels
-// (kubernetesOverviewQueries.ts), narrowed to one node. The "== 1" filter
-// means only genuinely "bad" rows come back at all - an empty result means
-// the node is fully healthy, no separate healthy-case branch needed.
+// buildNodeAlertsSeverityQuery below). Same condition set as the Kubernetes
+// home page's own "Nodes not ready"/pressure issue panels
+// (kubernetesOverviewQueries.ts), narrowed to one node. "Bad" means a
+// different status per condition - Ready is bad when false/unknown, every
+// Pressure condition is bad when true - so each half needs its own status
+// filter; kube-state-metrics emits one boolean-gauge series per condition
+// *per possible status value*, so a single status=~"true|false|unknown"
+// selector across both halves (the bug this replaced) would match whichever
+// status happens to be current, healthy or not, and the "== 1" filter alone
+// could never tell the two apart. With the status filters split like this,
+// only genuinely "bad" rows come back at all - an empty result means the
+// node is fully healthy, no separate healthy-case branch needed.
 export function buildNodeConditionQuery(clusterRegex: string, node: string): string {
-  return `max by (condition, status) (kube_node_status_condition{cluster="${clusterRegex}", node="${node}", condition=~"Ready|MemoryPressure|DiskPressure|PIDPressure", status=~"true|false|unknown"} == 1)`;
+  return `max by (condition, status) (
+    kube_node_status_condition{cluster="${clusterRegex}", node="${node}", condition="Ready", status=~"false|unknown"} == 1
+    or
+    kube_node_status_condition{cluster="${clusterRegex}", node="${node}", condition=~"MemoryPressure|DiskPressure|PIDPressure", status="true"} == 1
+  )`;
 }
 
 // Same node-alerts-or-pod-alerts-on-that-node join as nodeTableQueries.alerts

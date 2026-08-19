@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.9
+
+- Fixed the Node Drilldown's health banner always showing "Node is not ready": `buildNodeConditionQuery` matched `status=~"true|false|unknown"` for every condition, but kube-state-metrics emits one boolean-gauge series per condition *per possible status value* - so a perfectly healthy node still had a `condition="Ready"` row at value 1 (just with `status="true"`), and the banner's own `condition === 'Ready'` check couldn't tell that apart from a real `status="false"` outage. Split into two condition-appropriate status filters instead (`Ready` bad when `false`/`unknown`, any `*Pressure` bad when `true`), verified against live Prometheus data - now a healthy node's query is genuinely empty, matching what this function's own comment already claimed.
+
 ## 1.10.8
 
 - Pod Drilldown's health banner now factors the pod's own phase into its severity too, same idea as the Workload Drilldown's ready/desired-based one from 1.10.7: `Pending` is a warning, `Failed`/`Unknown` is critical, combined with the existing alert-severity coloring by taking whichever is more severe - mirrors `podStatusColor`'s own phase tiers already used by the Overview tab's "status:" row.
