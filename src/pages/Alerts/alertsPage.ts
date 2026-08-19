@@ -23,12 +23,14 @@ import {
   CLUSTER_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
   NODES_VARIABLE_NAME,
+  POD_VARIABLE_NAME,
   SEVERITY_VARIABLE_NAME,
   THANOS_VARIABLE_NAME,
   createAlertnameFilterVariable,
   createClusterFilterVariable,
   createNamespaceFilterVariable,
   createNodesFilterVariable,
+  createPodFilterVariable,
   createSeverityFilterVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
@@ -54,15 +56,25 @@ const severityMappings: ValueMapping[] = [
 function getAlertsScene() {
   const clusterRegex = `\${${CLUSTER_VARIABLE_NAME}:regex}`;
   const namespaceRegex = `\${${NAMESPACE_VARIABLE_NAME}:regex}`;
+  const nodeRegex = `\${${NODES_VARIABLE_NAME}:regex}`;
+  const podRegex = `\${${POD_VARIABLE_NAME}:regex}`;
   const severityRegex = `\${${SEVERITY_VARIABLE_NAME}:regex}`;
   const alertnameRegex = `\${${ALERTNAME_VARIABLE_NAME}:regex}`;
+  // ALERTS carries "node"/"pod" directly on whichever alerts are actually
+  // node-/pod-scoped (same as cluster/namespace/severity/alertname) - no
+  // join needed, unlike a hypothetical "workload" filter (ALERTS has no
+  // such label of its own; see createWorkloadFilterVariable's own comment
+  // on why that needs a separate join query instead of a plain selector -
+  // deliberately not added here to avoid silently dropping alerts that
+  // don't happen to have a matching pod-ownership record).
+  const commonFilters = `cluster=~"${clusterRegex}", namespace=~"${namespaceRegex}", node=~"${nodeRegex}", pod=~"${podRegex}", severity=~"${severityRegex}", alertname!~"ArgoCDSyncAlert"`;
 
   const firingByClusterRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
       {
         refId: 'firing',
-        expr: `count by(cluster) (ALERTS{alertstate="firing", cluster=~"${clusterRegex}", severity=~"${severityRegex}", namespace=~"${namespaceRegex}", alertname!~"ArgoCDSyncAlert"})`,
+        expr: `count by(cluster) (ALERTS{alertstate="firing", ${commonFilters}})`,
         legendFormat: '{{cluster}}',
       },
     ],
@@ -81,7 +93,7 @@ function getAlertsScene() {
     queries: [
       {
         refId: 'firing',
-        expr: `count by(namespace) (ALERTS{alertstate="firing", cluster=~"${clusterRegex}", severity=~"${severityRegex}", namespace=~"${namespaceRegex}", alertname!~"ArgoCDSyncAlert"})`,
+        expr: `count by(namespace) (ALERTS{alertstate="firing", ${commonFilters}})`,
         legendFormat: '{{namespace}}',
       },
     ],
@@ -100,7 +112,7 @@ function getAlertsScene() {
     queries: [
       {
         refId: 'firing',
-        expr: `count by(severity) (ALERTS{alertstate="firing", cluster=~"${clusterRegex}", severity=~"${severityRegex}", namespace=~"${namespaceRegex}", alertname!~"ArgoCDSyncAlert"})`,
+        expr: `count by(severity) (ALERTS{alertstate="firing", ${commonFilters}})`,
         legendFormat: '{{severity}}',
       },
     ],
@@ -119,7 +131,7 @@ function getAlertsScene() {
     queries: [
       {
         refId: 'alerts',
-        expr: `ALERTS{alertstate="firing", cluster=~"${clusterRegex}", namespace=~"${namespaceRegex}", severity=~"${severityRegex}", alertname=~"${alertnameRegex}", alertname!~"ArgoCDSyncAlert"}`,
+        expr: `ALERTS{alertstate="firing", ${commonFilters}, alertname=~"${alertnameRegex}"}`,
         format: 'table',
         instant: true,
       },
@@ -218,6 +230,7 @@ export function getAlertsPage() {
         createClusterFilterVariable(),
         createNodesFilterVariable(`\${${CLUSTER_VARIABLE_NAME}:regex}`),
         createNamespaceFilterVariable(),
+        createPodFilterVariable(`\${${CLUSTER_VARIABLE_NAME}:regex}`, `\${${NAMESPACE_VARIABLE_NAME}:regex}`),
         createSeverityFilterVariable(),
         createAlertnameFilterVariable(),
       ],
@@ -227,6 +240,7 @@ export function getAlertsPage() {
       new VariableValueControl({ variableName: CLUSTER_VARIABLE_NAME }),
       new VariableValueControl({ variableName: NODES_VARIABLE_NAME }),
       new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
+      new VariableValueControl({ variableName: POD_VARIABLE_NAME }),
       new VariableValueControl({ variableName: SEVERITY_VARIABLE_NAME }),
       new VariableValueControl({ variableName: ALERTNAME_VARIABLE_NAME }),
       new SceneControlsSpacer(),

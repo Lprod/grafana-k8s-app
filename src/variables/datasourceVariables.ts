@@ -116,7 +116,16 @@ export function createClusterFilterVariable(options: { isMulti?: boolean } = {})
     query: { refId: 'clusterVariableQuery', query: 'label_values(kube_node_info, cluster)' },
     isMulti,
     includeAll: isMulti,
-    allValue: isMulti ? '.+' : undefined,
+    // ".*" not ".+": these values feed a `label=~"$var:regex"` selector on a
+    // metric where the label isn't guaranteed present on every series (e.g.
+    // ALERTS doesn't carry "namespace" on every cluster/node-level alert,
+    // or "severity" on every custom alerting rule) - ".+" requires at least
+    // one character, so it silently excludes label-absent series even with
+    // "All" selected, while ".*" (zero or more) matches those too. Confirmed
+    // live against Prometheus: adding a plain `node=~".+"` filter dropped an
+    // alert with no "node" label entirely, even though "All" should mean no
+    // filtering at all.
+    allValue: isMulti ? '.*' : undefined,
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, CLUSTER_VARIABLE_NAME);
@@ -138,7 +147,16 @@ export function createNamespaceFilterVariable(options: { isMulti?: boolean; clus
     },
     isMulti,
     includeAll: isMulti,
-    allValue: isMulti ? '.+' : undefined,
+    // ".*" not ".+": these values feed a `label=~"$var:regex"` selector on a
+    // metric where the label isn't guaranteed present on every series (e.g.
+    // ALERTS doesn't carry "namespace" on every cluster/node-level alert,
+    // or "severity" on every custom alerting rule) - ".+" requires at least
+    // one character, so it silently excludes label-absent series even with
+    // "All" selected, while ".*" (zero or more) matches those too. Confirmed
+    // live against Prometheus: adding a plain `node=~".+"` filter dropped an
+    // alert with no "node" label entirely, even though "All" should mean no
+    // filtering at all.
+    allValue: isMulti ? '.*' : undefined,
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, NAMESPACE_VARIABLE_NAME);
@@ -159,7 +177,16 @@ export function createNodesFilterVariable(clusterRegex: string, options: { isMul
     },
     isMulti,
     includeAll: isMulti,
-    allValue: isMulti ? '.+' : undefined,
+    // ".*" not ".+": these values feed a `label=~"$var:regex"` selector on a
+    // metric where the label isn't guaranteed present on every series (e.g.
+    // ALERTS doesn't carry "namespace" on every cluster/node-level alert,
+    // or "severity" on every custom alerting rule) - ".+" requires at least
+    // one character, so it silently excludes label-absent series even with
+    // "All" selected, while ".*" (zero or more) matches those too. Confirmed
+    // live against Prometheus: adding a plain `node=~".+"` filter dropped an
+    // alert with no "node" label entirely, even though "All" should mean no
+    // filtering at all.
+    allValue: isMulti ? '.*' : undefined,
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, NODES_VARIABLE_NAME);
@@ -210,7 +237,11 @@ export function createPodFilterVariable(
     // join of their own, masking the broken variable. Leaving `allValue`
     // undefined here makes Grafana build "All" from the query's own
     // (already workload-scoped) result list instead.
-    allValue: isMulti && !options.workload ? '.+' : undefined,
+    // ".*" not ".+" for the same "label isn't guaranteed present on every
+    // series" reason as every other filter variable's own allValue here -
+    // e.g. the Alerts page's own Pod filter (this branch) runs against
+    // ALERTS, which doesn't carry "pod" on every cluster/node-level alert.
+    allValue: isMulti && !options.workload ? '.*' : undefined,
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, POD_VARIABLE_NAME);
@@ -228,7 +259,16 @@ export function createSeverityFilterVariable(options: { isMulti?: boolean } = {}
     },
     isMulti,
     includeAll: isMulti,
-    allValue: isMulti ? '.+' : undefined,
+    // ".*" not ".+": these values feed a `label=~"$var:regex"` selector on a
+    // metric where the label isn't guaranteed present on every series (e.g.
+    // ALERTS doesn't carry "namespace" on every cluster/node-level alert,
+    // or "severity" on every custom alerting rule) - ".+" requires at least
+    // one character, so it silently excludes label-absent series even with
+    // "All" selected, while ".*" (zero or more) matches those too. Confirmed
+    // live against Prometheus: adding a plain `node=~".+"` filter dropped an
+    // alert with no "node" label entirely, even though "All" should mean no
+    // filtering at all.
+    allValue: isMulti ? '.*' : undefined,
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, SEVERITY_VARIABLE_NAME);
@@ -246,7 +286,16 @@ export function createAlertnameFilterVariable(options: { isMulti?: boolean } = {
     },
     isMulti,
     includeAll: isMulti,
-    allValue: isMulti ? '.+' : undefined,
+    // ".*" not ".+": these values feed a `label=~"$var:regex"` selector on a
+    // metric where the label isn't guaranteed present on every series (e.g.
+    // ALERTS doesn't carry "namespace" on every cluster/node-level alert,
+    // or "severity" on every custom alerting rule) - ".+" requires at least
+    // one character, so it silently excludes label-absent series even with
+    // "All" selected, while ".*" (zero or more) matches those too. Confirmed
+    // live against Prometheus: adding a plain `node=~".+"` filter dropped an
+    // alert with no "node" label entirely, even though "All" should mean no
+    // filtering at all.
+    allValue: isMulti ? '.*' : undefined,
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, ALERTNAME_VARIABLE_NAME);
@@ -304,7 +353,16 @@ export function createWorkloadFilterVariable(options: { isMulti?: boolean; clust
     regex: '/workload="([^"]+)"/',
     isMulti,
     includeAll: isMulti,
-    allValue: isMulti ? '.+' : undefined,
+    // ".*" not ".+": these values feed a `label=~"$var:regex"` selector on a
+    // metric where the label isn't guaranteed present on every series (e.g.
+    // ALERTS doesn't carry "namespace" on every cluster/node-level alert,
+    // or "severity" on every custom alerting rule) - ".+" requires at least
+    // one character, so it silently excludes label-absent series even with
+    // "All" selected, while ".*" (zero or more) matches those too. Confirmed
+    // live against Prometheus: adding a plain `node=~".+"` filter dropped an
+    // alert with no "node" label entirely, even though "All" should mean no
+    // filtering at all.
+    allValue: isMulti ? '.*' : undefined,
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, WORKLOAD_VARIABLE_NAME);

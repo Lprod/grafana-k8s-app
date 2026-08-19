@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.10
+
+- Fixed every filter variable's "All" value (`allValue`) app-wide: `.+` requires at least one character, so `label=~"$var:regex"` silently excluded any series missing that label entirely even with "All" selected - confirmed live against Prometheus, a plain `node=~".+"` filter dropped a pod-scoped alert with no "node" label. Switched to `.*` (zero or more), which matches those too. Most likely explanation for the Alerts page's reported "any filter besides Cluster returns nothing" - `severity`/`namespace` aren't guaranteed present on every alert (some cluster/node-level or custom-rule alerts lack them), so narrowing to a real cluster+namespace could still zero out if the remaining alerts happened to lack a severity label, even though nothing was wrong with the cluster/namespace selection itself.
+- Alerts page: the "Node" filter control existed but was never actually wired into any of the four queries (three summary panels + the table) - fixed. Added a new "Pod" filter alongside it, using the same direct `pod=~` match (ALERTS carries its own "pod" label). A "Workload" filter was deliberately left out - ALERTS has no "workload" label of its own, and joining one in (`namespace_workload_pod:kube_pod_owner:relabel`) would silently drop every alert lacking a matching pod-ownership record, i.e. the same class of bug being fixed here.
+
 ## 1.10.9
 
 - Fixed the Node Drilldown's health banner always showing "Node is not ready": `buildNodeConditionQuery` matched `status=~"true|false|unknown"` for every condition, but kube-state-metrics emits one boolean-gauge series per condition *per possible status value* - so a perfectly healthy node still had a `condition="Ready"` row at value 1 (just with `status="true"`), and the banner's own `condition === 'Ready'` check couldn't tell that apart from a real `status="false"` outage. Split into two condition-appropriate status filters instead (`Ready` bad when `false`/`unknown`, any `*Pressure` bad when `true`), verified against live Prometheus data - now a healthy node's query is genuinely empty, matching what this function's own comment already claimed.
