@@ -43,6 +43,8 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
   const ephemeralUsagePanel = PanelBuilders.timeseries()
     .setTitle('Ephemeral Volume Usage')
     .setUnit('percentunit')
+    .setMin(0)
+    .setMax(1)
     .setData(ephemeralUsageRunner)
     .setHeaderActions(new PanelTimeRangeCompare())
     .setCustomFieldConfig('spanNulls', true)

@@ -144,14 +144,25 @@ export const workloadMemoryOptimizationQueries = {
 export type WorkloadMemoryOptimizationKey = keyof typeof workloadMemoryOptimizationQueries;
 
 // "Pods" table (Overview tab) - one row per pod belonging to this workload.
-// memRequests/memLimits sum away their inner `max by (..., container)`
-// grouping via an outer `sum by (cluster, namespace, pod)`, same as their cpu
-// sibling (cpuRequests) and the Node Drilldown's own pods table
-// (nodePodsTableQueries) - a multi-container pod would otherwise contribute
-// one row per container to the table's "merge" transformation (memRequests/
-// memLimits are the only queries in this set that carry a "container"
-// dimension the others don't), fanning out every other column's value across
-// N duplicate rows instead of yielding one row per pod.
+// memRequests/memLimits/cpuRequests all sum away their inner `max by (...,
+// container)` grouping via an outer `sum by (cluster, namespace, pod)`,
+// same as the Node Drilldown's own pods table (nodePodsTableQueries) and
+// cpuUsage's own plain `by (cluster, namespace, pod)` shape - every query in
+// this set now ends up with that exact same (cluster, namespace, pod) field
+// set, nothing more. Two real bugs this avoids: (a) a multi-container pod
+// would otherwise contribute one row per container to the table's "merge"
+// transformation for whichever query still carried a "container" dimension,
+// fanning out every other column's value across N duplicate rows instead of
+// yielding one row per pod; (b) cpuRequests used to additionally carry
+// workload/workload_type/join_key fields (from an inner `label_join` +
+// workload-attribution join, dropped now that $pod is already correctly
+// workload-scoped by createPodFilterVariable - see its own comment) that
+// none of its merge siblings had, which broke the calculateField division
+// feeding CPU REQUESTS' percent/color further below - cpuRequests being the
+// only query with a differently-shaped output than cpuUsage silently
+// desynced "Value #cpuUsage / Value #cpuRequests" per row, unlike the
+// memory side (memUsage/memRequests/memLimits), which never had that
+// mismatch and always computed correctly.
 export const workloadPodsTableQueries = {
   // Takes the most recent entry of each pod (ip/uid can change over time),
   // joined against its workload attribution and its most recent phase.
@@ -170,7 +181,7 @@ export const workloadPodsTableQueries = {
     )`,
   infoWaiting: `sum by (cluster, namespace, pod, reason) (kube_pod_container_status_waiting_reason{cluster="$cluster", namespace=~"$namespace", pod=~"$pod"} > 0)`,
   cpuUsage: `sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="$cluster", namespace=~"$namespace", pod=~"$pod"}) by (cluster, namespace, pod)`,
-  cpuRequests: `label_join(last_over_time((sum by (cluster, namespace, workload, workload_type, pod) (max by (cluster, namespace, pod, container) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}) * on (cluster,namespace,pod) group_left(workload,workload_type) group by (cluster, namespace, pod, workload, workload_type) (namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace", pod=~"$pod", workload=~"$workload"})))[$__range:]), "join_key", ".", "cluster", "namespace", "workload", "workload_type", "pod")`,
+  cpuRequests: `sum by (cluster, namespace, pod) (last_over_time((max by (cluster, namespace, pod, container) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}))[$__range:]))`,
   memUsage: `sum(
     container_memory_working_set_bytes{cluster="$cluster", namespace="$namespace", container!="", image!=""}
   * on(namespace,pod)

@@ -21,7 +21,7 @@ import {
   WorkloadCpuStatKey,
 } from '../../queries/workloadCpuQueries';
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
-import { usageThresholds } from '../../scenes/tableCells';
+import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
 
@@ -139,11 +139,11 @@ export function getWorkloadCpuScene(clusterRegex: string, namespaceRegex: string
     .setCustomFieldConfig('spanNulls', true)
     .build();
 
-  // "Pods" table - POD/TYPE/REQUESTS (CORES)/USAGE (P95)/USAGE/CAPACITY
-  // (P95, %), one row per pod. All 4 queries carry the exact same
-  // (cluster, namespace, workload, workload_type, pod, join_key) label set
-  // (see workloadCpuQueries.ts), so "merge" matches rows by all of them at
-  // once - no ambiguity, unlike the Overview tab's own Pods table.
+  // "Pods" table - POD/TYPE/REQUESTS (CORES)/USAGE (P95), one row per pod.
+  // All 4 queries carry the exact same (cluster, namespace, workload,
+  // workload_type, pod, join_key) label set (see workloadCpuQueries.ts), so
+  // "merge" matches rows by all of them at once - no ambiguity, unlike the
+  // Overview tab's own Pods table.
   const tableRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: (Object.keys(workloadCpuPodsTableQueries) as WorkloadCpuPodsTableQueryKey[]).map((key) => ({
@@ -158,6 +158,14 @@ export function getWorkloadCpuScene(clusterRegex: string, namespaceRegex: string
     $data: tableRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // Combines REQUESTS with its own usage-as-%-of-requests value
+      // (cpuAggPercent) into one value+percent+bar cell (requestUsageCell)
+      // instead of a separate "USAGE/CAPACITY (P95, %)" column - same
+      // convention as every other Requests column in this app (Namespaces/
+      // Workloads list tables, Overview tab's own Pods table) - stashed via
+      // attachPercentField so the raw percent field can be fully dropped
+      // below instead of kept as its own column.
+      attachPercentField('Value #requests', 'Value #cpuAggPercent'),
       {
         id: 'organize',
         options: {
@@ -168,13 +176,13 @@ export function getWorkloadCpuScene(clusterRegex: string, namespaceRegex: string
             workload: true,
             join_key: true,
             'Value #timeline': true,
+            'Value #cpuAggPercent': true,
           },
           indexByName: {
             pod: 0,
             workload_type: 1,
             'Value #requests': 2,
             'Value #cpuAgg': 3,
-            'Value #cpuAggPercent': 4,
           },
           renameByName: {},
         },
@@ -198,17 +206,12 @@ export function getWorkloadCpuScene(clusterRegex: string, namespaceRegex: string
         .overrideUnit('cores')
         .overrideDecimals(2)
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: requestUsageCell() } as any)
         .matchFieldsWithName('Value #cpuAgg')
         .overrideDisplayName('USAGE (P95)')
         .overrideUnit('cores')
         .overrideDecimals(2)
         .overrideCustomFieldConfig('align', 'left')
-        .matchFieldsWithName('Value #cpuAggPercent')
-        .overrideDisplayName('USAGE/CAPACITY (P95, %)')
-        .overrideUnit('percentunit')
-        .overrideThresholds(usageThresholds)
-        .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
     )
     .build();
 

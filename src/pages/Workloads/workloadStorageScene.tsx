@@ -50,6 +50,8 @@ export function getWorkloadStorageScene(clusterRegex: string, namespaceRegex: st
   const ephemeralUsagePanel = PanelBuilders.timeseries()
     .setTitle('Ephemeral Volume Usage')
     .setUnit('percentunit')
+    .setMin(0)
+    .setMax(1)
     .setData(ephemeralUsageRunner)
     .setHeaderActions(new PanelTimeRangeCompare())
     .setCustomFieldConfig('spanNulls', true)

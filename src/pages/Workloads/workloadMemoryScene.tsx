@@ -21,7 +21,7 @@ import {
   WorkloadMemoryStatKey,
 } from '../../queries/workloadMemoryQueries';
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
-import { usageThresholds } from '../../scenes/tableCells';
+import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
 
@@ -139,10 +139,10 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
     .setCustomFieldConfig('spanNulls', true)
     .build();
 
-  // "Pods" table - POD/TYPE/REQUESTS/USAGE (P95)/USAGE/CAPACITY (P95, %).
-  // Only "timeline" carries workload/workload_type/image_spec - "merge"
-  // matches rows by the fields common to every query instead, (cluster,
-  // namespace, pod, container) - see workloadMemoryQueries.ts's own comment.
+  // "Pods" table - POD/TYPE/REQUESTS/USAGE (P95). Only "timeline" carries
+  // workload/workload_type/image_spec - "merge" matches rows by the fields
+  // common to every query instead, (cluster, namespace, pod, container) -
+  // see workloadMemoryQueries.ts's own comment.
   const tableRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: (Object.keys(workloadMemoryPodsTableQueries) as WorkloadMemoryPodsTableQueryKey[]).map((key) => ({
@@ -157,6 +157,14 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
     $data: tableRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // Combines REQUESTS with its own usage-as-%-of-requests value
+      // (memAggPercent) into one value+percent+bar cell (requestUsageCell)
+      // instead of a separate "USAGE/CAPACITY (P95, %)" column - same
+      // convention as every other Requests column in this app (Namespaces/
+      // Workloads list tables, Overview tab's own Pods table) - stashed via
+      // attachPercentField so the raw percent field can be fully dropped
+      // below instead of kept as its own column.
+      attachPercentField('Value #requests', 'Value #memAggPercent'),
       {
         id: 'organize',
         options: {
@@ -168,13 +176,13 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
             container: true,
             image_spec: true,
             'Value #timeline': true,
+            'Value #memAggPercent': true,
           },
           indexByName: {
             pod: 0,
             workload_type: 1,
             'Value #requests': 2,
             'Value #memAgg': 3,
-            'Value #memAggPercent': 4,
           },
           renameByName: {},
         },
@@ -197,16 +205,11 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
         .overrideDisplayName('REQUESTS')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: requestUsageCell() } as any)
         .matchFieldsWithName('Value #memAgg')
         .overrideDisplayName('USAGE (P95)')
         .overrideUnit('bytes')
         .overrideCustomFieldConfig('align', 'left')
-        .matchFieldsWithName('Value #memAggPercent')
-        .overrideDisplayName('USAGE/CAPACITY (P95, %)')
-        .overrideUnit('percentunit')
-        .overrideThresholds(usageThresholds)
-        .overrideCustomFieldConfig('align', 'left')
-        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorText })
     )
     .build();
 

@@ -1453,7 +1453,7 @@ function getClusterStorageScene(clusterRegex: string) {
     ],
   });
 
-  const ephemeralUsagePanel = PanelBuilders.timeseries().setTitle('Ephemeral Volume Usage').setUnit('percentunit').setData(ephemeralUsageRunner).setHeaderActions(new PanelTimeRangeCompare()).setCustomFieldConfig('spanNulls', true).build();
+  const ephemeralUsagePanel = PanelBuilders.timeseries().setTitle('Ephemeral Volume Usage').setUnit('percentunit').setMin(0).setMax(1).setData(ephemeralUsageRunner).setHeaderActions(new PanelTimeRangeCompare()).setCustomFieldConfig('spanNulls', true).build();
 
   const pvcStorageClassRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.4
+
+- Fixed the Workload Drilldown's CPU and Memory tabs' own "Pods" table: the REQUESTS column was a plain value with no percent badge or color at all, unlike every other Requests column in the app - `workloadCpuScene.tsx`/`workloadMemoryScene.tsx` never attached `cpuAggPercent`/`memAggPercent` onto it via `attachPercentField`/`requestUsageCell`, instead showing that ratio as a fully separate standalone "USAGE/CAPACITY (P95, %)" column. Now combined into one value+percent+bar cell on REQUESTS, same convention as the Namespaces/Workloads list tables and the Overview tab's own Pods table - the separate column is gone, its value now lives in the REQUESTS cell.
+- Fixed the Workload Overview tab's own "Pods" table: CPU REQUESTS' percent/color was silently broken (Requests % missing) because `cpuRequests` (`workloadOverviewQueries.ts`) was the only query in that table's query set with a differently-shaped output (extra `workload`/`workload_type`/`join_key` fields from an inner `label_join` + workload-attribution join) - the client-side `Value #cpuUsage / Value #cpuRequests` division desynced per row as a result, unlike the memory side (memUsage/memRequests/memLimits), which never had that mismatch. Simplified to the same plain `sum by (cluster, namespace, pod)` shape as its siblings - the workload-attribution join is redundant now that `$pod` is already correctly workload-scoped (see 1.10.2's `createPodFilterVariable` fix).
+- The "Ephemeral Volume Usage" panel (Cluster/Namespace/Workload/Pod Drilldowns' own Storage tabs) now fixes its Y axis to 0%-100% (`setMin(0)`/`setMax(1)`) instead of auto-scaling to the data range, same as every other `percentunit` panel on these tabs.
+
 ## 1.10.3
 
 - Fixed the Workload Overview tab's "ready replicas" and "create date" info card rows always showing "–": the `ready`/`desired`/`created` queries feeding it were plain instant Prometheus queries without `format: 'table'`, so their "Value" field never got disambiguated to "Value #<refId>" - `InfoCard`'s fieldName-based lookups silently found nothing. Same gotcha already fixed on the Pod Overview tab's own info cards (see the 1.10.0 entry below, which flagged this exact spot as still-latent at the time) - now applied here too.
