@@ -416,12 +416,19 @@ function getWorkloadOverviewScene(
 
   const { ready, desired } = buildWorkloadReadyDesiredQueries(workloadType, clusterRegex, namespaceRegex, workload);
 
+  // format: 'table' on every query below - without it, a plain instant
+  // Prometheus query's "Value" field is never disambiguated to
+  // "Value #<refId>", so InfoCard's fieldName-based lookups (findFieldAcrossFrames
+  // below) silently return nothing even with multiple queries sharing one
+  // runner - same gotcha as the Pod Overview tab's own info cards
+  // (podsPage.tsx), latent here since this card was first built (see 1.10.0
+  // CHANGELOG entry).
   const rightRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
-      { refId: 'ready', expr: ready, instant: true },
-      { refId: 'desired', expr: desired, instant: true },
-      { refId: 'created', expr: buildWorkloadCreatedQuery(workloadType, clusterRegex, namespaceRegex, workload), instant: true },
+      { refId: 'ready', expr: ready, instant: true, format: 'table' },
+      { refId: 'desired', expr: desired, instant: true, format: 'table' },
+      { refId: 'created', expr: buildWorkloadCreatedQuery(workloadType, clusterRegex, namespaceRegex, workload), instant: true, format: 'table' },
     ],
   });
 

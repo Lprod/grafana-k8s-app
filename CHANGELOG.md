@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.3
+
+- Fixed the Workload Overview tab's "ready replicas" and "create date" info card rows always showing "–": the `ready`/`desired`/`created` queries feeding it were plain instant Prometheus queries without `format: 'table'`, so their "Value" field never got disambiguated to "Value #<refId>" - `InfoCard`'s fieldName-based lookups silently found nothing. Same gotcha already fixed on the Pod Overview tab's own info cards (see the 1.10.0 entry below, which flagged this exact spot as still-latent at the time) - now applied here too.
+
 ## 1.10.2
 
 - Fixed the real root cause behind the Workload Drilldown's CPU/Memory/Overview tabs showing pods from *other* workloads in the same namespace (not just the current one): `createPodFilterVariable` (`datasourceVariables.ts`), the hidden `pod` variable every one of those tabs builds via `{ workload }`, hardcoded `allValue: '.+'` - so with the variable's default "All" selection, `${pod:regex}` resolved to a match-everything wildcard regardless of the variable's own workload-scoped query, silently defeating it. The CPU tab's own "Pods" table happened to still look correct because its queries carry a redundant `namespace_workload_pod:kube_pod_owner:relabel{...workload=~"$workload"}` join of their own; the Memory tab's and the Overview tab's non-joined queries (`requests`/`memAgg`/`memAggPercent`, `cpuUsage`/`memUsage`/`memRequests`/`memLimits`/`infoWaiting`) had nothing else to fall back on and returned every pod in the namespace instead. `allValue` is now only set for the (currently unused) non-workload-scoped case, so "All" is built from the variable's own already-workload-scoped result list.
