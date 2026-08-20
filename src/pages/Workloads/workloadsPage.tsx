@@ -82,6 +82,7 @@ import {
   createThanosDatasourceVariable,
   createWorkloadFilterVariable,
 } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -290,6 +291,7 @@ function getWorkloadsListScene() {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -736,6 +738,7 @@ function getWorkloadOverviewScene(
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [rqliteDatasourceVariable, podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',
@@ -808,6 +811,7 @@ function getWorkloadLogsScene(cluster: string, namespace: string, workload: stri
   const logsPanel = buildLogPanel('Logs', logsRunner);
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -838,6 +842,7 @@ function getWorkloadEventsScene(namespace: string, workload: string) {
   const eventsPanel = buildLogPanel('Events', eventsRunner);
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

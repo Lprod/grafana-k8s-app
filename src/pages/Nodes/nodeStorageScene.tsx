@@ -17,6 +17,7 @@ import {
 import { substituteClusterNodeAndPodToken } from '../../queries/nodeQueries';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createNodePodFilterVariable } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Same green/orange/red capacity thresholds as the Namespace/Cluster
 // Drilldowns' own Storage tabs - redeclared locally per this codebase's
@@ -213,6 +214,7 @@ export function getNodeStorageScene(clusterRegex: string, node: string, nodeRege
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',

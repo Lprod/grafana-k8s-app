@@ -29,6 +29,7 @@ import {
   createNamespaceFilterVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 const JOBS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Jobs}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -176,6 +177,7 @@ function getCronjobsScene(clusterRegex: string, namespaceRegex: string) {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({ direction: 'column', children: [new SceneFlexItem({ body: table })] }),
   });
 }
@@ -276,6 +278,7 @@ function getJobsScene(clusterRegex: string, namespaceRegex: string) {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

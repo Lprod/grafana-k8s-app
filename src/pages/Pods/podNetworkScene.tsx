@@ -9,6 +9,7 @@ import {
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Reuses the Workload Drilldown's own Network tab queries verbatim
 // (workloadNetworkQueries.ts) - see podCpuScene.tsx's own file-level comment
@@ -71,6 +72,7 @@ export function getPodNetworkScene(clusterRegex: string, namespaceRegex: string,
   );
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

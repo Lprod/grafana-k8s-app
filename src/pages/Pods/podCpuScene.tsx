@@ -14,6 +14,7 @@ import { podContainersTableQueries } from '../../queries/podOverviewQueries';
 import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Reuses the Workload Drilldown's own CPU tab queries verbatim
 // (workloadCpuQueries.ts) - every one of them already carries its own
@@ -211,6 +212,7 @@ export function getPodCpuScene(clusterRegex: string, namespaceRegex: string, wor
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

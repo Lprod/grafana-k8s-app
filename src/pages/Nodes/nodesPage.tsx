@@ -61,6 +61,7 @@ import {
   createNodesFilterVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -262,6 +263,7 @@ function getNodesListScene() {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -595,6 +597,7 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -644,6 +647,7 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
 // getPodPlaceholderScene in podsPage.tsx) for the tabs not built out yet.
 function getNodePlaceholderScene(title: string) {
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

@@ -24,6 +24,7 @@ import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries'
 import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Same green-baseline/red-if-any thresholds as the Overview/CPU tabs' own
 // alertsThresholds - redeclared locally rather than imported, matching this
@@ -214,6 +215,7 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',

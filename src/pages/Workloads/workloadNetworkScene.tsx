@@ -10,6 +10,7 @@ import {
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Same rx-positive/tx-negative ("- sum(...)" baked into the tx query text
 // itself) two-series-per-panel shape as the Namespace Drilldown's own
@@ -80,6 +81,7 @@ export function getWorkloadNetworkScene(clusterRegex: string, namespaceRegex: st
   );
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',

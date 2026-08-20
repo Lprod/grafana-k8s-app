@@ -10,6 +10,7 @@ import {
 import { substituteClusterNodeAndPodToken } from '../../queries/nodeQueries';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createNodePodFilterVariable } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Same rx-positive/tx-negative two-series-per-panel shape as every other
 // drilldown's own Network tab.
@@ -79,6 +80,7 @@ export function getNodeNetworkScene(clusterRegex: string, node: string, nodeRege
   );
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',

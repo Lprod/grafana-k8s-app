@@ -18,6 +18,7 @@ import {
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Same green/orange/red capacity thresholds as the Namespace Drilldown's own
 // pvcCapacityThresholds (namespaceStorageScene.tsx) - redeclared locally
@@ -242,6 +243,7 @@ export function getWorkloadStorageScene(clusterRegex: string, namespaceRegex: st
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',

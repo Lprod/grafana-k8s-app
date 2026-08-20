@@ -23,6 +23,7 @@ import {
 import { attachPercentField, requestUsageCell, usageTierCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME, WORKLOAD_VARIABLE_NAME, createWorkloadFilterVariable } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 
@@ -254,6 +255,7 @@ export function getNamespaceMemoryScene(cluster: string, namespace: string, clus
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [createWorkloadFilterVariable({ clusterRegex, namespaceRegex })] }),
     body: new SceneFlexLayout({
       direction: 'column',

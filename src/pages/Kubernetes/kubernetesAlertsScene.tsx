@@ -2,6 +2,7 @@ import { EmbeddedScene, PanelBuilders, SceneFlexItem, SceneFlexLayout, SceneQuer
 import { LegendDisplayMode } from '@grafana/schema';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Given verbatim - see kubernetesOverviewQueries.ts's header comment for
 // this repo's literal-translation convention for queries pasted from
@@ -24,6 +25,7 @@ export function getKubernetesAlertsScene() {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [new SceneFlexItem({ height: 400, body: panel })],

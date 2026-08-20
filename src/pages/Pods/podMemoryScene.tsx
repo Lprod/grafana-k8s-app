@@ -14,6 +14,7 @@ import { podContainersTableQueries } from '../../queries/podOverviewQueries';
 import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Reuses the Workload Drilldown's own Memory tab queries verbatim
 // (workloadMemoryQueries.ts) - see podCpuScene.tsx's own file-level comment
@@ -217,6 +218,7 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

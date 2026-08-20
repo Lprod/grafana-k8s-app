@@ -17,6 +17,7 @@ import {
   KubernetesEfficiencyTopStatKey,
   kubernetesEfficiencyWasteByNamespaceQueries,
 } from '../../queries/kubernetesEfficiencyQueries';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Same green/orange-background convention as Grafana's own reference for
 // this tab (distinct from the Overview tab's red/green - that one still
@@ -79,6 +80,7 @@ export function getKubernetesEfficiencyScene() {
   ];
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

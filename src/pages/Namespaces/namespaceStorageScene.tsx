@@ -17,6 +17,7 @@ import {
 } from '../../queries/namespaceStorageQueries';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Same green/orange/red capacity thresholds as clustersApp.tsx's own
 // pvcCapacityThresholds (Cluster Storage tab's "by namespace (avg)" panels)
@@ -233,6 +234,7 @@ export function getNamespaceStorageScene(clusterRegex: string, namespaceRegex: s
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

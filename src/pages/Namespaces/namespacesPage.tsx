@@ -72,6 +72,7 @@ import {
   createRqliteDatasourceVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -250,6 +251,7 @@ function getNamespacesListScene() {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -668,6 +670,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
   eventsPanel.setState({ titleItems: <PanelLinkTitleItem title="View Events" url={`${baseUrl}/events`} /> });
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [rqliteDatasourceVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',
@@ -745,6 +748,7 @@ function getNamespaceLogsScene(cluster: string, namespace: string) {
   const logsPanel = buildLogPanel('Logs', logsRunner);
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -770,6 +774,7 @@ function getNamespaceEventsScene(namespace: string) {
   const eventsPanel = buildLogPanel('Events', eventsRunner);
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

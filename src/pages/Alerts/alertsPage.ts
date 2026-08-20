@@ -34,6 +34,7 @@ import {
   createSeverityFilterVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 const ALERTS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Alerts}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
@@ -198,6 +199,7 @@ function getAlertsScene() {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

@@ -62,6 +62,7 @@ import { getJobsPage } from '../pages/Jobs/jobsPage';
 import { getKubernetesHomePage } from '../pages/Kubernetes/kubernetesPage';
 import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds } from './tableCells';
 import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
+import { attachExploreMenus } from './panelExplore';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
@@ -245,6 +246,7 @@ function getClustersListScene() {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -540,6 +542,7 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [createNodesFilterVariable(clusterRegex)] }),
     body: new SceneFlexLayout({
       direction: 'column',
@@ -938,6 +941,7 @@ function getClusterCpuScene(cluster: string, clusterRegex: string) {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({
       variables: [createNodesFilterVariable(clusterRegex), createNamespaceFilterVariable({ clusterRegex })],
     }),
@@ -1305,6 +1309,7 @@ function getClusterMemoryScene(cluster: string, clusterRegex: string) {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({
       variables: [createNodesFilterVariable(clusterRegex), createNamespaceFilterVariable({ clusterRegex })],
     }),
@@ -1437,6 +1442,7 @@ function getClusterNetworkScene(clusterRegex: string) {
   const bandwidthByNodePanel = PanelBuilders.timeseries().setTitle('Network Bandwidth by node').setUnit('Bps').setData(bandwidthByNodeRunner).setHeaderActions(new PanelTimeRangeCompare()).setCustomFieldConfig('spanNulls', true).build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -1728,6 +1734,7 @@ function getClusterStorageScene(clusterRegex: string) {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

@@ -14,9 +14,11 @@ import {
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { ResourceSimulatorObject } from './ResourceSimulatorObject';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 export function getResourceSimulatorScene() {
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $timeRange: new SceneTimeRange({ from: 'now-15m', to: 'now' }),
     $variables: new SceneVariableSet({
       variables: [

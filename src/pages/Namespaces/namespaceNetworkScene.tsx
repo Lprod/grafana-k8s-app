@@ -9,6 +9,7 @@ import {
 } from '../../queries/namespaceNetworkQueries';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Same rx-positive/tx-negative ("- sum(...)" baked into the tx query text
 // itself) two-series-per-panel shape as getClusterNetworkScene's own
@@ -72,6 +73,7 @@ export function getNamespaceNetworkScene(clusterRegex: string, namespaceRegex: s
   );
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

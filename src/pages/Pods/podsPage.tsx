@@ -66,6 +66,7 @@ import { getPodCpuScene } from './podCpuScene';
 import { getPodMemoryScene } from './podMemoryScene';
 import { getPodNetworkScene } from './podNetworkScene';
 import { getPodStorageScene } from './podStorageScene';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -469,6 +470,7 @@ function getPodOverviewScene(
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -544,6 +546,7 @@ function getPodLogsScene(cluster: string, namespace: string, pod: string) {
   const logsPanel = buildLogPanel('Logs', logsRunner);
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
@@ -567,6 +570,7 @@ function getPodEventsScene(namespace: string, pod: string) {
   const eventsPanel = buildLogPanel('Events', eventsRunner);
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

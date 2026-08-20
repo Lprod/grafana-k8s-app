@@ -29,6 +29,7 @@ import {
   kubernetesStabilityQueries,
   kubernetesTopStatQueries,
 } from '../../queries/kubernetesOverviewQueries';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
@@ -279,6 +280,7 @@ export function getKubernetesOverviewScene() {
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

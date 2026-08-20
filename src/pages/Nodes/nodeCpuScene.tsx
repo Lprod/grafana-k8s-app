@@ -23,6 +23,7 @@ import { substituteClusterNodeAndPodToken } from '../../queries/nodeQueries';
 import { attachPercentField, requestUsageCell, usageThresholds, usageTierCell } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createNodePodFilterVariable } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 
@@ -203,6 +204,7 @@ export function getNodeCpuScene(cluster: string, clusterRegex: string, node: str
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     $variables: new SceneVariableSet({ variables: [podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',

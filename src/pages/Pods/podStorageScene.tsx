@@ -17,6 +17,7 @@ import {
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // Reuses the Workload Drilldown's own Storage tab queries verbatim
 // (workloadStorageQueries.ts, every query already carries its own
@@ -229,6 +230,7 @@ export function getPodStorageScene(clusterRegex: string, namespaceRegex: string,
     .build();
 
   return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
