@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.0
+
+- Built out the Node Drilldown's CPU, Memory, Network, and Storage tabs (previously placeholders), translated from a reference Grafana dashboard export: Pod-filtered efficiency stats, usage/distribution/alignment timeseries, and Pods tables on CPU/Memory; Bandwidth/Saturation (+ by-pod) on Network; PVC Storage Class/Bytes/Inodes/Status, PV Status, Throughput, and IOPS on Storage. Logs/Events stay placeholders - the reference dashboard has no Events tab and no configured Logs query, and the demo Elasticsearch data has no node-identifying field to filter by.
+- Fixed the Overview tab's VCF/vSphere info card: `vcf_vcenter` now reads `kube_node_info`'s own `provider` label directly instead of a (non-existent) vSphere lookup, and `vcf_clustername`/`vcf_esx_host` use the actual 2-hop chain across two different `vsphere_vm_cpu_*` metrics - the previous single 3-hop self-join against one metric didn't match the reference dashboard's real query chain.
+- Fixed the new CPU/Memory tabs' "Efficiency: Pod Usage/Requests (%)" panels, which the reference dashboard's own copy of divides by node capacity again (byte-for-byte identical to the neighboring "Distribution" panel) - now actually divides by the pod's own CPU/Memory requests, matching the panel's title.
+- Added a `node` label to the demo dataset's `container_fs_{reads,writes}_{bytes_,}total` counters (previously absent entirely), fixing "No data" on the new Storage tab's node-scoped Throughput/IOPS panels.
+
 ## 1.10.11
 
 - Fixed the Workload/Pod Drilldown health banners showing an unlogically high "N firing alerts" count: `alertsSeverityCounts` sums the first numeric field off *every* frame it's given, but since 1.10.7/1.10.8 the same `healthRunner` also carries `ready`/`desired` (Workload) or `phase` (Pod) refIds for the pod-readiness severity check added then - those numbers were silently being added straight into the alert count/severity instead of just the real 'alerts' refId. Now scoped to `refId === 'alerts'` only, same as `NodeHealthBanner`'s own alert-frame filtering already did.

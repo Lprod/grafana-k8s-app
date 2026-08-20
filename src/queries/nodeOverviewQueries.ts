@@ -44,32 +44,34 @@ export function buildNodeAlertsSeverityQuery(clusterRegex: string, node: string)
 }
 
 // kube_node_info's own labels - internal_ip/os_image/kernel_version/
-// kubelet_version/container_runtime_version all live on the one series, so
-// one query covers the Overview tab's left+middle info card rows.
+// kubelet_version/container_runtime_version/provider all live on the one
+// series, so one query covers the Overview tab's left+middle+right-hand
+// "vcf_vcenter" info card rows ("provider" added for the right card's own
+// VCF/vSphere fix, see buildNodeVcfInfoQuery above).
 export function buildNodeInfoQuery(clusterRegex: string, node: string): string {
-  return `max by (internal_ip, os_image, kernel_version, kubelet_version, container_runtime_version) (kube_node_info{cluster="${clusterRegex}", node="${node}"})`;
+  return `max by (internal_ip, os_image, kernel_version, kubelet_version, container_runtime_version, provider) (kube_node_info{cluster="${clusterRegex}", node="${node}"})`;
 }
 
-// VCF/vSphere identity chain, given verbatim: the node (as OpenShift/K8s
-// knows it) is a VM, so vsphere_vm_cpu_idle_summation's own "vmname" label
-// matches this node's name directly. From there the chain is vmname ->
-// esxhostname (the ESX host it's running on) -> clustername (the vSphere/VCF
-// cluster that ESX host belongs to) -> vcenter (the vCenter that cluster
-// belongs to) - described as three sequential "same metric, different
-// filter" lookups, translated here into one PromQL query via chained
-// on(...)/group_left(...) self-joins against the same metric instead of
-// three dependent Grafana panel queries (which would need JS-side chaining
-// to feed one query's result into the next one's filter value). Not
-// verifiable against the local demo stack - there's no vSphere/telegraf
-// source in the demo compose stack - so this needs checking against a real
-// environment.
+// VCF/vSphere identity, corrected against the actual reference dashboard
+// (node.json) rather than the originally-verbal description this used to be
+// built from: "vcf_vcenter" does NOT come from a vSphere metric at all - it's
+// kube_node_info's own "provider" label (the node's providerID, which on a
+// VCF-backed OpenShift cluster is the vCenter hostname), see
+// buildNodeInfoQuery below (extended with "provider"). Only "vcf_esx_host"
+// and "vcf_clustername" are a real vSphere lookup, and it's a 2-hop chain
+// across *two different* vsphere_vm_cpu_* metrics, not a 3-hop self-join
+// against one metric: vmname -> esxhostname via
+// vsphere_vm_cpu_idle_summation{vmname=$node}, then esxhostname ->
+// clustername via a *different* metric, vsphere_vm_cpu_demand_average
+// {esxhostname=$esxi} - confirmed from the dashboard's own chained template
+// variable definitions (esxi/clustername), not a single query. Still not
+// verifiable against the local demo stack - no vSphere/telegraf source there
+// - so this needs checking against a real environment regardless.
 export function buildNodeVcfInfoQuery(node: string): string {
-  return `group by (esxhostname, clustername, vcenter) (
+  return `group by (esxhostname, clustername) (
     vsphere_vm_cpu_idle_summation{vmname="${node}"}
     * on (esxhostname) group_left(clustername)
-    group by (esxhostname, clustername) (vsphere_vm_cpu_idle_summation)
-    * on (clustername) group_left(vcenter)
-    group by (clustername, vcenter) (vsphere_vm_cpu_idle_summation)
+    group by (esxhostname, clustername) (vsphere_vm_cpu_demand_average)
   )`;
 }
 

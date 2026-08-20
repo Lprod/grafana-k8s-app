@@ -107,6 +107,25 @@ export function substituteClusterAndNode(expr: string, clusterRegex: string, nod
   return expr.replaceAll('$cluster', clusterRegex).replaceAll('$node', nodeRegex);
 }
 
+// CPU/Memory/Network/Storage tabs' own substitute - same $cluster/$node
+// handling as substituteClusterAndNode, plus a $pod token for their own
+// (visible on CPU/Memory, hidden on Network/Storage) Pod picker. The given
+// Storage tab queries mix two different $node usages verbatim: a regex
+// `node=~"$node"` (every other tab's own form, wants the escaped nodeRegex)
+// and one exact `node="$node"` inside their shared
+// `kube_pod_info{cluster=~"$cluster", node="$node"}` join fragment (wants
+// the raw, unescaped node name - substituting an escaped regex string like
+// `\.` into an exact-match position would break any node name containing a
+// character regexp-escaping touches). The `node="$node"` replace runs first
+// and is a no-op for tabs that never use that exact-match form.
+export function substituteClusterNodeAndPodToken(expr: string, clusterRegex: string, node: string, nodeRegex: string, podToken: string): string {
+  return expr
+    .replaceAll('node="$node"', `node="${node}"`)
+    .replaceAll('$cluster', clusterRegex)
+    .replaceAll('$node', nodeRegex)
+    .replaceAll('$pod', podToken);
+}
+
 export function buildNodesListTargets(clusterRegex: string, nodeRegex: string) {
   return (Object.keys(nodeTableQueries) as NodeQueryKey[]).map((key) => ({
     refId: key,

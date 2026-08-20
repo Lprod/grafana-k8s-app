@@ -23,6 +23,10 @@ import { LegendDisplayMode, TableCellDisplayMode, ThresholdsMode } from '@grafan
 import { Alert, Badge, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildNodesListTargets, substituteClusterAndNode } from '../../queries/nodeQueries';
+import { getNodeCpuScene } from './nodeCpuScene';
+import { getNodeMemoryScene } from './nodeMemoryScene';
+import { getNodeNetworkScene } from './nodeNetworkScene';
+import { getNodeStorageScene } from './nodeStorageScene';
 import {
   buildNodeAlertsSeverityQuery,
   buildNodeConditionQuery,
@@ -345,15 +349,24 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
     ],
   });
 
+  // Two queries sharing one $data - "vcf_vcenter" comes from kube_node_info's
+  // own "provider" label (info), "vcf_clustername"/"vcf_esx_host" from the
+  // separate 2-hop vSphere chain (vcf) - see buildNodeVcfInfoQuery's own
+  // comment for why these are genuinely two different sources, not one query
+  // split for convenience. InfoCard already searches every frame, same as
+  // the health banner's own conditions/alerts split.
   const rightRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'vcf', expr: buildNodeVcfInfoQuery(node), instant: true, format: 'table' }],
+    queries: [
+      { refId: 'info', expr: buildNodeInfoQuery(clusterRegex, node), instant: true, format: 'table' },
+      { refId: 'vcf', expr: buildNodeVcfInfoQuery(node), instant: true, format: 'table' },
+    ],
   });
 
   const rightCard = new InfoCard({
     $data: rightRunner,
     rows: [
-      { label: 'vcf_vcenter:', render: (frames) => findFieldAcrossFrames(frames, 'vcenter')?.values[0] ?? '–' },
+      { label: 'vcf_vcenter:', render: (frames) => findFieldAcrossFrames(frames, 'provider')?.values[0] ?? '–' },
       { label: 'vcf_clustername:', render: (frames) => findFieldAcrossFrames(frames, 'clustername')?.values[0] ?? '–' },
       { label: 'vcf_esx_host:', render: (frames) => findFieldAcrossFrames(frames, 'esxhostname')?.values[0] ?? '–' },
     ],
@@ -462,6 +475,13 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
             uid: true,
             asserts_env: true,
             asserts_site: true,
+            // The "info" query's own value (a group-by-collapsed "1", not
+            // anything meaningful to show) - was never excluded, a latent
+            // bug only invisible here because this table has enough other
+            // columns to push it off the right edge of a typical viewport;
+            // it's directly visible (and fixed) on the CPU/Memory tabs' own
+            // narrower Pods tables, which reuse this same query set.
+            'Value #info': true,
             'Value #cpu_requests_percent': true,
             'Value #mem_requests_percent': true,
             'Value #mem_limits_percent': true,
@@ -645,10 +665,15 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
 
   const tabDefs: NodeTabDef[] = [
     { slug: 'overview', title: 'Overview', getScene: () => getNodeOverviewScene(cluster, node, clusterRegex, nodeRegex) },
-    { slug: 'cpu', title: 'CPU', getScene: () => getNodePlaceholderScene('CPU') },
-    { slug: 'memory', title: 'Memory', getScene: () => getNodePlaceholderScene('Memory') },
-    { slug: 'network', title: 'Network', getScene: () => getNodePlaceholderScene('Network') },
-    { slug: 'storage', title: 'Storage', getScene: () => getNodePlaceholderScene('Storage') },
+    { slug: 'cpu', title: 'CPU', getScene: () => getNodeCpuScene(cluster, clusterRegex, node, nodeRegex) },
+    { slug: 'memory', title: 'Memory', getScene: () => getNodeMemoryScene(cluster, clusterRegex, node, nodeRegex) },
+    { slug: 'network', title: 'Network', getScene: () => getNodeNetworkScene(clusterRegex, node, nodeRegex) },
+    { slug: 'storage', title: 'Storage', getScene: () => getNodeStorageScene(clusterRegex, node, nodeRegex) },
+    // No reference dashboard content for either tab (Logs' own panel had no
+    // query configured at all; Events doesn't exist as a tab there), and the
+    // demo Elasticsearch data has no node-identifying field to filter by -
+    // left as placeholders per explicit user decision rather than guessing
+    // at an ES query shape with nothing to verify it against.
     { slug: 'logs', title: 'Logs', getScene: () => getNodePlaceholderScene('Logs') },
     { slug: 'events', title: 'Events', getScene: () => getNodePlaceholderScene('Events') },
   ];

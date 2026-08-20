@@ -347,61 +347,61 @@ container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",po
 # would otherwise be silently dropped from those two panels specifically
 # (the non-"by workload" Throughput/IOPS panels have no such join and
 # already picked up app-0 fine).
-container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda"} 10737418240
-container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda"} 2147483648
-container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda"} 5368709120
-container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda"} 536870912
-container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda"} 52428800
-container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda"} 10737418240
-container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda"} 2147483648
-container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda"} 5368709120
-container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda"} 536870912
-container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda"} 52428800
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda",node="demo-cluster-aws-node-1"} 10737418240
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda",node="demo-cluster-aws-node-1"} 2147483648
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda",node="demo-cluster-aws-node-2"} 5368709120
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda",node="demo-cluster-aws-node-2"} 536870912
+container_fs_reads_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda",node="demo-cluster-aws-node-3"} 52428800
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda",node="demo-cluster-gce-node-1"} 10737418240
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda",node="demo-cluster-gce-node-1"} 2147483648
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda",node="demo-cluster-gce-node-2"} 5368709120
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda",node="demo-cluster-gce-node-2"} 536870912
+container_fs_reads_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda",node="demo-cluster-gce-node-1"} 52428800
 
 # HELP container_fs_writes_bytes_total Cumulative bytes written to a container's filesystem (demo data).
 # TYPE container_fs_writes_bytes_total counter
 container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-0",container="app",device="/dev/sda"} 53687091200
 container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-0",container="app",device="/dev/sda"} 107374182400
-container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda"} 5368709120
-container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda"} 1073741824
-container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda"} 4294967296
-container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda"} 314572800
-container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda"} 20971520
-container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda"} 5368709120
-container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda"} 1073741824
-container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda"} 4294967296
-container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda"} 314572800
-container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda"} 20971520
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda",node="demo-cluster-aws-node-1"} 5368709120
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda",node="demo-cluster-aws-node-1"} 1073741824
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda",node="demo-cluster-aws-node-2"} 4294967296
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda",node="demo-cluster-aws-node-2"} 314572800
+container_fs_writes_bytes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda",node="demo-cluster-aws-node-3"} 20971520
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda",node="demo-cluster-gce-node-1"} 5368709120
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda",node="demo-cluster-gce-node-1"} 1073741824
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda",node="demo-cluster-gce-node-2"} 4294967296
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda",node="demo-cluster-gce-node-2"} 314572800
+container_fs_writes_bytes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda",node="demo-cluster-gce-node-1"} 20971520
 
 # HELP container_fs_reads_total Cumulative read operations on a container's filesystem (demo data).
 # TYPE container_fs_reads_total counter
 container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="app-0",container="app",device="/dev/sda"} 5000000
 container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="app-0",container="app",device="/dev/sda"} 8000000
-container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda"} 500000
-container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda"} 100000
-container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda"} 250000
-container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda"} 25000
-container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda"} 5000
-container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda"} 500000
-container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda"} 100000
-container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda"} 250000
-container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda"} 25000
-container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda"} 5000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda",node="demo-cluster-aws-node-1"} 500000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda",node="demo-cluster-aws-node-1"} 100000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda",node="demo-cluster-aws-node-2"} 250000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda",node="demo-cluster-aws-node-2"} 25000
+container_fs_reads_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda",node="demo-cluster-aws-node-3"} 5000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda",node="demo-cluster-gce-node-1"} 500000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda",node="demo-cluster-gce-node-1"} 100000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda",node="demo-cluster-gce-node-2"} 250000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda",node="demo-cluster-gce-node-2"} 25000
+container_fs_reads_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda",node="demo-cluster-gce-node-1"} 5000
 
 # HELP container_fs_writes_total Cumulative write operations on a container's filesystem (demo data).
 # TYPE container_fs_writes_total counter
 container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="app-0",container="app",device="/dev/sda"} 2000000
 container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="app-0",container="app",device="/dev/sda"} 3500000
-container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda"} 250000
-container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda"} 50000
-container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda"} 200000
-container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda"} 15000
-container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda"} 2000
-container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda"} 250000
-container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda"} 50000
-container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda"} 200000
-container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda"} 15000
-container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda"} 2000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="app-aws",container="app",device="/dev/sda",node="demo-cluster-aws-node-1"} 250000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="node-agent-0-aws",container="node-agent",device="/dev/sda",node="demo-cluster-aws-node-1"} 50000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="cache-0-aws",container="cache",device="/dev/sda",node="demo-cluster-aws-node-2"} 200000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",container="db-migrate",device="/dev/sda",node="demo-cluster-aws-node-2"} 15000
+container_fs_writes_total{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",container="debug-shell",device="/dev/sda",node="demo-cluster-aws-node-3"} 2000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="app-gce",container="app",device="/dev/sda",node="demo-cluster-gce-node-1"} 250000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="node-agent-0-gce",container="node-agent",device="/dev/sda",node="demo-cluster-gce-node-1"} 50000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",container="cache",device="/dev/sda",node="demo-cluster-gce-node-2"} 200000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",container="db-migrate",device="/dev/sda",node="demo-cluster-gce-node-2"} 15000
+container_fs_writes_total{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",device="/dev/sda",node="demo-cluster-gce-node-1"} 2000
 
 # HELP container_network_receive_bytes_total Cumulative bytes received on a pod's network interface (demo data).
 # TYPE container_network_receive_bytes_total counter

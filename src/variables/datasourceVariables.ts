@@ -247,6 +247,32 @@ export function createPodFilterVariable(
   return syncValueFromUrlOnActivation(variable, POD_VARIABLE_NAME);
 }
 
+// Node Drilldown's own Pod picker (CPU/Memory/Network/Storage tabs) - scoped
+// by node rather than namespace, since this page already knows exactly one
+// node from its own route params but (unlike the Workload/Pod Drilldowns'
+// hidden pod variable) covers every namespace that node happens to be
+// running pods from. Deliberately a separate function rather than another
+// createPodFilterVariable option - that one's query is namespace-shaped
+// (kube_pod_info{cluster,namespace}), this one's is node-shaped
+// (kube_pod_info{cluster,node}), genuinely different label sets rather than
+// a variant of the same query.
+export function createNodePodFilterVariable(clusterRegex: string, node: string, options: { isMulti?: boolean } = {}) {
+  const isMulti = options.isMulti ?? true;
+  const variable = new QueryVariable({
+    name: POD_VARIABLE_NAME,
+    label: 'Pod',
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    query: { refId: 'podVariableQuery', query: `label_values(kube_pod_info{cluster="${clusterRegex}", node="${node}"}, pod)` },
+    isMulti,
+    includeAll: isMulti,
+    // Same "leave allValue undefined so 'All' builds from the already-scoped
+    // query result" reasoning as createPodFilterVariable's own workload
+    // branch - see that function's own comment for the bug this avoids.
+    value: isMulti ? '$__all' : '',
+  });
+  return syncValueFromUrlOnActivation(variable, POD_VARIABLE_NAME);
+}
+
 export function createSeverityFilterVariable(options: { isMulti?: boolean } = {}) {
   const isMulti = options.isMulti ?? true;
   const variable = new QueryVariable({
