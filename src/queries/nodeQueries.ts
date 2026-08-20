@@ -20,17 +20,24 @@ export const nodeTableQueries = {
       kube_node_info{cluster=~"$cluster", node=~"$node"}
     )
   [$__range:])`,
-  alerts: `count by (node) (
-    # node alerts
-    ALERTS{alertstate="firing", cluster=~"$cluster", node=~"$node"}
-
-    OR
-
-    # pod alerts by node
-    max by (cluster, namespace, pod) (ALERTS{alertstate="firing", cluster=~"$cluster", node=~"$node", pod!=""})
-    * on (cluster, namespace, pod) group_left (node)
-    max by (cluster, namespace, pod, node) (kube_pod_info{cluster=~"$cluster", node=~"$node"})
-  )`,
+  // Deliberately just a direct "node" label match, not also OR-ing in
+  // pod-scoped alerts attributed to the node via a kube_pod_info join (an
+  // earlier version of this did) - this column's own "View alerts" link
+  // goes straight to the Alerts page with just `var-nodes=<node>` in the
+  // URL, and that page's own Node filter can only do the same plain "node"
+  // label match, with no way to replicate a join from a URL param. The
+  // richer join-based count disagreed with what the linked-to page could
+  // actually show (a real "N firing alerts" here, an empty table after
+  // clicking through) - same fix, same reasoning, as
+  // buildNodeAlertsSeverityQuery (nodeOverviewQueries.ts) already got for
+  // the Node Drilldown's own health banner.
+  // "node!=''" additionally excludes alerts with no "node" label at all
+  // from this by-node count - without it, `count by (node)` still emits an
+  // explicit node="" group for them (any filter variable's "All" value is
+  // ".*", which matches an absent label too - see gotcha in v1.10.10's
+  // CHANGELOG entry), showing up as a phantom all-blank row at the bottom
+  // of the Nodes table with only a real (but node-less) alert count.
+  alerts: `count by (node) (ALERTS{alertstate="firing", cluster=~"$cluster", node=~"$node", node!=""})`,
   cpu_usage_avg: `avg_over_time(sum by (node) (
     label_replace(
       1 - max by (cluster, instance, cpu, core) (rate(node_cpu_seconds_total{cluster=~"$cluster", mode="idle", instance=~"$node"}[$__rate_interval]))

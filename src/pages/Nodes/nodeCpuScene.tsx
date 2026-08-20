@@ -219,6 +219,7 @@ export function getNodeCpuScene(cluster: string, clusterRegex: string, node: str
         }),
         new SceneFlexLayout({
           direction: 'row',
+          ySizing: 'content',
           children: [
             new SceneFlexItem({ height: 400, body: overviewUsagePanel }),
             new SceneFlexItem({ height: 400, body: distributionPanel }),

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.1
+
+- Fixed the Nodes list table's "Alerts" column disagreeing with what the Alerts page could actually show after clicking through: the column's own count also joined in pod-scoped alerts attributed to the node via `kube_pod_info`, but the Alerts page's Node filter can only do a plain `node` label match with no way to replicate that join from a URL param (cluster/node were set correctly, alerts just never showed) - simplified to match, same fix/reasoning the Node Drilldown's own health banner already got.
+- Fixed a phantom all-blank row at the bottom of the Nodes and Clusters list tables: `count`/`sum by (node)`/`by (cluster)` still emits an explicit empty-string group for input series missing that label entirely (a firing alert with no "node" label, a raw node-exporter series with no "cluster" label in the real environment) - the app-wide filter "All" value is `.*`, which matches an absent label too. Added `node!=""` to the Nodes list's own alerts query plus a `filterByValue` safety net on both tables.
+- Fixed large empty gaps between panels on every Node Drilldown tab: the row wrapper around a tab's own fixed-height panel row was missing `ySizing: 'content'`, so it stretched to fill whatever vertical space was left in its column instead of hugging its children - only the Nodes page's own scenes had this (every other drilldown's tab files already set it consistently).
+
 ## 1.11.0
 
 - Built out the Node Drilldown's CPU, Memory, Network, and Storage tabs (previously placeholders), translated from a reference Grafana dashboard export: Pod-filtered efficiency stats, usage/distribution/alignment timeseries, and Pods tables on CPU/Memory; Bandwidth/Saturation (+ by-pod) on Network; PVC Storage Class/Bytes/Inodes/Status, PV Status, Throughput, and IOPS on Storage. Logs/Events stay placeholders - the reference dashboard has no Events tab and no configured Logs query, and the demo Elasticsearch data has no node-identifying field to filter by.

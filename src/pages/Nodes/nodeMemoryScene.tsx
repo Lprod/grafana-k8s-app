@@ -212,6 +212,7 @@ export function getNodeMemoryScene(cluster: string, clusterRegex: string, node: 
         }),
         new SceneFlexLayout({
           direction: 'row',
+          ySizing: 'content',
           children: [
             new SceneFlexItem({ height: 400, body: overviewUsagePanel }),
             new SceneFlexItem({ height: 400, body: distributionPanel }),

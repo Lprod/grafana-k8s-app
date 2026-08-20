@@ -117,6 +117,24 @@ function getClustersListScene() {
     $data: queryRunner,
     transformations: [
       { id: 'joinByField', options: { byField: 'cluster', mode: 'outer' } },
+      // At least one of these queries' many OTel/fallback branches
+      // (cpu_usage_avg etc. - see clusterQueries.ts) can return a real
+      // number for a series that's missing a "cluster" label entirely in
+      // this org's actual Prometheus data (e.g. a raw node-exporter target
+      // that never got cluster-relabeled) - `joinByField` still emits a row
+      // for it (empty-string join key), showing up as an all-blank phantom
+      // row at the bottom of the table with real-looking CPU/Mem numbers
+      // but no cluster name, no Nodes/Alerts count. Filtered out here
+      // rather than chasing which specific fallback branch in these
+      // already-large multi-source queries is responsible.
+      {
+        id: 'filterByValue',
+        options: {
+          filters: [{ fieldName: 'cluster', config: { id: 'regex', options: { value: '^$' } } }],
+          type: 'exclude',
+          match: 'any',
+        },
+      },
       {
         id: 'organize',
         options: {

@@ -138,6 +138,18 @@ function getNodesListScene() {
     $data: queryRunner,
     transformations: [
       { id: 'joinByField', options: { byField: 'node', mode: 'outer' } },
+      // Safety net, same reasoning as the Clusters list table's own copy of
+      // this (clustersApp.tsx) - `joinByField` still emits a row for any
+      // query result missing a "node" label entirely (join key ""), which
+      // would otherwise show as an all-blank phantom row.
+      {
+        id: 'filterByValue',
+        options: {
+          filters: [{ fieldName: 'node', config: { id: 'regex', options: { value: '^$' } } }],
+          type: 'exclude',
+          match: 'any',
+        },
+      },
       {
         id: 'organize',
         options: {
@@ -612,6 +624,7 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
         }),
         new SceneFlexLayout({
           direction: 'row',
+          ySizing: 'content',
           children: [
             new SceneFlexItem({ height: 400, body: cpuOptimizationPanel }),
             new SceneFlexItem({ height: 400, body: memoryOptimizationPanel }),
