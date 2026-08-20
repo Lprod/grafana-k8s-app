@@ -65,6 +65,7 @@ import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
+const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
 const pvcCapacityThresholds = {
@@ -458,6 +459,7 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
         .matchFieldsWithName('node')
         .overrideDisplayName('Node')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([{ title: 'View node', url: `${NODES_URL}/${encodeURIComponent(cluster)}/\${__value.text}\${__url.params}` }])
         .matchFieldsWithName('Value #cpu_usage_avg')
         .overrideDisplayName('CPU Avg')
         .overrideUnit('cores')
@@ -894,6 +896,7 @@ function getClusterCpuScene(cluster: string, clusterRegex: string) {
         .matchFieldsWithName('node')
         .overrideDisplayName('Nodes')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([{ title: 'View node', url: `${NODES_URL}/${encodeURIComponent(cluster)}/\${__value.text}\${__url.params}` }])
         .matchFieldsWithName('os_image')
         .overrideDisplayName('OS')
         .overrideCustomFieldConfig('align', 'left')
@@ -1262,6 +1265,7 @@ function getClusterMemoryScene(cluster: string, clusterRegex: string) {
         .matchFieldsWithName('node')
         .overrideDisplayName('Node')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([{ title: 'View node', url: `${NODES_URL}/${encodeURIComponent(cluster)}/\${__value.text}\${__url.params}` }])
         .matchFieldsWithName('os_image')
         .overrideDisplayName('OS')
         .overrideCustomFieldConfig('align', 'left')

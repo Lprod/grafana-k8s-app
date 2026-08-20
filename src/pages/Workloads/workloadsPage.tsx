@@ -86,6 +86,7 @@ import {
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
+const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
 function ResourceUsageLegend() {
@@ -663,6 +664,9 @@ function getWorkloadOverviewScene(
         .matchFieldsWithName('node')
         .overrideDisplayName('NODE')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          { title: 'View node', url: `${NODES_URL}/${encodeURIComponent(cluster)}/\${__value.text}\${__url.params}` },
+        ])
         .matchFieldsWithName('phase')
         .overrideDisplayName('STATUS')
         .overrideCustomFieldConfig('align', 'left')

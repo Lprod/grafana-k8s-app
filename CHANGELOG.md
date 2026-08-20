@@ -6,6 +6,7 @@
 - Fixed the Overview tab's VCF/vSphere info card: `vcf_vcenter` now reads `kube_node_info`'s own `provider` label directly instead of a (non-existent) vSphere lookup, and `vcf_clustername`/`vcf_esx_host` use the actual 2-hop chain across two different `vsphere_vm_cpu_*` metrics - the previous single 3-hop self-join against one metric didn't match the reference dashboard's real query chain.
 - Fixed the new CPU/Memory tabs' "Efficiency: Pod Usage/Requests (%)" panels, which the reference dashboard's own copy of divides by node capacity again (byte-for-byte identical to the neighboring "Distribution" panel) - now actually divides by the pod's own CPU/Memory requests, matching the panel's title.
 - Added a `node` label to the demo dataset's `container_fs_{reads,writes}_{bytes_,}total` counters (previously absent entirely), fixing "No data" on the new Storage tab's node-scoped Throughput/IOPS panels.
+- Added POD/WORKLOAD column links (to their own Drilldowns) to the Node Drilldown's new CPU/Memory tabs' Pods tables, and NODE column links (to the Node Drilldown) wherever still missing app-wide: the Workload Drilldown's own Overview Pods table, and the Cluster Drilldown's Overview/CPU/Memory tabs' own Nodes tables.
 
 ## 1.10.11
 
