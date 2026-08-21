@@ -11,7 +11,7 @@ import {
 } from '../../queries/workloadMemoryQueries';
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
 import { podContainersTableQueries } from '../../queries/podOverviewQueries';
-import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
+import { attachPercentField, coverageThresholds, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
@@ -43,7 +43,7 @@ function applyMemoryUsageSeriesOverrides(b: FieldConfigOverridesBuilder<any>) {
 
 const memoryStatPanelDefs: Array<{ key: WorkloadMemoryStatKey; title: string; unit: string; thresholds: typeof alertsThresholds }> = [
   { key: 'alertsFiring', title: 'Alerts: Firing (p95)', unit: 'short', thresholds: alertsThresholds },
-  { key: 'schedulingRequestsSet', title: 'Scheduling: Containers with Memory requests set (p95)', unit: 'percentunit', thresholds: usageThresholds },
+  { key: 'schedulingRequestsSet', title: 'Scheduling: Containers with Memory requests set (p95)', unit: 'percentunit', thresholds: coverageThresholds },
   { key: 'alignmentUsageRequests', title: 'Alignment: Usage/Requests (p95)', unit: 'percentunit', thresholds: usageThresholds },
 ];
 

@@ -42,6 +42,21 @@ export const usageThresholds = {
   ],
 };
 
+// The *inverse* direction of usageThresholds, for "coverage"-style ratios
+// where a higher number is unambiguously better and 100% is the goal - e.g.
+// "Containers with CPU/Memory requests set". usageThresholds is a
+// *utilisation* scale (too low wastes capacity, too high risks the ceiling),
+// so reusing it here paints a perfectly-configured 100% workload red. Same
+// 60%/90% split, mirrored: under 60% red, 60-90% orange, 90%+ green.
+export const coverageThresholds = {
+  mode: ThresholdsMode.Absolute,
+  steps: [
+    { color: 'red', value: -Infinity },
+    { color: 'orange', value: 0.6 },
+    { color: 'green', value: 0.9 },
+  ],
+};
+
 export function usageTierFromFraction(fraction: number | null | undefined): UsageTier {
   if (fraction === null || fraction === undefined || Number.isNaN(fraction)) {
     return 'unknown';

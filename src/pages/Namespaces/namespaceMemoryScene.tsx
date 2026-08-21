@@ -20,7 +20,7 @@ import {
   namespaceMemoryWorkloadAlignmentQuery,
   NamespaceMemoryStatKey,
 } from '../../queries/namespaceMemoryQueries';
-import { attachPercentField, requestUsageCell, usageTierCell, usageThresholds } from '../../scenes/tableCells';
+import { attachPercentField, coverageThresholds, requestUsageCell, usageThresholds, usageTierCell } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { THANOS_VARIABLE_NAME, WORKLOAD_VARIABLE_NAME, createWorkloadFilterVariable } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
@@ -56,7 +56,7 @@ function applyMemoryUsageSeriesOverrides(b: any) {
 
 const memoryStatPanelDefs: Array<{ key: NamespaceMemoryStatKey; title: string; unit: string; thresholds: typeof alertsThresholds }> = [
   { key: 'alertsFiring', title: 'Alerts: Firing (p95)', unit: 'short', thresholds: alertsThresholds },
-  { key: 'schedulingRequestsSet', title: 'Scheduling: Containers with Memory requests set (p95)', unit: 'percentunit', thresholds: usageThresholds },
+  { key: 'schedulingRequestsSet', title: 'Scheduling: Containers with Memory requests set (p95)', unit: 'percentunit', thresholds: coverageThresholds },
   { key: 'alignmentUsageRequests', title: 'Alignment: Usage/Requests (p95)', unit: 'percentunit', thresholds: usageThresholds },
 ];
 
