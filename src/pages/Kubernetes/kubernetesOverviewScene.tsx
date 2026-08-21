@@ -17,7 +17,7 @@ import { FieldColorModeId } from '@grafana/data';
 import { Combobox, ComboboxOption, Icon } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { CLUSTER_VARIABLE_NAME, THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
-import { SectionHeading } from '../../scenes/clustersApp';
+import { SectionHeading } from '../../scenes/sectionHeading';
 import { PanelLinkTitleItem } from '../../scenes/panelLinks';
 import {
   deployedContainerImagesQuery,
@@ -30,6 +30,7 @@ import {
   kubernetesTopStatQueries,
 } from '../../queries/kubernetesOverviewQueries';
 import { attachExploreMenus } from '../../scenes/panelExplore';
+import { applyEntityDrilldownLinks } from '../../scenes/drilldownLinks';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
@@ -232,33 +233,14 @@ export function getKubernetesOverviewScene() {
   });
   // The 12 swapped-in issue queries carry different label sets (some
   // cluster+node, some cluster+namespace+pod, one cluster+namespace+
-  // deployment) - `matchFieldsWithName` only applies to whichever of these
-  // columns actually exist in the currently-selected query's result, so one
-  // override set safely covers all of them. Same native-table-link idiom
-  // (`__data.fields.X`/`__value.text`) every other list table in this app
-  // already uses for its own Cluster/Namespace/Node/Pod columns.
+  // deployment), which is exactly the case applyEntityDrilldownLinks is
+  // built for - it only touches whichever of those columns the currently
+  // selected query actually returns.
   const detailTable = PanelBuilders.table()
     .setTitle('Issue details')
     .setData(detailQueryRunner)
     .setNoValue(kubernetesIssueQueries[initialKey].noValueText)
-    .setOverrides((b) =>
-      b
-        .matchFieldsWithName('cluster')
-        .overrideLinks([{ title: 'View cluster', url: `${CLUSTERS_URL}/\${__value.text}\${__url.params}` }])
-        .matchFieldsWithName('namespace')
-        .overrideLinks([
-          { title: 'View namespace', url: `${NAMESPACES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}` },
-        ])
-        .matchFieldsWithName('node')
-        .overrideLinks([{ title: 'View node', url: `${NODES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}` }])
-        .matchFieldsWithName('pod')
-        .overrideLinks([
-          {
-            title: 'View pod',
-            url: `${WORKLOADS_URL}/\${__data.fields.cluster}/\${__data.fields.namespace}/\${__data.fields.workload_type}/\${__data.fields.workload}/pods/\${__value.text}\${__url.params}`,
-          },
-        ])
-    )
+    .setOverrides(applyEntityDrilldownLinks)
     .build();
 
   const detailView = new DetailViewSelection({ selectedKey: initialKey }, detailQueryRunner, detailTable);

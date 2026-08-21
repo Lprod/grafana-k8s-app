@@ -35,6 +35,8 @@ import {
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
+import { addKubectlField, applyKubectlColumn } from '../../scenes/kubectlCell';
+import { applyEntityDrilldownLinks } from '../../scenes/drilldownLinks';
 
 const ALERTS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Alerts}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
@@ -127,12 +129,35 @@ function getAlertsScene() {
     .setCustomFieldConfig('spanNulls', true)
     .build();
 
+  // ALERTS carries no "workload" label of its own, but the POD column's link
+  // has to point at the Pod Drilldown, whose route is nested under its owning
+  // workload (/workloads/:cluster/:namespace/:workloadType/:workload/pods/:pod).
+  // Three mutually-exclusive branches (mutually exclusive so `or` can't
+  // duplicate a row - `or` only drops a right-hand series whose label set
+  // matches the left *exactly*, which the added workload labels would defeat):
+  //   1. pod-scoped alerts whose pod has an ownership record - workload/
+  //      workload_type joined on, same existence-join idiom every pod-level
+  //      issue query on the Kubernetes home page uses.
+  //   2. pod-scoped alerts whose pod has none (bare/standalone pods, static
+  //      pods) - workload derived from the pod's own name with
+  //      workload_type="pod", the same bare-pod fallback
+  //      kubernetesTopStatQueries.workloads uses. Without this the POD link
+  //      would resolve to a URL with empty workload segments.
+  //   3. node-/cluster-level alerts, which have no `pod` label at all - passed
+  //      through untouched so the join can't silently drop them.
+  const alertsFilters = `alertstate="firing", ${commonFilters}, alertname=~"${alertnameRegex}"`;
+  const podAlerts = `ALERTS{${alertsFilters}, pod!=""}`;
+  const nonPodAlerts = `ALERTS{${alertsFilters}, pod=""}`;
+  const podOwner = `namespace_workload_pod:kube_pod_owner:relabel{cluster=~"${clusterRegex}"}`;
+  const ownedPodAlerts = `(${podAlerts} * on (cluster, namespace, pod) group_left (workload, workload_type) ${podOwner})`;
+  const unownedPodAlerts = `label_replace(label_replace(${podAlerts} unless on (cluster, namespace, pod) (${podOwner}), "workload", "$1", "pod", "(.+)"), "workload_type", "pod", "", "")`;
+
   const alertsTableRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [
       {
         refId: 'alerts',
-        expr: `ALERTS{alertstate="firing", ${commonFilters}, alertname=~"${alertnameRegex}"}`,
+        expr: `${ownedPodAlerts} or ${unownedPodAlerts} or ${nonPodAlerts}`,
         format: 'table',
         instant: true,
       },
@@ -145,31 +170,58 @@ function getAlertsScene() {
       {
         id: 'filterFieldsByName',
         options: {
-          include: { names: ['cluster', 'severity', 'alertname', 'namespace', 'pod', 'container', 'endpoint', 'instance', 'job'] },
+          include: {
+            names: [
+              'cluster',
+              'severity',
+              'alertname',
+              'node',
+              'namespace',
+              'pod',
+              'workload',
+              'workload_type',
+              'container',
+              'endpoint',
+              'instance',
+              'job',
+            ],
+          },
         },
       },
       addActionField,
+      addKubectlField,
       {
         id: 'organize',
         options: {
+          // Action goes first, not last: it hosts the "Investigate" button
+          // (this page's whole Assistant integration) and this table is wide
+          // enough to scroll horizontally on a normal screen, which used to
+          // leave the button permanently off-screen to the right.
           indexByName: {
-            cluster: 0,
-            severity: 1,
-            alertname: 2,
-            namespace: 3,
-            pod: 4,
-            container: 5,
-            endpoint: 6,
-            instance: 7,
-            job: 8,
-            action: 9,
+            action: 0,
+            kubectl: 1,
+            cluster: 2,
+            severity: 3,
+            alertname: 4,
+            node: 5,
+            namespace: 6,
+            pod: 7,
+            workload: 8,
+            workload_type: 9,
+            container: 10,
+            endpoint: 11,
+            instance: 12,
+            job: 13,
           },
           renameByName: {
             cluster: 'CLUSTER',
             severity: 'SEVERITY',
             alertname: 'ALERTNAME',
+            node: 'NODE',
             namespace: 'NAMESPACE',
             pod: 'POD',
+            workload: 'WORKLOAD',
+            workload_type: 'TYPE',
             container: 'CONTAINER',
             endpoint: 'ENDPOINT',
             instance: 'INSTANCE',
@@ -184,8 +236,18 @@ function getAlertsScene() {
   const alertsTable = PanelBuilders.table()
     .setTitle('Firing Alerts at ${__to:date:YYYY-MM-DD HH-mm-ss}')
     .setData(alertsTableData)
+    // Icon-only kubectl column sits next to Investigate as the second half
+    // of the same "act on this alert" pair.
     .setOverrides((b) =>
-      b
+      applyKubectlColumn(applyEntityDrilldownLinks(b))
+        // workload_type only exists as a column because the POD/WORKLOAD links
+        // need it to build their URL (it can't be dropped from the frame and
+        // still be readable by a `${__data.fields.workload_type}` macro, and
+        // custom.hideFrom is a no-op on the Table panel - see the project's
+        // own notes on that). Kept narrow so it costs as little width as
+        // possible in an already-wide table.
+        .matchFieldsWithName('workload_type')
+        .overrideCustomFieldConfig('width', 90)
         .matchFieldsWithName('SEVERITY')
         .overrideMappings(severityMappings)
         .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.ColorBackground })
@@ -195,6 +257,7 @@ function getAlertsScene() {
           cellComponent: InvestigateActionCell,
         } as any)
         .overrideCustomFieldConfig('width', 120)
+
     )
     .build();
 

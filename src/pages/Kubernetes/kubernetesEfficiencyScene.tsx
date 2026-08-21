@@ -10,7 +10,7 @@ import {
 import { BigValueColorMode, BigValueGraphMode, ThresholdsMode, VizOrientation } from '@grafana/schema';
 import React from 'react';
 import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
-import { SectionHeading } from '../../scenes/clustersApp';
+import { SectionHeading } from '../../scenes/sectionHeading';
 import {
   kubernetesEfficiencyTableQueries,
   kubernetesEfficiencyTopStatQueries,
@@ -18,6 +18,7 @@ import {
   kubernetesEfficiencyWasteByNamespaceQueries,
 } from '../../queries/kubernetesEfficiencyQueries';
 import { attachExploreMenus } from '../../scenes/panelExplore';
+import { applyEntityDrilldownLinks } from '../../scenes/drilldownLinks';
 
 // Same green/orange-background convention as Grafana's own reference for
 // this tab (distinct from the Overview tab's red/green - that one still
@@ -68,7 +69,16 @@ function buildEfficiencyTable(def: (typeof kubernetesEfficiencyTableQueries)[num
     $data: runner,
     transformations: [{ id: 'organize', options: { excludeByName: { Time: true } } }],
   });
-  return PanelBuilders.table().setTitle(def.title).setData(data).setNoValue(def.noValueText).build();
+  // Every one of these 5 tables returns cluster/namespace/pod/container plus
+  // workload/workload_type (each query already joins the pod's own ownership
+  // record on for the last two), so the standard Drilldown link set applies
+  // as-is - same links the Overview tab's own issue table has.
+  return PanelBuilders.table()
+    .setTitle(def.title)
+    .setData(data)
+    .setNoValue(def.noValueText)
+    .setOverrides(applyEntityDrilldownLinks)
+    .build();
 }
 
 export function getKubernetesEfficiencyScene() {

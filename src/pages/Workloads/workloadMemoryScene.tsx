@@ -21,7 +21,7 @@ import {
   WorkloadMemoryStatKey,
 } from '../../queries/workloadMemoryQueries';
 import { substituteWorkloadTokens } from '../../queries/workloadOverviewQueries';
-import { attachPercentField, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
+import { attachPercentField, coverageThresholds, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
@@ -54,7 +54,7 @@ function applyMemoryUsageSeriesOverrides(b: FieldConfigOverridesBuilder<any>) {
 
 const memoryStatPanelDefs: Array<{ key: WorkloadMemoryStatKey; title: string; unit: string; thresholds: typeof alertsThresholds }> = [
   { key: 'alertsFiring', title: 'Alerts: Firing (p95)', unit: 'short', thresholds: alertsThresholds },
-  { key: 'schedulingRequestsSet', title: 'Scheduling: Containers with Memory requests set (p95)', unit: 'percentunit', thresholds: usageThresholds },
+  { key: 'schedulingRequestsSet', title: 'Scheduling: Containers with Memory requests set (p95)', unit: 'percentunit', thresholds: coverageThresholds },
   { key: 'alignmentUsageRequests', title: 'Alignment: Usage/Requests (p95)', unit: 'percentunit', thresholds: usageThresholds },
 ];
 
@@ -73,7 +73,13 @@ function buildMemoryStatPanel(title: string, expr: string, unit: string, thresho
     .build();
 }
 
-export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: string, workloadRegex: string, workload: string) {
+export function getWorkloadMemoryScene(
+  clusterRegex: string,
+  namespaceRegex: string,
+  workloadRegex: string,
+  workload: string,
+  podBaseUrl: string
+) {
   // Hidden pod variable - same reasoning as the Overview/CPU tabs' own (see
   // getWorkloadOverviewScene in workloadsPage.tsx): every $pod-referencing
   // query below needs to resolve to "every pod belonging to this workload",
@@ -199,6 +205,12 @@ export function getWorkloadMemoryScene(clusterRegex: string, namespaceRegex: str
         .matchFieldsWithName('pod')
         .overrideDisplayName('POD')
         .overrideCustomFieldConfig('align', 'left')
+        // This table is already scoped to one cluster/namespace/workload
+        // (route params), so the Pod Drilldown's own URL prefix is passed in
+        // pre-built rather than read per-row - `cluster`/`namespace`/
+        // `workload` are excluded from the frame above and aren't available
+        // to a `${__data.fields.X}` macro here.
+        .overrideLinks([{ title: 'View pod', url: `${podBaseUrl}/\${__value.text}\${__url.params}` }])
         .matchFieldsWithName('workload_type')
         .overrideDisplayName('TYPE')
         .overrideCustomFieldConfig('align', 'left')
