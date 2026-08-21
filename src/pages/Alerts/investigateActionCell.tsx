@@ -1,32 +1,11 @@
 import React from 'react';
-import { DataTransformContext, FieldType } from '@grafana/data';
 import { createAssistantContextItem, OpenAssistantButton } from '@grafana/assistant';
 import { CustomCellRendererProps } from '@grafana/ui';
-import { CustomTransformOperator } from '@grafana/scenes';
-import { map } from 'rxjs/operators';
+import { OcActionButton, ocScopeForRow } from '../../scenes/ocCell';
 
-// The alerts query only returns label columns - there's no natural field to
-// host an "Investigate" button, so this adds a synthetic one every row can
-// render a cell against. Must run after filterFieldsByName (which would
-// otherwise strip an unlisted field) and before organize (so the new field
-// still picks up a position/rename).
-export const addActionField: CustomTransformOperator = (_context: DataTransformContext) => (source) =>
-  source.pipe(
-    map((frames) =>
-      frames.map((frame) => ({
-        ...frame,
-        fields: [
-          ...frame.fields,
-          {
-            name: 'action',
-            type: FieldType.string,
-            config: {},
-            values: frame.fields[0]?.values.map(() => '') ?? [],
-          },
-        ],
-      }))
-    )
-  );
+// The synthetic `action` field both buttons below render into is added by the
+// shared helper in ocCell.tsx - this page just renders a richer cell into it.
+export { addActionField } from '../../scenes/ocCell';
 
 function fieldValue(frame: CustomCellRendererProps['frame'], rowIndex: number, fieldName: string): string {
   const field = frame.fields.find((f) => f.name === fieldName);
@@ -57,18 +36,25 @@ export function InvestigateActionCell({ frame, rowIndex }: CustomCellRendererPro
     container ? `, container "${container}"` : ''
   }. Explain the likely cause and suggest next steps.`;
 
+  // Both row actions live in the one Action column, side by side: ask the
+  // Assistant about this alert, or copy an oc command for whatever entity it
+  // is about. The oc scope is read from the same row rather than re-derived
+  // here, so it stays in step with every other table's own Action column.
   return (
-    <OpenAssistantButton
-      title="Investigate"
-      size="sm"
-      origin="debeka-k8s-app/alerts-table"
-      prompt={prompt}
-      context={[
-        createAssistantContextItem('structured', {
-          title: `Alert: ${alertname}`,
-          data: { cluster, severity, alertname, node, namespace, workload, workloadType, pod, container },
-        }),
-      ]}
-    />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <OpenAssistantButton
+        title="Investigate"
+        size="sm"
+        origin="debeka-k8s-app/alerts-table"
+        prompt={prompt}
+        context={[
+          createAssistantContextItem('structured', {
+            title: `Alert: ${alertname}`,
+            data: { cluster, severity, alertname, node, namespace, workload, workloadType, pod, container },
+          }),
+        ]}
+      />
+      <OcActionButton scope={ocScopeForRow(frame, rowIndex)} />
+    </div>
   );
 }

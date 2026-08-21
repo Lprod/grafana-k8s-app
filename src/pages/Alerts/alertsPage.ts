@@ -35,7 +35,6 @@ import {
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
-import { addKubectlField, applyKubectlColumn } from '../../scenes/kubectlCell';
 import { applyEntityDrilldownLinks } from '../../scenes/drilldownLinks';
 
 const ALERTS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Alerts}`;
@@ -189,7 +188,6 @@ function getAlertsScene() {
         },
       },
       addActionField,
-      addKubectlField,
       {
         id: 'organize',
         options: {
@@ -199,19 +197,18 @@ function getAlertsScene() {
           // leave the button permanently off-screen to the right.
           indexByName: {
             action: 0,
-            kubectl: 1,
-            cluster: 2,
-            severity: 3,
-            alertname: 4,
-            node: 5,
-            namespace: 6,
-            pod: 7,
-            workload: 8,
-            workload_type: 9,
-            container: 10,
-            endpoint: 11,
-            instance: 12,
-            job: 13,
+            cluster: 1,
+            severity: 2,
+            alertname: 3,
+            node: 4,
+            namespace: 5,
+            pod: 6,
+            workload: 7,
+            workload_type: 8,
+            container: 9,
+            endpoint: 10,
+            instance: 11,
+            job: 12,
           },
           renameByName: {
             cluster: 'CLUSTER',
@@ -236,10 +233,8 @@ function getAlertsScene() {
   const alertsTable = PanelBuilders.table()
     .setTitle('Firing Alerts at ${__to:date:YYYY-MM-DD HH-mm-ss}')
     .setData(alertsTableData)
-    // Icon-only kubectl column sits next to Investigate as the second half
-    // of the same "act on this alert" pair.
     .setOverrides((b) =>
-      applyKubectlColumn(applyEntityDrilldownLinks(b))
+      applyEntityDrilldownLinks(b)
         // workload_type only exists as a column because the POD/WORKLOAD links
         // need it to build their URL (it can't be dropped from the frame and
         // still be readable by a `${__data.fields.workload_type}` macro, and
@@ -256,7 +251,7 @@ function getAlertsScene() {
           type: TableCellDisplayMode.Custom,
           cellComponent: InvestigateActionCell,
         } as any)
-        .overrideCustomFieldConfig('width', 120)
+        .overrideCustomFieldConfig('width', 190)
 
     )
     .build();

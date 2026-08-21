@@ -74,7 +74,7 @@ import {
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 import { SectionHeading } from '../../scenes/sectionHeading';
-import { addKubectlField, applyKubectlColumn } from '../../scenes/kubectlCell';
+import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
@@ -145,7 +145,7 @@ function getNamespacesListScene() {
       attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
       attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
       attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
-      addKubectlField,
+      addActionField,
       {
         id: 'organize',
         options: {
@@ -156,7 +156,7 @@ function getNamespacesListScene() {
             'Value #mem_limits_percent': true,
           },
           indexByName: {
-            kubectl: 0,
+            action: 0,
             cluster: 1,
             namespace: 2,
             'Value #info': 3,
@@ -177,7 +177,7 @@ function getNamespacesListScene() {
     .setTitle('Namespaces')
     .setData(transformedData)
     .setOverrides((b) =>
-      applyKubectlColumn(b)
+      applyOcActionColumn(b)
         .matchFieldsWithName('cluster')
         .overrideDisplayName('Cluster')
         .overrideCustomFieldConfig('align', 'left')

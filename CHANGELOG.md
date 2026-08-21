@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.4
+
+- Reworked the row-action column introduced in v1.11.3, per feedback:
+  - **`oc` instead of `kubectl`** throughout - this org runs OpenShift. Beyond the binary name, the commands now use the OpenShift-idiomatic spellings where they differ: `oc rsh <pod>` instead of `kubectl exec -it ... -- sh`, `oc adm cordon`/`oc adm drain` instead of the top-level kubectl verbs, `oc get events --field-selector involvedObject.name=...` instead of the newer `kubectl events --for` (which older `oc` builds don't have), and `oc describe project` for a namespace.
+  - **One Action column instead of two.** On the Alerts page the "Investigate" and `oc` buttons now sit side by side in the single existing Action column; every other table's previously nameless icon column is now called "Action" too.
+  - **A real button instead of a bare icon**: same shape and size as the Assistant's own "Investigate" button (secondary, solid, `sm`), with the clipboard icon and the label `oc`. Deliberately without the Assistant's purple/orange gradient border, which is its branding.
+- Renamed `src/scenes/kubectlCell.tsx` to `ocCell.tsx` and its exports accordingly; the synthetic column's field is now called `action` everywhere, so the Alerts page's own Action field and every other table's use one shared helper.
+
 ## 1.11.3
 
 - Fixed the Alerts page's "Firing Alerts" table having no drilldown links at all on its Cluster/Namespace/Pod columns. The Pod link needs the pod's owning workload (the Pod Drilldown's route is nested under it), which `ALERTS` carries no label for, so the table's query now attributes each pod-scoped alert to its workload in three mutually-exclusive branches: joined from `namespace_workload_pod:kube_pod_owner:relabel` where a record exists, derived from the pod's own name (`workload_type="pod"`) where it doesn't, and left untouched for node-/cluster-level alerts that have no `pod` label at all. Adds WORKLOAD and TYPE columns (both also needed to build the link), and links WORKLOAD to the Workload Drilldown too.

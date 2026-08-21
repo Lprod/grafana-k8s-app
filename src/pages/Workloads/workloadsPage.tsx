@@ -85,7 +85,7 @@ import {
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 import { SectionHeading } from '../../scenes/sectionHeading';
-import { addKubectlField, applyKubectlColumn } from '../../scenes/kubectlCell';
+import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { createChangeAnnotations } from '../../scenes/changeAnnotations';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 
@@ -187,7 +187,7 @@ function getWorkloadsListScene() {
       attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
       attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
       attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
-      addKubectlField,
+      addActionField,
       {
         id: 'organize',
         options: {
@@ -201,7 +201,7 @@ function getWorkloadsListScene() {
             'Value #mem_limits_percent': true,
           },
           indexByName: {
-            kubectl: 0,
+            action: 0,
             cluster: 1,
             namespace: 2,
             workload: 3,
@@ -223,7 +223,7 @@ function getWorkloadsListScene() {
     .setTitle('Workloads')
     .setData(transformedData)
     .setOverrides((b) =>
-      applyKubectlColumn(b)
+      applyOcActionColumn(b)
         .matchFieldsWithName('cluster')
         .overrideDisplayName('Cluster')
         .overrideCustomFieldConfig('align', 'left')
@@ -624,7 +624,7 @@ function getWorkloadOverviewScene(
       // column (not asked to combine).
       attachPercentField('Value #cpuRequests', 'cpu_requests_percent'),
       attachPercentField('Value #memRequests', 'mem_requests_percent'),
-      addKubectlField,
+      addActionField,
       {
         id: 'organize',
         options: {
@@ -647,7 +647,7 @@ function getWorkloadOverviewScene(
             mem_requests_percent: true,
           },
           indexByName: {
-            kubectl: 0,
+            action: 0,
             pod: 1,
             node: 2,
             phase: 3,
@@ -668,9 +668,9 @@ function getWorkloadOverviewScene(
     .setTitle('Pods')
     .setData(podsData)
     // cluster/namespace aren't columns here (the page is already scoped to
-    // one workload), so they're passed to the kubectl menu as fixed values.
+    // one workload), so they're passed to the oc menu as fixed values.
     .setOverrides((b) =>
-      applyKubectlColumn(b, { cluster, namespace })
+      applyOcActionColumn(b, { cluster, namespace })
         .matchFieldsWithName('pod')
         .overrideDisplayName('POD')
         .overrideCustomFieldConfig('align', 'left')

@@ -63,7 +63,7 @@ import {
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 import { SectionHeading } from '../../scenes/sectionHeading';
-import { addKubectlField, applyKubectlColumn } from '../../scenes/kubectlCell';
+import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 
 const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
@@ -150,13 +150,13 @@ function getNodesListScene() {
           match: 'any',
         },
       },
-      addKubectlField,
+      addActionField,
       {
         id: 'organize',
         options: {
           excludeByName: { Time: true, asserts_env: true, asserts_site: true, provider_id: true, 'Value #info': true },
           indexByName: {
-            kubectl: 0,
+            action: 0,
             cluster: 1,
             node: 2,
             'Value #alerts': 3,
@@ -179,7 +179,7 @@ function getNodesListScene() {
     .setTitle('Nodes')
     .setData(transformedData)
     .setOverrides((b) =>
-      applyKubectlColumn(b)
+      applyOcActionColumn(b)
         .matchFieldsWithName('cluster')
         .overrideDisplayName('Cluster')
         .overrideCustomFieldConfig('align', 'left')
@@ -469,7 +469,7 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
       attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
       attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
       attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
-      addKubectlField,
+      addActionField,
       {
         id: 'organize',
         options: {
@@ -503,7 +503,7 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
             'Value #mem_limits_percent': true,
           },
           indexByName: {
-            kubectl: 0,
+            action: 0,
             pod: 1,
             workload: 2,
             workload_type: 3,
@@ -525,10 +525,10 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
     .setTitle('Pods')
     .setData(podsData)
     // `cluster` isn't a column here (the page is already scoped to one), so
-    // it's passed to the kubectl menu as a fixed value; namespace/pod are
+    // it's passed to the oc menu as a fixed value; namespace/pod are
     // still read per-row.
     .setOverrides((b) =>
-      applyKubectlColumn(b, { cluster })
+      applyOcActionColumn(b, { cluster })
         .matchFieldsWithName('pod')
         .overrideDisplayName('POD')
         .overrideCustomFieldConfig('align', 'left')
