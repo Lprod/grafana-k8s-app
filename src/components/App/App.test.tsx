@@ -9,9 +9,15 @@ import { getClustersSceneApp } from '../../scenes/clustersApp';
 describe('Components/App', () => {
   test('clusters scene app exposes the Clusters page with a cluster drilldown', () => {
     const sceneApp = getClustersSceneApp();
-    const [clustersPage] = sceneApp.state.pages;
+    // Looked up by title, not by position: the Kubernetes home page was
+    // added ahead of Clusters in the `pages` array in v1.7.0, which silently
+    // broke this test's original `const [clustersPage] = ...` destructure.
+    const clustersPage = sceneApp.state.pages.find((page) => page.state.title === 'Clusters');
 
-    expect(clustersPage.state.title).toBe('Clusters');
+    expect(clustersPage).toBeDefined();
+    if (!clustersPage) {
+      return;
+    }
     expect(clustersPage.state.url).toBe('/a/debeka-k8s-app/clusters');
     expect(clustersPage.state.drilldowns).toHaveLength(1);
     expect(clustersPage.state.drilldowns?.[0].routePath).toBe('/:cluster/*');
