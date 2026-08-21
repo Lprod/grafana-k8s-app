@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.11.2
+
+- Fixed the Kubernetes home page's "Issue details" table (the shared table behind every Availability/Stability/Infrastructure mini panel's "View detail" link) having no Cluster/Namespace/Pod column links at all, unlike every other table in this app - added the same native-table-link idiom already used elsewhere, applied via `matchFieldsWithName` so it safely covers whichever of the 12 swapped-in issue queries' differing label sets (cluster+node, cluster+namespace+pod, ...) is currently selected.
+- Fixed the Clusters list table's "Alerts" column disagreeing with what the Cluster Drilldown's own alerts badge and the Alerts page could actually show after clicking through: the column's query was restricted to `alertname=~"(Kube.*|CPUThrottlingHigh)"` (plus an OR'd-in `GRAFANA_ALERTS` branch), while both of those only exclude `ArgoCDSyncAlert` and otherwise count every firing alert - simplified to match, same fix/reasoning the Nodes list's own "Alerts" column got in v1.11.1.
+
 ## 1.11.1
 
 - Fixed the Nodes list table's "Alerts" column disagreeing with what the Alerts page could actually show after clicking through: the column's own count also joined in pod-scoped alerts attributed to the node via `kube_pod_info`, but the Alerts page's Node filter can only do a plain `node` label match with no way to replicate that join from a URL param (cluster/node were set correctly, alerts just never showed) - simplified to match, same fix/reasoning the Node Drilldown's own health banner already got.

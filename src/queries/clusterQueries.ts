@@ -6,7 +6,18 @@ export const clusterTableQueries = {
   // metrics "provider_id", which is a full "<scheme>://<node-id>" URI) -
   // used as-is here, no label_replace extraction needed.
   info: `sum by (asserts_env, asserts_site, cluster, provider) (last_over_time((sum by (asserts_env, asserts_site, cluster, node, provider) (max by (asserts_env, asserts_site, cluster, container_runtime_version, internal_ip, kernel_version, kubelet_version, node, os_image, pod_cidr, provider, system_uuid) (kube_node_info{cluster=~".+"})))[$__range:]))`,
-  alerts: `count by (cluster) (ALERTS{alertname=~"(Kube.*|CPUThrottlingHigh)", alertstate=~"firing", cluster=~".+"} or GRAFANA_ALERTS{alertname=~"(Kube.*|CPUThrottlingHigh)", alertstate=~"firing", cluster=~".+"})`,
+  // Deliberately a plain "firing alerts for this cluster" count, not
+  // restricted to alertname=~"(Kube.*|CPUThrottlingHigh)" (an earlier
+  // version of this did, plus an OR'd-in GRAFANA_ALERTS branch) - this
+  // column's own "View alerts" link goes straight to the Alerts page with
+  // just `var-cluster=<cluster>` in the URL, and that page's own filters
+  // (and the Cluster Drilldown's own alerts badge) count *every* firing
+  // ALERTS series for the cluster, only excluding "ArgoCDSyncAlert". The
+  // narrower alertname-restricted count disagreed with what the linked-to
+  // page/drilldown could actually show (e.g. "5" here, "20" after clicking
+  // through) - same fix/reasoning as the Nodes list's own "Alerts" column
+  // got in v1.11.1 (nodeQueries.ts).
+  alerts: `count by (cluster) (ALERTS{alertstate="firing", cluster=~".+", alertname!~"ArgoCDSyncAlert"})`,
   cpu_usage_avg: `avg_over_time((sum by (cluster) (label_join(sum by (cluster, instance) (max by (cluster, instance, cpu, core) (1 - rate(node_cpu_seconds_total{cluster=~".+", mode=~"idle"}[$__rate_interval]) >= 0)) or max by (cluster, instance) (rate(node_cpu_usage_seconds_total{cluster=~".+"}[$__rate_interval]) >= 0) or label_join(label_join(label_join(max by (k8s_cluster_name, k8s_node_name) (rate(k8s_node_cpu_time_seconds_total{k8s_cluster_name=~".+"}[$__rate_interval])), "cluster", ",", "k8s_cluster_name"), "instance", ",", "k8s_node_name"), "node", ",", "k8s_node_name"), "node", ",", "instance")))[$__range:])`,
   cpu_usage_avg_percent: `avg_over_time((sum by (cluster) (label_join(sum by (cluster, instance) (max by (cluster, instance, cpu, core) (1 - rate(node_cpu_seconds_total{cluster=~".+", mode=~"idle"}[$__rate_interval]) >= 0)) or max by (cluster, instance) (rate(node_cpu_usage_seconds_total{cluster=~".+"}[$__rate_interval]) >= 0) or label_join(label_join(label_join(max by (k8s_cluster_name, k8s_node_name) (rate(k8s_node_cpu_time_seconds_total{k8s_cluster_name=~".+"}[$__rate_interval])), "cluster", ",", "k8s_cluster_name"), "instance", ",", "k8s_node_name"), "node", ",", "k8s_node_name"), "node", ",", "instance")))[$__range:]) / on (cluster) (sum by (cluster) (max by (cluster, node, resource) (kube_node_status_capacity{cluster=~".+", resource=~"cpu"})) or sum by (cluster) (label_join(label_join(max by (k8s_cluster_name, k8s_node_name) (system_cpu_logical_count{k8s_cluster_name=~".+"}), "cluster", ",", "k8s_cluster_name"), "node", ",", "k8s_node_name")))`,
   cpu_usage_max: `max_over_time((sum by (cluster) (label_join(sum by (cluster, instance) (max by (cluster, instance, cpu, core) (1 - rate(node_cpu_seconds_total{cluster=~".+", mode=~"idle"}[$__rate_interval]) >= 0)) or max by (cluster, instance) (rate(node_cpu_usage_seconds_total{cluster=~".+"}[$__rate_interval]) >= 0) or label_join(label_join(label_join(max by (k8s_cluster_name, k8s_node_name) (rate(k8s_node_cpu_time_seconds_total{k8s_cluster_name=~".+"}[$__rate_interval])), "cluster", ",", "k8s_cluster_name"), "instance", ",", "k8s_node_name"), "node", ",", "k8s_node_name"), "node", ",", "instance")))[$__range:])`,

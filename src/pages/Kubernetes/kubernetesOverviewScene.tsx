@@ -230,10 +230,35 @@ export function getKubernetesOverviewScene() {
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [{ refId: 'detail', expr: kubernetesIssueQueries[initialKey].expr, format: 'table', instant: true }],
   });
+  // The 12 swapped-in issue queries carry different label sets (some
+  // cluster+node, some cluster+namespace+pod, one cluster+namespace+
+  // deployment) - `matchFieldsWithName` only applies to whichever of these
+  // columns actually exist in the currently-selected query's result, so one
+  // override set safely covers all of them. Same native-table-link idiom
+  // (`__data.fields.X`/`__value.text`) every other list table in this app
+  // already uses for its own Cluster/Namespace/Node/Pod columns.
   const detailTable = PanelBuilders.table()
     .setTitle('Issue details')
     .setData(detailQueryRunner)
     .setNoValue(kubernetesIssueQueries[initialKey].noValueText)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('cluster')
+        .overrideLinks([{ title: 'View cluster', url: `${CLUSTERS_URL}/\${__value.text}\${__url.params}` }])
+        .matchFieldsWithName('namespace')
+        .overrideLinks([
+          { title: 'View namespace', url: `${NAMESPACES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}` },
+        ])
+        .matchFieldsWithName('node')
+        .overrideLinks([{ title: 'View node', url: `${NODES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}` }])
+        .matchFieldsWithName('pod')
+        .overrideLinks([
+          {
+            title: 'View pod',
+            url: `${WORKLOADS_URL}/\${__data.fields.cluster}/\${__data.fields.namespace}/\${__data.fields.workload_type}/\${__data.fields.workload}/pods/\${__value.text}\${__url.params}`,
+          },
+        ])
+    )
     .build();
 
   const detailView = new DetailViewSelection({ selectedKey: initialKey }, detailQueryRunner, detailTable);
