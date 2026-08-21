@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.5
+
+- Gave the `oc` row-action button the same purple-to-orange gradient border the Assistant's own "Investigate" button wears, so the two read as one matched pair of row actions instead of a branded button next to a plain one. Ported from `@grafana/assistant`'s own compiled styles rather than eyeballed, so the two stay identical.
+
 ## 1.11.4
 
 - Reworked the row-action column introduced in v1.11.3, per feedback:

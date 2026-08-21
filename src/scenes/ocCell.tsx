@@ -1,7 +1,8 @@
 import React from 'react';
-import { AppEvents, DataTransformContext, FieldType, IconName } from '@grafana/data';
+import { AppEvents, DataTransformContext, FieldType, GrafanaTheme2, IconName } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
-import { Button, CustomCellRendererProps, Dropdown, Menu } from '@grafana/ui';
+import { Button, CustomCellRendererProps, Dropdown, Menu, useStyles2 } from '@grafana/ui';
+import { css } from '@emotion/css';
 import { CustomTransformOperator, FieldConfigOverridesBuilder } from '@grafana/scenes';
 import { map } from 'rxjs/operators';
 
@@ -162,14 +163,72 @@ function fieldValue(frame: CustomCellRendererProps['frame'], rowIndex: number, f
   return value === undefined || value === null || value === '' ? undefined : String(value);
 }
 
+// The purple-to-orange gradient border the Assistant's own "Investigate"
+// button wears, reproduced here so the two read as one matched pair of row
+// actions rather than a branded button next to a plain one.
+//
+// Ported from `@grafana/assistant`'s own compiled `getStyles` rather than
+// eyeballed, so the two stay pixel-identical: a `::before` layer painting the
+// gradient across the full radius, and a `::after` layer inset by the border
+// width painting the button's own background back over the middle - which is
+// what leaves only a 1px gradient ring visible. The `::after` background is
+// layered over `background.canvas` because `secondary.main` is semi-
+// transparent and would otherwise let the gradient bleed through the face of
+// the button. `isolation: 'isolate'` keeps the two negative z-index layers
+// behind the label but in front of whatever the button sits on.
+const getOcButtonStyles = (theme: GrafanaTheme2) => {
+  const baseBackground = theme.colors.secondary.main;
+  const elevatedBackground = theme.colors.emphasize(baseBackground, 0.05);
+  const underlyingColor = theme.colors.background.canvas;
+  const borderWidth = 1;
+  const outerRadius = theme.shape.radius.default;
+  const innerRadius = `max(calc(${outerRadius} - ${borderWidth}px), 1px)`;
+
+  const solidBackgroundLayer = (background: string) => ({
+    content: '""',
+    position: 'absolute' as const,
+    inset: `${borderWidth}px`,
+    borderRadius: innerRadius,
+    background: `linear-gradient(${background}, ${background}), ${underlyingColor}`,
+    zIndex: -1,
+    transition: 'none',
+    pointerEvents: 'none' as const,
+  });
+
+  return {
+    button: css({
+      label: 'oc-action-button',
+      width: 'fit-content',
+      position: 'relative',
+      isolation: 'isolate',
+      border: 'none',
+      transition: 'none !important',
+      '&::before': {
+        content: '""',
+        position: 'absolute',
+        inset: 0,
+        borderRadius: outerRadius,
+        background: 'linear-gradient(90deg, rgb(168, 85, 247), rgb(249, 115, 22))',
+        zIndex: -2,
+        pointerEvents: 'none',
+      },
+      '&::after': solidBackgroundLayer(baseBackground),
+      '&:hover': { transition: 'none !important' },
+      '&:hover::after': {
+        background: `linear-gradient(${elevatedBackground}, ${elevatedBackground}), ${underlyingColor}`,
+      },
+    }),
+  };
+};
+
 /**
- * The button itself. Deliberately shaped like the Assistant's own
- * "Investigate" button (`Button`, `variant="secondary"`, `fill="solid"`,
- * `size="sm"`, icon + short label) so the two sit side by side in one Action
- * cell as a matched pair - but without the Assistant's purple/orange gradient
- * border, which is its branding and would misrepresent what this button does.
+ * The button itself: same shape, size and gradient border as the Assistant's
+ * own "Investigate" button (`Button`, `variant="secondary"`, `fill="solid"`,
+ * `size="sm"`, icon + short label), so the two sit side by side in one Action
+ * cell as a visually matched pair.
  */
 export function OcActionButton({ scope }: { scope: OcScope }) {
+  const styles = useStyles2(getOcButtonStyles);
   const commands = ocCommandsFor(scope);
   if (commands.length === 0) {
     return null;
@@ -185,7 +244,14 @@ export function OcActionButton({ scope }: { scope: OcScope }) {
 
   return (
     <Dropdown overlay={menu} placement="bottom-start">
-      <Button icon="clipboard-alt" variant="secondary" fill="solid" size="sm" title="Copy an oc command for this row">
+      <Button
+        icon="clipboard-alt"
+        variant="secondary"
+        fill="solid"
+        size="sm"
+        className={styles.button}
+        title="Copy an oc command for this row"
+      >
         oc
       </Button>
     </Dropdown>
