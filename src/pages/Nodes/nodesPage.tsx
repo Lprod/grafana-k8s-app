@@ -62,17 +62,15 @@ import {
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
+import { SectionHeading } from '../../scenes/sectionHeading';
+import { addKubectlField, applyKubectlColumn } from '../../scenes/kubectlCell';
+import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 
 const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
-
-function SectionHeading({ title }: { title: string }) {
-  const theme = useTheme2();
-  return <h3 style={{ ...theme.typography.h3, margin: 0 }}>{title}</h3>;
-}
 
 function NodePageTitle({ title, cluster }: { title: string; cluster: string }) {
   const theme = useTheme2();
@@ -82,6 +80,7 @@ function NodePageTitle({ title, cluster }: { title: string; cluster: string }) {
       <h1 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
         {title}
         <Badge text="node" color="darkgrey" />
+        <InvestigateEntityButton kind="node" name={title} cluster={cluster} />
       </h1>
       <div style={{ fontSize: theme.typography.body.fontSize, color: theme.colors.text.secondary, marginTop: 2 }}>
         in cluster{' '}
@@ -151,22 +150,24 @@ function getNodesListScene() {
           match: 'any',
         },
       },
+      addKubectlField,
       {
         id: 'organize',
         options: {
           excludeByName: { Time: true, asserts_env: true, asserts_site: true, provider_id: true, 'Value #info': true },
           indexByName: {
-            cluster: 0,
-            node: 1,
-            'Value #alerts': 2,
-            'Value #cpu_usage_avg': 3,
-            'Value #cpu_usage_avg_percent': 4,
-            'Value #cpu_usage_max': 5,
-            'Value #cpu_usage_max_percent': 6,
-            'Value #mem_usage_avg': 7,
-            'Value #mem_usage_avg_percent': 8,
-            'Value #mem_usage_max': 9,
-            'Value #mem_usage_max_percent': 10,
+            kubectl: 0,
+            cluster: 1,
+            node: 2,
+            'Value #alerts': 3,
+            'Value #cpu_usage_avg': 4,
+            'Value #cpu_usage_avg_percent': 5,
+            'Value #cpu_usage_max': 6,
+            'Value #cpu_usage_max_percent': 7,
+            'Value #mem_usage_avg': 8,
+            'Value #mem_usage_avg_percent': 9,
+            'Value #mem_usage_max': 10,
+            'Value #mem_usage_max_percent': 11,
           },
           renameByName: {},
         },
@@ -178,7 +179,7 @@ function getNodesListScene() {
     .setTitle('Nodes')
     .setData(transformedData)
     .setOverrides((b) =>
-      b
+      applyKubectlColumn(b)
         .matchFieldsWithName('cluster')
         .overrideDisplayName('Cluster')
         .overrideCustomFieldConfig('align', 'left')
@@ -468,6 +469,7 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
       attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
       attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
       attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
+      addKubectlField,
       {
         id: 'organize',
         options: {
@@ -501,16 +503,17 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
             'Value #mem_limits_percent': true,
           },
           indexByName: {
-            pod: 0,
-            workload: 1,
-            workload_type: 2,
-            namespace: 3,
-            phase: 4,
-            'Value #cpu_usage': 5,
-            'Value #cpu_requests': 6,
-            'Value #mem_usage': 7,
-            'Value #mem_requests': 8,
-            'Value #mem_limits': 9,
+            kubectl: 0,
+            pod: 1,
+            workload: 2,
+            workload_type: 3,
+            namespace: 4,
+            phase: 5,
+            'Value #cpu_usage': 6,
+            'Value #cpu_requests': 7,
+            'Value #mem_usage': 8,
+            'Value #mem_requests': 9,
+            'Value #mem_limits': 10,
           },
           renameByName: {},
         },
@@ -521,8 +524,11 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
   const podsTable = PanelBuilders.table()
     .setTitle('Pods')
     .setData(podsData)
+    // `cluster` isn't a column here (the page is already scoped to one), so
+    // it's passed to the kubectl menu as a fixed value; namespace/pod are
+    // still read per-row.
     .setOverrides((b) =>
-      b
+      applyKubectlColumn(b, { cluster })
         .matchFieldsWithName('pod')
         .overrideDisplayName('POD')
         .overrideCustomFieldConfig('align', 'left')

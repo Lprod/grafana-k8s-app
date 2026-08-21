@@ -5,6 +5,7 @@ import {
   SceneAppPage,
   SceneAppPageLike,
   SceneControlsSpacer,
+  SceneDataLayerControls,
   SceneFlexItem,
   SceneFlexLayout,
   SceneDataTransformer,
@@ -67,18 +68,16 @@ import { getPodMemoryScene } from './podMemoryScene';
 import { getPodNetworkScene } from './podNetworkScene';
 import { getPodStorageScene } from './podStorageScene';
 import { attachExploreMenus } from '../../scenes/panelExplore';
+import { SectionHeading } from '../../scenes/sectionHeading';
+import { createChangeAnnotations } from '../../scenes/changeAnnotations';
+import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
-function SectionHeading({ title }: { title: string }) {
-  const theme = useTheme2();
-  return <h3 style={{ ...theme.typography.h3, margin: 0 }}>{title}</h3>;
-}
-
-function PodPageTitle({ title, cluster }: { title: string; cluster: string }) {
+function PodPageTitle({ title, cluster, namespace }: { title: string; cluster: string; namespace: string }) {
   const theme = useTheme2();
   const clusterUrl = `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`;
   return (
@@ -86,6 +85,7 @@ function PodPageTitle({ title, cluster }: { title: string; cluster: string }) {
       <h1 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
         {title}
         <Badge text="pod" color="orange" />
+        <InvestigateEntityButton kind="pod" name={title} cluster={cluster} namespace={namespace} />
       </h1>
       <div style={{ fontSize: theme.typography.body.fontSize, color: theme.colors.text.secondary, marginTop: 2 }}>
         in cluster{' '}
@@ -635,16 +635,21 @@ export function getPodDetailPage(
   return new SceneAppPage({
     title: pod,
     titleImg: KUBERNETES_ICON,
-    renderTitle: (title) => <PodPageTitle title={title} cluster={cluster} />,
+    renderTitle: (title) => <PodPageTitle title={title} cluster={cluster} namespace={namespace} />,
     url: baseUrl,
     routePath: baseUrl,
     getParentPage: () => parent,
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
+    // Restart markers across all 7 tabs, scoped to this exact pod (no
+    // "Rollouts" layer here - a rollout is a workload-level event, and the
+    // Workload Drilldown one level up already carries that one).
+    $data: createChangeAnnotations({ cluster, namespace, pod }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
     controls: [
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
+      new SceneDataLayerControls(),
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),

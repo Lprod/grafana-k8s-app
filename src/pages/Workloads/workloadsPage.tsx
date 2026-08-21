@@ -6,6 +6,7 @@ import {
   SceneAppPage,
   SceneAppPageLike,
   SceneControlsSpacer,
+  SceneDataLayerControls,
   SceneDataTransformer,
   SceneFlexItem,
   SceneFlexLayout,
@@ -83,6 +84,10 @@ import {
   createWorkloadFilterVariable,
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
+import { SectionHeading } from '../../scenes/sectionHeading';
+import { addKubectlField, applyKubectlColumn } from '../../scenes/kubectlCell';
+import { createChangeAnnotations } from '../../scenes/changeAnnotations';
+import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -182,6 +187,7 @@ function getWorkloadsListScene() {
       attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
       attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
       attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
+      addKubectlField,
       {
         id: 'organize',
         options: {
@@ -195,16 +201,17 @@ function getWorkloadsListScene() {
             'Value #mem_limits_percent': true,
           },
           indexByName: {
-            cluster: 0,
-            namespace: 1,
-            workload: 2,
-            workload_type: 3,
-            'Value #ready_pods': 4,
-            'Value #cpu_usage': 5,
-            'Value #cpu_requests': 6,
-            'Value #mem_usage': 7,
-            'Value #mem_requests': 8,
-            'Value #mem_limits': 9,
+            kubectl: 0,
+            cluster: 1,
+            namespace: 2,
+            workload: 3,
+            workload_type: 4,
+            'Value #ready_pods': 5,
+            'Value #cpu_usage': 6,
+            'Value #cpu_requests': 7,
+            'Value #mem_usage': 8,
+            'Value #mem_requests': 9,
+            'Value #mem_limits': 10,
           },
           renameByName: {},
         },
@@ -216,7 +223,7 @@ function getWorkloadsListScene() {
     .setTitle('Workloads')
     .setData(transformedData)
     .setOverrides((b) =>
-      b
+      applyKubectlColumn(b)
         .matchFieldsWithName('cluster')
         .overrideDisplayName('Cluster')
         .overrideCustomFieldConfig('align', 'left')
@@ -313,12 +320,17 @@ function getWorkloadsListScene() {
   });
 }
 
-function SectionHeading({ title }: { title: string }) {
-  const theme = useTheme2();
-  return <h3 style={{ ...theme.typography.h3, margin: 0 }}>{title}</h3>;
-}
-
-function WorkloadPageTitle({ title, cluster, workloadType }: { title: string; cluster: string; workloadType: string }) {
+function WorkloadPageTitle({
+  title,
+  cluster,
+  namespace,
+  workloadType,
+}: {
+  title: string;
+  cluster: string;
+  namespace: string;
+  workloadType: string;
+}) {
   const theme = useTheme2();
   const clusterUrl = `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`;
   return (
@@ -326,6 +338,7 @@ function WorkloadPageTitle({ title, cluster, workloadType }: { title: string; cl
       <h1 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
         {title}
         <Badge text={formatWorkloadTypeLabel(workloadType)} color="green" />
+        <InvestigateEntityButton kind="workload" name={title} cluster={cluster} namespace={namespace} workloadType={workloadType} />
       </h1>
       <div style={{ fontSize: theme.typography.body.fontSize, color: theme.colors.text.secondary, marginTop: 2 }}>
         in cluster{' '}
@@ -611,6 +624,7 @@ function getWorkloadOverviewScene(
       // column (not asked to combine).
       attachPercentField('Value #cpuRequests', 'cpu_requests_percent'),
       attachPercentField('Value #memRequests', 'mem_requests_percent'),
+      addKubectlField,
       {
         id: 'organize',
         options: {
@@ -633,15 +647,16 @@ function getWorkloadOverviewScene(
             mem_requests_percent: true,
           },
           indexByName: {
-            pod: 0,
-            node: 1,
-            phase: 2,
-            'Value #cpuUsage': 3,
-            'Value #cpuRequests': 4,
-            'Value #memUsage': 5,
-            'Value #memRequests': 6,
-            'Value #memLimits': 7,
-            mem_limits_percent: 8,
+            kubectl: 0,
+            pod: 1,
+            node: 2,
+            phase: 3,
+            'Value #cpuUsage': 4,
+            'Value #cpuRequests': 5,
+            'Value #memUsage': 6,
+            'Value #memRequests': 7,
+            'Value #memLimits': 8,
+            mem_limits_percent: 9,
           },
           renameByName: {},
         },
@@ -652,8 +667,10 @@ function getWorkloadOverviewScene(
   const podsTable = PanelBuilders.table()
     .setTitle('Pods')
     .setData(podsData)
+    // cluster/namespace aren't columns here (the page is already scoped to
+    // one workload), so they're passed to the kubectl menu as fixed values.
     .setOverrides((b) =>
-      b
+      applyKubectlColumn(b, { cluster, namespace })
         .matchFieldsWithName('pod')
         .overrideDisplayName('POD')
         .overrideCustomFieldConfig('align', 'left')
@@ -886,8 +903,16 @@ function getWorkloadDetailPage(
       title: 'Overview',
       getScene: () => getWorkloadOverviewScene(cluster, namespace, workloadType, workload, clusterRegex, namespaceRegex, workloadRegex),
     },
-    { slug: 'cpu', title: 'CPU', getScene: () => getWorkloadCpuScene(clusterRegex, namespaceRegex, workloadRegex, workload) },
-    { slug: 'memory', title: 'Memory', getScene: () => getWorkloadMemoryScene(clusterRegex, namespaceRegex, workloadRegex, workload) },
+    {
+      slug: 'cpu',
+      title: 'CPU',
+      getScene: () => getWorkloadCpuScene(clusterRegex, namespaceRegex, workloadRegex, workload, `${baseUrl}/pods`),
+    },
+    {
+      slug: 'memory',
+      title: 'Memory',
+      getScene: () => getWorkloadMemoryScene(clusterRegex, namespaceRegex, workloadRegex, workload, `${baseUrl}/pods`),
+    },
     { slug: 'network', title: 'Network', getScene: () => getWorkloadNetworkScene(clusterRegex, namespaceRegex, workloadRegex, workload) },
     { slug: 'storage', title: 'Storage', getScene: () => getWorkloadStorageScene(clusterRegex, namespaceRegex, workloadRegex, workload) },
     { slug: 'logs', title: 'Logs', getScene: () => getWorkloadLogsScene(cluster, namespace, workload) },
@@ -907,16 +932,21 @@ function getWorkloadDetailPage(
   return new SceneAppPage({
     title: workload,
     titleImg: KUBERNETES_ICON,
-    renderTitle: (title) => <WorkloadPageTitle title={title} cluster={cluster} workloadType={workloadType} />,
+    renderTitle: (title) => <WorkloadPageTitle title={title} cluster={cluster} namespace={namespace} workloadType={workloadType} />,
     url: baseUrl,
     routePath: `${WORKLOADS_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/${encodeURIComponent(workloadType)}/${encodeURIComponent(workload)}`,
     getParentPage: () => parent,
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
+    // Rollout/restart markers for every timeseries panel across all 7 tabs -
+    // see createChangeAnnotations for why this belongs on the page rather
+    // than on each tab's own EmbeddedScene.
+    $data: createChangeAnnotations({ cluster, namespace, workload, workloadType }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
     controls: [
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
+      new SceneDataLayerControls(),
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),

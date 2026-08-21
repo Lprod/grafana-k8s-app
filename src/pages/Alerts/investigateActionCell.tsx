@@ -44,10 +44,18 @@ export function InvestigateActionCell({ frame, rowIndex }: CustomCellRendererPro
   const namespace = fieldValue(frame, rowIndex, 'namespace');
   const pod = fieldValue(frame, rowIndex, 'pod');
   const container = fieldValue(frame, rowIndex, 'container');
+  // node/workload are only present on some rows (node-scoped alerts carry a
+  // node, pod-scoped ones a workload attribution) - both are appended to the
+  // prompt only when non-empty, same as pod/container already were.
+  const node = fieldValue(frame, rowIndex, 'node');
+  const workload = fieldValue(frame, rowIndex, 'workload');
+  const workloadType = fieldValue(frame, rowIndex, 'workload_type');
 
   const prompt = `Perform a root cause analysis for the firing Kubernetes alert "${alertname}" (severity: ${severity}) in namespace "${namespace}" on cluster "${cluster}"${
-    pod ? `, pod "${pod}"` : ''
-  }${container ? `, container "${container}"` : ''}. Explain the likely cause and suggest next steps.`;
+    node ? `, node "${node}"` : ''
+  }${workload ? `, ${workloadType || 'workload'} "${workload}"` : ''}${pod ? `, pod "${pod}"` : ''}${
+    container ? `, container "${container}"` : ''
+  }. Explain the likely cause and suggest next steps.`;
 
   return (
     <OpenAssistantButton
@@ -58,7 +66,7 @@ export function InvestigateActionCell({ frame, rowIndex }: CustomCellRendererPro
       context={[
         createAssistantContextItem('structured', {
           title: `Alert: ${alertname}`,
-          data: { cluster, severity, alertname, namespace, pod, container },
+          data: { cluster, severity, alertname, node, namespace, workload, workloadType, pod, container },
         }),
       ]}
     />

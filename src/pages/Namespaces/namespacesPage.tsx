@@ -73,6 +73,9 @@ import {
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
+import { SectionHeading } from '../../scenes/sectionHeading';
+import { addKubectlField, applyKubectlColumn } from '../../scenes/kubectlCell';
+import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -142,6 +145,7 @@ function getNamespacesListScene() {
       attachPercentField('Value #mem_requests', 'Value #mem_requests_percent'),
       attachPercentField('Value #mem_limits', 'Value #mem_limits_percent'),
       attachPercentField('Value #mem_usage', 'Value #mem_limits_percent'),
+      addKubectlField,
       {
         id: 'organize',
         options: {
@@ -152,15 +156,16 @@ function getNamespacesListScene() {
             'Value #mem_limits_percent': true,
           },
           indexByName: {
-            cluster: 0,
-            namespace: 1,
-            'Value #info': 2,
-            'Value #alerts': 3,
-            'Value #cpu_usage': 4,
-            'Value #cpu_requests': 5,
-            'Value #mem_usage': 6,
-            'Value #mem_requests': 7,
-            'Value #mem_limits': 8,
+            kubectl: 0,
+            cluster: 1,
+            namespace: 2,
+            'Value #info': 3,
+            'Value #alerts': 4,
+            'Value #cpu_usage': 5,
+            'Value #cpu_requests': 6,
+            'Value #mem_usage': 7,
+            'Value #mem_requests': 8,
+            'Value #mem_limits': 9,
           },
           renameByName: {},
         },
@@ -172,7 +177,7 @@ function getNamespacesListScene() {
     .setTitle('Namespaces')
     .setData(transformedData)
     .setOverrides((b) =>
-      b
+      applyKubectlColumn(b)
         .matchFieldsWithName('cluster')
         .overrideDisplayName('Cluster')
         .overrideCustomFieldConfig('align', 'left')
@@ -273,11 +278,6 @@ function getNamespacesListScene() {
   });
 }
 
-function SectionHeading({ title }: { title: string }) {
-  const theme = useTheme2();
-  return <h3 style={{ ...theme.typography.h3, margin: 0 }}>{title}</h3>;
-}
-
 function NamespacePageTitle({ title, cluster }: { title: string; cluster: string }) {
   const theme = useTheme2();
   const clusterUrl = `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`;
@@ -286,6 +286,7 @@ function NamespacePageTitle({ title, cluster }: { title: string; cluster: string
       <h1 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
         {title}
         <Badge text="namespace" color="purple" />
+        <InvestigateEntityButton kind="namespace" name={title} cluster={cluster} namespace={title} />
       </h1>
       <div style={{ fontSize: theme.typography.body.fontSize, color: theme.colors.text.secondary, marginTop: 2 }}>
         in cluster{' '}

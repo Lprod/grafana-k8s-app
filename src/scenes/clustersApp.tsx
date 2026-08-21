@@ -63,6 +63,8 @@ import { getKubernetesHomePage } from '../pages/Kubernetes/kubernetesPage';
 import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds } from './tableCells';
 import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
 import { attachExploreMenus } from './panelExplore';
+import { SectionHeading } from './sectionHeading';
+import { InvestigateEntityButton } from './investigateEntityButton';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
@@ -278,6 +280,7 @@ function ClusterPageTitle({ title }: { title: string }) {
     <h1 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
       {title}
       <Badge text="cluster" color="blue" />
+      <InvestigateEntityButton kind="cluster" name={title} cluster={title} />
     </h1>
   );
 }
@@ -290,12 +293,8 @@ function ClusterPageTitle({ title }: { title: string }) {
 // ("var-cluster-2") in the URL, so the value we pass never reaches it. Using
 // a plain Button (no href, so nothing intercepts it) and navigating via
 // window.location forces a real page load, so the destination mounts fresh
-// and "var-cluster" binds to its own variable.
-export function SectionHeading({ title }: { title: string }) {
-  const theme = useTheme2();
-  return <h3 style={{ ...theme.typography.h3, margin: 0 }}>{title}</h3>;
-}
-
+// and "var-cluster" binds to its own variable. (Several other pages' own
+// title components cite this note by name - keep it here if it moves.)
 function ClusterOverviewLinks({ cluster }: { cluster: string }) {
   const namespacesUrl = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}`;
   const workloadsUrl = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}`;

@@ -580,6 +580,31 @@ kube_job_created{cluster="demo-cluster-gce",namespace="default",job_name="db-mig
 kube_pod_created{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws"} 1761043149
 kube_pod_created{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce"} 1761043149
 
+# Rollout markers for the Workload Drilldown's "Rollouts" annotation layer
+# (src/scenes/changeAnnotations.ts). kube-state-metrics bumps
+# metadata_generation on every spec change, and the layer's query is
+# `changes(...[$__rate_interval]) > 0` - so with this file being served
+# statically these values never move and no annotation will ever appear in
+# the demo. They exist so the query resolves against a real metric instead of
+# an entirely absent one; the same limitation already applies to every other
+# rate()/increase()/changes()-based panel in this demo (see the notes on
+# container_fs_* and "Restarting containers").
+# HELP kube_deployment_metadata_generation Sequence number of the deployment spec (demo data).
+# TYPE kube_deployment_metadata_generation gauge
+kube_deployment_metadata_generation{cluster="demo-cluster-aws",namespace="default",deployment="app"} 4
+kube_deployment_metadata_generation{cluster="demo-cluster-gce",namespace="default",deployment="app"} 4
+kube_deployment_metadata_generation{cluster="demo-cluster-aws",namespace="default",deployment="broken-app"} 1
+
+# HELP kube_daemonset_metadata_generation Sequence number of the daemonset spec (demo data).
+# TYPE kube_daemonset_metadata_generation gauge
+kube_daemonset_metadata_generation{cluster="demo-cluster-aws",namespace="default",daemonset="node-agent"} 2
+kube_daemonset_metadata_generation{cluster="demo-cluster-gce",namespace="default",daemonset="node-agent"} 2
+
+# HELP kube_statefulset_metadata_generation Sequence number of the statefulset spec (demo data).
+# TYPE kube_statefulset_metadata_generation gauge
+kube_statefulset_metadata_generation{cluster="demo-cluster-aws",namespace="default",statefulset="cache"} 3
+kube_statefulset_metadata_generation{cluster="demo-cluster-gce",namespace="default",statefulset="cache"} 3
+
 # "All Jobs" page's Jobs tab demo data (demo data) - extends the existing
 # db-migrate Job (below) with the owner/start/completion metrics its own
 # queries read, rather than reusing infra-check/user-check (whose
