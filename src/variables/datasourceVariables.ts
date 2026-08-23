@@ -1,4 +1,4 @@
-import { DataSourceVariable, QueryVariable } from '@grafana/scenes';
+import { DataSourceVariable, QueryVariable, TextBoxVariable } from '@grafana/scenes';
 import { getDatasourceDefaults } from '../utils/appJsonData';
 import { substituteClusterAndNamespace, workloadTableQueries } from '../queries/workloadQueries';
 
@@ -15,6 +15,7 @@ export const NODES_VARIABLE_NAME = 'nodes';
 export const POD_VARIABLE_NAME = 'pod';
 export const SEVERITY_VARIABLE_NAME = 'severity';
 export const ALERTNAME_VARIABLE_NAME = 'alertname';
+export const SEARCH_VARIABLE_NAME = 'search';
 
 // SceneAppPage's `$variables` are constructed eagerly (unlike the lazily
 // invoked `getScene` factory) for EVERY top-level page at once, as soon as
@@ -392,4 +393,20 @@ export function createWorkloadFilterVariable(options: { isMulti?: boolean; clust
     value: isMulti ? '$__all' : '',
   });
   return syncValueFromUrlOnActivation(variable, WORKLOAD_VARIABLE_NAME);
+}
+
+// Search page's free-text search box - a plain TextBoxVariable, not a
+// QueryVariable, so none of the "same name across sibling top-level pages
+// gets silently suffixed" collision handling above applies (no other
+// top-level page declares a "search" variable, so there's nothing for
+// Scenes' URL-key deduplication to collide with) - Scenes' own automatic
+// variable URL sync is enough on its own here. `${search:regex}` (see
+// searchQueries.ts) escapes the typed text via formatRegistry's Regex
+// formatter before it's spliced into any PromQL.
+export function createSearchTextVariable() {
+  return new TextBoxVariable({
+    name: SEARCH_VARIABLE_NAME,
+    label: 'Search',
+    value: '',
+  });
 }

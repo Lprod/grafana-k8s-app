@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.0
+
+- Added a top-level **Search** page (`/a/debeka-k8s-app/search`, first entry in the nav, ahead of Clusters) - "Find k8s objects, fast". A full-width search box plus Clusters/Nodes/Namespaces/Workloads/Pods/Containers filter pills, mirroring Grafana Play's own reference search page:
+  - Typing shows a live, grouped autocomplete dropdown (matched name, its immediate parent underneath, category label) - clicking a suggestion navigates straight to that object's own Drilldown page.
+  - Pressing Enter commits the search: the dropdown closes and the same data renders as full tables below, but only for categories with at least one match - a category with no matches isn't shown as an empty table, it's simply omitted. No matches anywhere shows a "No results found" warning instead.
+  - The filter pills scope which categories are searched at all, not just which are displayed - with none selected, all six are searched.
+  - Every result row links to its own existing page (Cluster/Node/Namespace/Workload/Pod Drilldown); Containers have no dedicated page in this app, so both their table column and dropdown suggestion link to the container's own pod instead.
+- This is the app's first release the user considers a complete "v1" of the product, hence the major version bump rather than another minor one.
+
 ## 1.13.0
 
 - Added a **Job Drilldown** page (`/jobs/job/:cluster/:namespace/:job`), reached from the All Jobs page's Jobs tab (its JOB column is now a link, previously plain text) and from the CronJob Drilldown's own "Runs" table (same fix). Title renders the job name, a red "job" badge, and an "in cluster X" subtitle, matching every other drilldown page's shell. Tabs: Overview, CPU, Memory (all three built out), Logs and Events still coming soon.

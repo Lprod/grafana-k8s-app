@@ -20,6 +20,12 @@
   "includes": [
     {
       "type": "page",
+      "name": "Search",
+      "path": "/a/%PLUGIN_ID%/search",
+      "addToNav": true
+    },
+    {
+      "type": "page",
       "name": "Clusters",
       "path": "/a/%PLUGIN_ID%/clusters",
       "addToNav": true

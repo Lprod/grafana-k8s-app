@@ -10,6 +10,7 @@ export enum ROUTES {
   Nodes = 'nodes',
   Alerts = 'alerts',
   Jobs = 'jobs',
+  Search = 'search',
 }
 
 // Fall back to our demo stack's datasource UIDs until an admin sets real

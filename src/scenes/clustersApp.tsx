@@ -60,6 +60,7 @@ import { getNodesPage } from '../pages/Nodes/nodesPage';
 import { getAlertsPage } from '../pages/Alerts/alertsPage';
 import { getJobsPage } from '../pages/Jobs/jobsPage';
 import { getKubernetesHomePage } from '../pages/Kubernetes/kubernetesPage';
+import { getSearchPage } from '../pages/Search/searchPage';
 import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds } from './tableCells';
 import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
 import { attachExploreMenus } from './panelExplore';
@@ -1856,6 +1857,7 @@ export function getClustersSceneApp() {
   return new SceneApp({
     pages: [
       getKubernetesHomePage(),
+      getSearchPage(),
       clustersPage,
       getResourceSimulatorPage(),
       getNamespacesPage(),
