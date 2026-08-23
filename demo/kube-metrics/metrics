@@ -556,6 +556,12 @@ namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespa
 # TYPE kube_pod_owner gauge
 kube_pod_owner{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws",owner_kind=""} 1
 kube_pod_owner{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",owner_kind=""} 1
+# Job Drilldown's own "Pods" table and per-pod "phase" timeline panels
+# (getJobOverviewScene in jobsPage.tsx) - same active demo pod modeled above
+# for the CronJob Drilldown's CPU/Memory tabs, now also given the
+# kube_pod_owner/status_phase/start_time/restart_policy rows those didn't
+# need but this new table does.
+kube_pod_owner{cluster="demo-cluster-aws",namespace="cluster-tests",pod="infra-check-29791301-pod",owner_kind="Job",owner_name="infra-check-29791301"} 1
 
 # HELP kube_deployment_status_replicas_available The number of available replicas per deployment (demo data).
 # TYPE kube_deployment_status_replicas_available gauge
@@ -878,6 +884,7 @@ kube_pod_status_phase{cluster="demo-cluster-aws",namespace="default",pod="canary
 kube_pod_status_phase{cluster="demo-cluster-gce",namespace="default",pod="netsplit-node-gce",phase="Unknown"} 1
 kube_pod_status_phase{cluster="demo-cluster-aws",namespace="default",pod="evicted-batch-aws",phase="Failed"} 1
 kube_pod_status_phase{cluster="demo-cluster-gce",namespace="default",pod="broken-image-gce",phase="Pending"} 1
+kube_pod_status_phase{cluster="demo-cluster-aws",namespace="cluster-tests",pod="infra-check-29791301-pod",phase="Running"} 1
 
 # HELP kube_pod_start_time Start time in unix timestamp for a pod (demo data).
 # TYPE kube_pod_start_time gauge
@@ -899,6 +906,14 @@ kube_pod_start_time{cluster="demo-cluster-aws",namespace="default",pod="canary-r
 kube_pod_start_time{cluster="demo-cluster-aws",namespace="default",pod="evicted-batch-aws"} 1787103983
 kube_pod_start_time{cluster="demo-cluster-gce",namespace="default",pod="netsplit-node-gce"} 1786941983
 kube_pod_start_time{cluster="demo-cluster-gce",namespace="default",pod="broken-image-gce"} 1787113583
+kube_pod_start_time{cluster="demo-cluster-aws",namespace="cluster-tests",pod="infra-check-29791301-pod"} 1787478065
+
+# HELP kube_pod_restart_policy Describes the restart policy in use by this pod (demo data).
+# TYPE kube_pod_restart_policy gauge
+# Job Drilldown Pods table's own RESTART POLICY column - a Job's pods almost
+# always run OnFailure/Never (never Always, which would fight the Job
+# controller's own retry/backoff logic).
+kube_pod_restart_policy{cluster="demo-cluster-aws",namespace="cluster-tests",pod="infra-check-29791301-pod",type="OnFailure"} 1
 
 # HELP kube_pod_status_condition The pod's current condition (demo data).
 # TYPE kube_pod_status_condition gauge

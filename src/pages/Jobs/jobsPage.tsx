@@ -1,17 +1,21 @@
 import React from 'react';
-import { FieldColorModeId, GrafanaTheme2, MappingType, SpecialValueMatch, ValueMapping } from '@grafana/data';
+import { map } from 'rxjs/operators';
+import { FieldColorModeId, GrafanaTheme2, MappingType, SpecialValueMatch, ValueMapping, VariableHide, PanelData, DataFrame } from '@grafana/data';
 import { LegendDisplayMode, TableCellDisplayMode } from '@grafana/schema';
 import { Alert, Badge, CustomCellRendererProps, useTheme2 } from '@grafana/ui';
 import {
+  CustomTransformOperator,
   EmbeddedScene,
   FieldConfigOverridesBuilder,
   PanelBuilders,
   SceneAppPage,
   SceneAppPageLike,
+  SceneByFrameRepeater,
   SceneControlsSpacer,
   SceneDataTransformer,
   SceneFlexItem,
   SceneFlexLayout,
+  SceneObject,
   SceneQueryRunner,
   SceneReactObject,
   SceneRefreshPicker,
@@ -38,6 +42,27 @@ import {
   CronjobMemoryOptimizationKey,
   CronjobRunsTableQueryKey,
 } from '../../queries/cronjobOverviewQueries';
+import {
+  buildJobEndQuery,
+  buildJobFailedQuery,
+  buildJobOwnerQuery,
+  buildJobPodPhaseQuery,
+  buildJobPodReasonQuery,
+  buildJobStartQuery,
+  buildJobSuccessQuery,
+  deriveJobFamilyRegex,
+  jobCpuOptimizationQueries,
+  jobMemoryOptimizationQueries,
+  jobPodsTableQueries,
+  jobPreviousRunsTableQueries,
+  substituteJobPodsTableQuery,
+  substituteJobPreviousRunsQuery,
+  substituteJobResourceQuery,
+  JobCpuOptimizationKey,
+  JobMemoryOptimizationKey,
+  JobPodsTableQueryKey,
+  JobPreviousRunsTableQueryKey,
+} from '../../queries/jobOverviewQueries';
 import { attachFieldValues } from '../../scenes/tableCells';
 import { InfoCard, findFieldAcrossFrames } from '../../scenes/clusterOverviewCards';
 import { SectionHeading } from '../../scenes/sectionHeading';
@@ -46,18 +71,23 @@ import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import {
   CLUSTER_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
+  POD_VARIABLE_NAME,
   THANOS_VARIABLE_NAME,
   createClusterFilterVariable,
   createNamespaceFilterVariable,
+  createPodFilterVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 import { getCronjobCpuScene } from './cronjobCpuScene';
 import { getCronjobMemoryScene } from './cronjobMemoryScene';
+import { getJobCpuScene } from './jobCpuScene';
+import { getJobMemoryScene } from './jobMemoryScene';
 
 const JOBS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Jobs}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
+const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
 // "PODS/COMPLETION" (Jobs tab) - plain colored "succeeded / completions"
@@ -286,6 +316,12 @@ function getJobsScene(clusterRegex: string, namespaceRegex: string) {
       b
         .matchFieldsWithName('JOB')
         .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          {
+            title: 'View job',
+            url: `${JOBS_URL}/job/\${__data.fields.cluster}/\${__data.fields.namespace}/\${__value.text}\${__url.params}`,
+          },
+        ])
         .matchFieldsWithName('CONTROLLED-BY')
         .overrideCustomFieldConfig('align', 'left')
         .matchFieldsWithName('CLUSTER')
@@ -369,15 +405,17 @@ function CronjobPageTitle({ title, cluster }: { title: string; cluster: string }
   );
 }
 
-// "Cronjob optimization" panels - same limits(red dashed)/requests(orange
-// dashed)/allocation(green finely-dashed)/usage(blue solid) styling as the
-// Pod/Workload/Namespace Drilldowns' own "optimization" panels (no
-// "capacity" line - a CronJob's pods have no resourcequota-style physical
-// ceiling of their own, same reasoning as those pages) - redeclared locally
-// per this codebase's established "every tab file redeclares its own small
-// style helpers" convention (see applyPodOptimizationSeriesOverrides in
-// podsPage.tsx).
-function applyCronjobOptimizationSeriesOverrides(b: FieldConfigOverridesBuilder<any>) {
+// "Cronjob optimization"/"Job optimization" panels - same limits(red
+// dashed)/requests(orange dashed)/allocation(green finely-dashed)/usage(blue
+// solid) styling as the Pod/Workload/Namespace Drilldowns' own "optimization"
+// panels (no "capacity" line - neither a CronJob's nor a Job's pods have a
+// resourcequota-style physical ceiling of their own, same reasoning as those
+// pages) - shared by both getCronjobOverviewScene and getJobOverviewScene
+// below since they're in this same file (the usual "every tab file
+// redeclares its own small style helpers" convention, e.g.
+// applyPodOptimizationSeriesOverrides in podsPage.tsx, is about avoiding
+// cross-*file* duplication, not a rule against reuse within one file).
+function applyOptimizationSeriesOverrides(b: FieldConfigOverridesBuilder<any>) {
   return b
     .matchFieldsByQuery('limits')
     .overrideColor({ mode: FieldColorModeId.Fixed, fixedColor: 'red' })
@@ -400,13 +438,15 @@ const durationMappings: ValueMapping[] = [
   { type: MappingType.SpecialValue, options: { match: SpecialValueMatch.NullAndNaN, result: { text: '–' } } },
 ];
 
-// "Runs" table's PODS/COMPLETION cell - same success/completion/failed-count
-// logic as jobPodsCompletionCell above (the All Jobs page's own Jobs tab),
-// just with "running" colored yellow instead of orange - an explicit,
-// page-specific choice for this table's own legend, not a change to the All
-// Jobs page's existing green/orange/red convention.
-function cronjobRunsPodsCompletionCell() {
-  return function CronjobRunsPodsCompletionCell({ rowIndex, field, value }: CustomCellRendererProps) {
+// PODS/COMPLETION cell shared by the CronJob Drilldown's own "Runs" table
+// and the Job Drilldown's own "Previous runs" table below - same
+// success/completion/failed-count logic as jobPodsCompletionCell above (the
+// All Jobs page's own Jobs tab), just with "running" colored yellow instead
+// of orange - an explicit, page-specific choice for these tables' own
+// legend, not a change to the All Jobs page's existing green/orange/red
+// convention.
+function runsPodsCompletionCell() {
+  return function RunsPodsCompletionCell({ rowIndex, field, value }: CustomCellRendererProps) {
     const theme = useTheme2();
     // A still-running job has no "success" value yet - the underlying field
     // is a duplicate of "Value #success" via a `+0` calculateField (see
@@ -431,10 +471,10 @@ function cronjobRunsPodsCompletionCell() {
   };
 }
 
-// Explains the Runs table's PODS/COMPLETION coloring - same right-aligned
-// layout as JobStatusLegend above, with "running" as yellow instead of
-// orange per this table's own explicit color choice.
-function CronjobRunsStatusLegend() {
+// Explains the Runs/Previous-runs tables' PODS/COMPLETION coloring - same
+// right-aligned layout as JobStatusLegend above, with "running" as yellow
+// instead of orange per these tables' own explicit color choice.
+function RunsStatusLegend() {
   const theme = useTheme2();
   const items: Array<{ label: string; colorName: string }> = [
     { label: 'complete', colorName: 'green' },
@@ -526,7 +566,7 @@ function getCronjobOverviewScene(
     .setTitle('CronJob CPU')
     .setUnit('cores')
     .setData(cpuOptimizationRunner)
-    .setOverrides(applyCronjobOptimizationSeriesOverrides)
+    .setOverrides(applyOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
     .setCustomFieldConfig('spanNulls', true)
@@ -543,7 +583,7 @@ function getCronjobOverviewScene(
     .setTitle('CronJob Memory')
     .setUnit('bytes')
     .setData(memoryOptimizationRunner)
-    .setOverrides(applyCronjobOptimizationSeriesOverrides)
+    .setOverrides(applyOptimizationSeriesOverrides)
     .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
     .setHeaderActions(new PanelTimeRangeCompare())
     .setCustomFieldConfig('spanNulls', true)
@@ -630,6 +670,16 @@ function getCronjobOverviewScene(
       b
         .matchFieldsWithName('JOB')
         .overrideCustomFieldConfig('align', 'left')
+        // cluster/namespace are already known from this page's own route
+        // params (not columns in this table - excluded above, same
+        // reasoning as the Node Drilldown's own Pods table), so they're
+        // inlined as literal values instead of read via __data.fields.
+        .overrideLinks([
+          {
+            title: 'View job',
+            url: `${JOBS_URL}/job/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/\${__value.text}\${__url.params}`,
+          },
+        ])
         .matchFieldsWithName('START')
         .overrideUnit('dateTimeFromNow')
         .matchFieldsWithName('END')
@@ -638,7 +688,7 @@ function getCronjobOverviewScene(
         .overrideUnit('dtdurationms')
         .overrideMappings(durationMappings)
         .matchFieldsWithName('PODS/COMPLETION')
-        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: cronjobRunsPodsCompletionCell() } as any)
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: runsPodsCompletionCell() } as any)
     )
     .build();
 
@@ -683,7 +733,7 @@ function getCronjobOverviewScene(
             new SceneFlexItem({
               xSizing: 'content',
               ySizing: 'content',
-              body: new SceneReactObject({ reactNode: <CronjobRunsStatusLegend /> }),
+              body: new SceneReactObject({ reactNode: <RunsStatusLegend /> }),
             }),
           ],
         }),
@@ -693,9 +743,528 @@ function getCronjobOverviewScene(
   });
 }
 
+function JobPageTitle({ title, cluster }: { title: string; cluster: string }) {
+  const theme = useTheme2();
+  const clusterUrl = `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`;
+  return (
+    <div>
+      <h1 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+        {title}
+        <Badge text="job" color="red" />
+        <InvestigateEntityButton kind="job" name={title} cluster={cluster} />
+      </h1>
+      <div style={{ fontSize: theme.typography.body.fontSize, color: theme.colors.text.secondary, marginTop: 2 }}>
+        in cluster{' '}
+        {/* Real page load (not <a href>) - same "cluster" scene variable
+            collision reasoning as every other drilldown's own page title. */}
+        <button
+          onClick={() => window.location.assign(clusterUrl)}
+          style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: theme.colors.text.link, cursor: 'pointer' }}
+        >
+          {cluster}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// "CURRENT PHASE" cell (Job Drilldown's own Pods table) - same
+// Running/Succeeded=green, Pending=orange, Failed/Unknown=red scale as every
+// other phase-derived cell in this app (see podStatusColor in podsPage.tsx),
+// redeclared locally per this file's own convention. A terminated-container
+// reason (e.g. "Completed", "OOMKilled", "Error") is appended in parentheses
+// when present, purely as extra context - unlike workloadsPage.tsx's own
+// podStatusCell, a reason here doesn't override the color, since "Completed"
+// is a perfectly healthy reason for a Job's own pod to have terminated.
+function jobPodPhaseColor(phase: string | undefined, theme: GrafanaTheme2): string | undefined {
+  switch (phase) {
+    case 'Running':
+    case 'Succeeded':
+      return theme.visualization.getColorByName('green');
+    case 'Pending':
+      return theme.visualization.getColorByName('orange');
+    case 'Failed':
+    case 'Unknown':
+      return theme.visualization.getColorByName('red');
+    default:
+      return undefined;
+  }
+}
+
+function jobPodPhaseCell() {
+  return function JobPodPhaseCell({ rowIndex, field, value }: CustomCellRendererProps) {
+    const theme = useTheme2();
+    const phase = typeof value === 'string' ? value : undefined;
+    const reasonValues = field.config?.custom?.reasonValues as Array<string | null | undefined> | undefined;
+    const reason = reasonValues?.[rowIndex];
+    const color = jobPodPhaseColor(phase, theme);
+    const text = reason ? `${phase ?? '–'} (${reason})` : (phase ?? '–');
+    return <span style={{ color }}>{text}</span>;
+  };
+}
+
+// Small caption above each of the per-pod "phase" state-timeline panels
+// below (see the SceneByFrameRepeater in getJobOverviewScene) - deliberately
+// smaller than SectionHeading, since this repeats once per pod rather than
+// once per section.
+function PodPhaseHeading({ pod }: { pod: string }) {
+  const theme = useTheme2();
+  return (
+    <div style={{ ...theme.typography.body, fontWeight: theme.typography.fontWeightMedium, margin: '8px 0 4px' }}>Pod phase: {pod}</div>
+  );
+}
+
+// A Job with zero pods matching the current time range still comes back as
+// one frame with an empty fields array, not zero frames (see the dedicated
+// comment where this is used in getJobOverviewScene) - filters those out
+// before SceneByFrameRepeater sees them, same CustomTransformOperator shape
+// as attachFieldValues in tableCells.tsx.
+function dropEmptyFrames(): CustomTransformOperator {
+  return () => (source) => source.pipe(map((frames) => frames.filter((frame) => frame.fields.length > 0)));
+}
+
+function getJobOverviewScene(
+  cluster: string,
+  namespace: string,
+  job: string,
+  clusterRegex: string,
+  namespaceRegex: string,
+  jobRegex: string
+) {
+  const clusterUrl = `${CLUSTERS_URL}/${encodeURIComponent(cluster)}`;
+  const namespaceUrl = `${NAMESPACES_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}`;
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Single-query runner - "Value" stays plain, not "Value #owner" (see the
+  // same note on getCronjobOverviewScene's own leftRunner above).
+  const ownerRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [{ refId: 'owner', expr: buildJobOwnerQuery(clusterRegex, namespaceRegex, job), instant: true, format: 'table' }],
+  });
+
+  const leftCard = new InfoCard({
+    $data: ownerRunner,
+    rows: [
+      { label: 'cluster:', render: () => cluster, href: clusterUrl },
+      { label: 'namespace:', render: () => namespace, href: namespaceUrl },
+      { label: 'job:', render: () => job },
+      {
+        label: 'controlled by:',
+        // kube_job_owner drops owner_kind/owner_name entirely for a
+        // standalone Job (empty-label-equals-absent-field, see gotcha #31 in
+        // the All Jobs page's own build notes) - a missing field here means
+        // "not controlled by anything", not a query error.
+        render: (frames) => {
+          const ownerKind = findFieldAcrossFrames(frames, 'owner_kind')?.values[0];
+          const ownerName = findFieldAcrossFrames(frames, 'owner_name')?.values[0];
+          return ownerKind === 'CronJob' && ownerName ? ownerName : '–';
+        },
+        href: (frames) => {
+          const ownerKind = findFieldAcrossFrames(frames, 'owner_kind')?.values[0];
+          const ownerName = findFieldAcrossFrames(frames, 'owner_name')?.values[0];
+          return ownerKind === 'CronJob' && ownerName
+            ? `${JOBS_URL}/cronjob/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/${encodeURIComponent(ownerName)}`
+            : undefined;
+        },
+      },
+    ],
+  });
+
+  // Four queries on one runner - "Value" does disambiguate to "Value #<refId>"
+  // here (see the same note on getCronjobOverviewScene's own rightRunner).
+  const runRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [
+      { refId: 'start', expr: buildJobStartQuery(clusterRegex, namespaceRegex, job), instant: true, format: 'table' },
+      { refId: 'end', expr: buildJobEndQuery(clusterRegex, namespaceRegex, job), instant: true, format: 'table' },
+      { refId: 'success', expr: buildJobSuccessQuery(clusterRegex, namespaceRegex, job), instant: true, format: 'table' },
+      { refId: 'fail', expr: buildJobFailedQuery(clusterRegex, namespaceRegex, job), instant: true, format: 'table' },
+    ],
+  });
+
+  const rightCard = new InfoCard({
+    $data: runRunner,
+    rows: [
+      { label: 'start:', fieldName: 'Value #start', unit: 'dateTimeFromNow' },
+      { label: 'end:', fieldName: 'Value #end', unit: 'dateTimeFromNow' },
+      { label: 'success:', fieldName: 'Value #success' },
+      { label: 'fail:', fieldName: 'Value #fail' },
+    ],
+  });
+
+  // "Job optimization" - CPU/Memory, scoped to this Job's own pod(s) via a
+  // genuine hidden Pod variable, one level deeper than the CronJob
+  // Drilldown's own "no picker, match everything" idiom: a Job can have more
+  // than one pod (retries/parallelism), so this needs a real variable rather
+  // than a fixed literal - same "one level deeper needs a real variable"
+  // pattern as the Workload Drilldown's own CPU/Memory tabs.
+  // namespace_workload_pod:kube_pod_owner:relabel already models a Job's own
+  // pods as workload_type="job"/workload=<job name> (see the CronJob
+  // Drilldown's own demo-data note on this), so createPodFilterVariable's
+  // existing `workload` option works unchanged.
+  const podVariable = createPodFilterVariable(clusterRegex, namespaceRegex, { workload: job });
+  podVariable.setState({ hide: VariableHide.hideVariable });
+  const podToken = `\${${POD_VARIABLE_NAME}:regex}`;
+  const substituteResource = (expr: string) => substituteJobResourceQuery(expr, clusterRegex, namespaceRegex, podToken);
+
+  const cpuOptimizationRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: (Object.keys(jobCpuOptimizationQueries) as JobCpuOptimizationKey[]).map((key) => ({
+      refId: key,
+      expr: substituteResource(jobCpuOptimizationQueries[key]),
+    })),
+  });
+  const cpuOptimizationPanel = PanelBuilders.timeseries()
+    .setTitle('Job CPU')
+    .setUnit('cores')
+    .setData(cpuOptimizationRunner)
+    .setOverrides(applyOptimizationSeriesOverrides)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
+    .build();
+
+  const memoryOptimizationRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: (Object.keys(jobMemoryOptimizationQueries) as JobMemoryOptimizationKey[]).map((key) => ({
+      refId: key,
+      expr: substituteResource(jobMemoryOptimizationQueries[key]),
+    })),
+  });
+  const memoryOptimizationPanel = PanelBuilders.timeseries()
+    .setTitle('Job Memory')
+    .setUnit('bytes')
+    .setData(memoryOptimizationRunner)
+    .setOverrides(applyOptimizationSeriesOverrides)
+    .setOption('legend', { displayMode: LegendDisplayMode.Table, placement: 'bottom', calcs: ['min', 'mean', 'max'] })
+    .setHeaderActions(new PanelTimeRangeCompare())
+    .setCustomFieldConfig('spanNulls', true)
+    .build();
+
+  // "Pods" table - POD/CURRENT PHASE/START/END/DURATION/RESTART POLICY.
+  const substitutePods = (expr: string) => substituteJobPodsTableQuery(expr, clusterRegex, namespaceRegex, jobRegex);
+
+  const podsTableRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: (Object.keys(jobPodsTableQueries) as JobPodsTableQueryKey[]).map((key) => ({
+      refId: key,
+      expr: substitutePods(jobPodsTableQueries[key]),
+      format: 'table' as const,
+      instant: true,
+    })),
+  });
+
+  // "phase"/"type"/"reason" are all group_left labels turned into their own
+  // scalar columns by format:'table' (same mechanism as every other
+  // group_left-derived column in this app) - "reason" is stashed onto
+  // "phase"'s own config for jobPodPhaseCell to read rather than kept as its
+  // own visible column (not one of this table's requested columns).
+  const podsTableData = new SceneDataTransformer({
+    $data: podsTableRunner,
+    transformations: [
+      { id: 'merge', options: {} },
+      {
+        id: 'calculateField',
+        options: {
+          mode: 'binary',
+          binary: { left: 'Value #end', operator: '-', right: 'Value #start' },
+          alias: 'DURATION',
+          replaceFields: false,
+        },
+      },
+      attachFieldValues('phase', 'reason', 'reasonValues'),
+      {
+        id: 'organize',
+        options: {
+          excludeByName: {
+            Time: true,
+            owner_name: true,
+            cluster: true,
+            namespace: true,
+            reason: true,
+            'Value #pods': true,
+            'Value #phase': true,
+            'Value #restartPolicy': true,
+            'Value #reason': true,
+          },
+          indexByName: {
+            pod: 0,
+            phase: 1,
+            'Value #start': 2,
+            'Value #end': 3,
+            DURATION: 4,
+            type: 5,
+          },
+          renameByName: {
+            pod: 'POD',
+            phase: 'CURRENT PHASE',
+            'Value #start': 'START',
+            'Value #end': 'END',
+            type: 'RESTART POLICY',
+          },
+        },
+      },
+    ],
+  });
+
+  const podsTable = PanelBuilders.table()
+    .setTitle('Pods')
+    .setData(podsTableData)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('POD')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          {
+            title: 'View pod',
+            // cluster/namespace/workloadType('job')/job are all already
+            // known from this page's own route params - same "inline the
+            // literal, only the pod name is a real column" reasoning as
+            // every other Pods table's own POD link in this app.
+            url: `${WORKLOADS_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/job/${encodeURIComponent(job)}/pods/\${__value.text}\${__url.params}`,
+          },
+        ])
+        .matchFieldsWithName('CURRENT PHASE')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: jobPodPhaseCell() } as any)
+        .matchFieldsWithName('START')
+        .overrideUnit('dateTimeFromNow')
+        .matchFieldsWithName('END')
+        .overrideUnit('dateTimeFromNow')
+        .matchFieldsWithName('DURATION')
+        .overrideUnit('dtdurationms')
+        .overrideMappings(durationMappings)
+        .matchFieldsWithName('RESTART POLICY')
+        .overrideCustomFieldConfig('align', 'left')
+    )
+    .build();
+
+  // One "phase" state-timeline panel per pod this Job owns - reuses the
+  // Pods table's own "pods" query as the repeater's own $data (no format:
+  // 'table', so each unique (owner_name, pod) combination stays its own
+  // frame/series, which is exactly what SceneByFrameRepeater iterates over).
+  const podListRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: [{ refId: 'pods', expr: substitutePods(jobPodsTableQueries.pods), instant: true }],
+  });
+
+  // A Job with no pods matching in the current time range (e.g. a Job whose
+  // pod was already garbage-collected) makes this query come back as *one*
+  // frame with an empty fields array, not zero frames - same "empty string
+  // label equals absent field" instant-query gotcha documented elsewhere in
+  // this app (see the Node Drilldown's own pressure-detection bug notes),
+  // just hitting SceneByFrameRepeater instead of a plain frame search.
+  // Without this filter, the repeater would still call getLayoutChild once
+  // for that placeholder frame and render one broken "pod-less" panel.
+  const podListData = new SceneDataTransformer({
+    $data: podListRunner,
+    transformations: [dropEmptyFrames()],
+  });
+
+  const podPhaseRepeater = new SceneByFrameRepeater({
+    $data: podListData,
+    body: new SceneFlexLayout({ direction: 'column', children: [] }),
+    getLayoutChild: (data: PanelData, frame: DataFrame, frameIndex: number): SceneObject => {
+      const podName = frame.fields.find((f) => f.labels?.pod)?.labels?.pod ?? `pod-${frameIndex}`;
+      const podRegex = escapeRegex(podName);
+      const phaseRunner = new SceneQueryRunner({
+        datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+        queries: [
+          { refId: 'phase', expr: buildJobPodPhaseQuery(clusterRegex, namespaceRegex, podRegex) },
+          { refId: 'reason', expr: buildJobPodReasonQuery(clusterRegex, namespaceRegex, podRegex) },
+        ],
+      });
+      const phasePanel = PanelBuilders.statetimeline()
+        .setTitle('phase')
+        .setData(phaseRunner)
+        .setOverrides((b) =>
+          b
+            .matchFieldsByQuery('phase')
+            .overrideDisplayName('Phase: ${__field.labels.phase}')
+            .matchFieldsByQuery('reason')
+            .overrideDisplayName('Reason: ${__field.labels.reason}')
+        )
+        .build();
+
+      return new SceneFlexItem({
+        ySizing: 'content',
+        body: new SceneFlexLayout({
+          direction: 'column',
+          children: [
+            new SceneFlexItem({ ySizing: 'content', body: new SceneReactObject({ reactNode: <PodPhaseHeading pod={podName} /> }) }),
+            new SceneFlexItem({ height: 220, body: phasePanel }),
+          ],
+        }),
+      });
+    },
+  });
+
+  // "Previous runs" - every other run of this same recurring Job (see
+  // deriveJobFamilyRegex's own comment in jobOverviewQueries.ts) that
+  // started before this one. Reuses the CronJob Drilldown's own "Runs"
+  // table's PODS/COMPLETION coloring + legend verbatim (runsPodsCompletionCell/
+  // RunsStatusLegend above), per an explicit ask to keep the two tables
+  // visually consistent - FAIL/SUCCESS are additionally kept as their own
+  // plain numeric columns here (unlike the Runs table, which only used them
+  // internally for coloring), so "success" needs the same +0-duplicate trick
+  // as that table's own PodsCompletionBase to feed the colored cell without
+  // losing the plain SUCCESS column.
+  const familyRegex = deriveJobFamilyRegex(jobRegex);
+  const substitutePreviousRuns = (expr: string) => substituteJobPreviousRunsQuery(expr, clusterRegex, namespaceRegex, familyRegex, jobRegex);
+
+  const previousRunsRunner = new SceneQueryRunner({
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    queries: (Object.keys(jobPreviousRunsTableQueries) as JobPreviousRunsTableQueryKey[]).map((key) => ({
+      refId: key,
+      expr: substitutePreviousRuns(jobPreviousRunsTableQueries[key]),
+      format: 'table' as const,
+      instant: true,
+    })),
+  });
+
+  const previousRunsData = new SceneDataTransformer({
+    $data: previousRunsRunner,
+    transformations: [
+      { id: 'merge', options: {} },
+      {
+        id: 'calculateField',
+        options: {
+          mode: 'binary',
+          binary: { left: 'Value #end', operator: '-', right: 'Value #start' },
+          alias: 'DURATION',
+          replaceFields: false,
+        },
+      },
+      {
+        id: 'calculateField',
+        options: {
+          mode: 'binary',
+          binary: { left: 'Value #success', operator: '+', right: '0' },
+          alias: 'PodsCompletionBase',
+          replaceFields: false,
+        },
+      },
+      attachFieldValues('PodsCompletionBase', 'Value #completion', 'completionValues'),
+      attachFieldValues('PodsCompletionBase', 'Value #failed', 'failedValues'),
+      {
+        id: 'organize',
+        options: {
+          excludeByName: {
+            Time: true,
+            cluster: true,
+            namespace: true,
+            join_name: true,
+            reason: true,
+            'Value #completion': true,
+          },
+          indexByName: {
+            job_name: 0,
+            'Value #start': 1,
+            'Value #end': 2,
+            DURATION: 3,
+            'Value #failed': 4,
+            'Value #success': 5,
+            PodsCompletionBase: 6,
+          },
+          renameByName: {
+            job_name: 'JOB',
+            'Value #start': 'START',
+            'Value #end': 'END',
+            'Value #failed': 'FAIL',
+            'Value #success': 'SUCCESS',
+            PodsCompletionBase: 'PODS/COMPLETION',
+          },
+        },
+      },
+    ],
+  });
+
+  const previousRunsTable = PanelBuilders.table()
+    .setTitle('Previous runs')
+    .setData(previousRunsData)
+    .setOverrides((b) =>
+      b
+        .matchFieldsWithName('JOB')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideLinks([
+          {
+            title: 'View job',
+            url: `${JOBS_URL}/job/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/\${__value.text}\${__url.params}`,
+          },
+        ])
+        .matchFieldsWithName('START')
+        .overrideUnit('dateTimeFromNow')
+        .matchFieldsWithName('END')
+        .overrideUnit('dateTimeFromNow')
+        .matchFieldsWithName('DURATION')
+        .overrideUnit('dtdurationms')
+        .overrideMappings(durationMappings)
+        .matchFieldsWithName('PODS/COMPLETION')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: runsPodsCompletionCell() } as any)
+    )
+    .build();
+
+  return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
+    $variables: new SceneVariableSet({ variables: [podVariable] }),
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Job information" /> }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ width: '50%', ySizing: 'content', minWidth: 0, body: leftCard }),
+            new SceneFlexItem({ width: '50%', ySizing: 'content', minWidth: 0, body: rightCard }),
+          ],
+        }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Job optimization" /> }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ height: 300, body: cpuOptimizationPanel }),
+            new SceneFlexItem({ height: 300, body: memoryOptimizationPanel }),
+          ],
+        }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Pods" /> }),
+        }),
+        new SceneFlexItem({ height: 400, body: podsTable }),
+        new SceneFlexItem({ ySizing: 'content', body: podPhaseRepeater }),
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <SectionHeading title="Previous runs" /> }),
+        }),
+        new SceneFlexLayout({
+          direction: 'row',
+          ySizing: 'content',
+          children: [
+            new SceneFlexItem({ body: new SceneControlsSpacer() }),
+            new SceneFlexItem({
+              xSizing: 'content',
+              ySizing: 'content',
+              body: new SceneReactObject({ reactNode: <RunsStatusLegend /> }),
+            }),
+          ],
+        }),
+        new SceneFlexItem({ height: 400, body: previousRunsTable }),
+      ],
+    }),
+  });
+}
+
 // Same shape as every other drilldown's own placeholder scaffold (e.g.
 // getNodePlaceholderScene in nodesPage.tsx) for the tabs not built out yet.
-function getCronjobPlaceholderScene(title: string) {
+function getJobsDrilldownPlaceholderScene(title: string) {
   return new EmbeddedScene({
     $behaviors: [attachExploreMenus],
     body: new SceneFlexLayout({
@@ -740,8 +1309,8 @@ function getCronjobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; nam
     },
     { slug: 'cpu', title: 'CPU', getScene: () => getCronjobCpuScene(cluster, namespace, clusterRegex, namespaceRegex) },
     { slug: 'memory', title: 'Memory', getScene: () => getCronjobMemoryScene(cluster, namespace, clusterRegex, namespaceRegex) },
-    { slug: 'logs', title: 'Logs', getScene: () => getCronjobPlaceholderScene('Logs') },
-    { slug: 'events', title: 'Events', getScene: () => getCronjobPlaceholderScene('Events') },
+    { slug: 'logs', title: 'Logs', getScene: () => getJobsDrilldownPlaceholderScene('Logs') },
+    { slug: 'events', title: 'Events', getScene: () => getJobsDrilldownPlaceholderScene('Events') },
   ];
 
   const tabs = tabDefs.map(
@@ -758,6 +1327,66 @@ function getCronjobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; nam
     title: cronjob,
     titleImg: KUBERNETES_ICON,
     renderTitle: (title) => <CronjobPageTitle title={title} cluster={cluster} />,
+    url: baseUrl,
+    routePath: baseUrl,
+    getParentPage: () => parent,
+    tabs,
+    $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
+    $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable()] }),
+    controls: [
+      new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
+      new SceneControlsSpacer(),
+      new SceneTimePicker({}),
+      new SceneRefreshPicker({ refresh: '1m' }),
+    ],
+    preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
+  });
+}
+
+interface JobTabDef {
+  slug: string;
+  title: string;
+  getScene: () => EmbeddedScene;
+}
+
+function getJobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; namespace: string; job: string }>, parent: SceneAppPageLike) {
+  const cluster = decodeURIComponent(routeMatch.params.cluster);
+  const namespace = decodeURIComponent(routeMatch.params.namespace);
+  const job = decodeURIComponent(routeMatch.params.job);
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const clusterRegex = escapeRegex(cluster);
+  const namespaceRegex = escapeRegex(namespace);
+  const jobRegex = escapeRegex(job);
+  const baseUrl = `${JOBS_URL}/job/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/${encodeURIComponent(job)}`;
+
+  // CPU/Memory/Logs/Events are scaffolded but not built out yet - same
+  // incremental-tab-by-tab build pattern as the CronJob Drilldown.
+  const tabDefs: JobTabDef[] = [
+    {
+      slug: 'overview',
+      title: 'Overview',
+      getScene: () => getJobOverviewScene(cluster, namespace, job, clusterRegex, namespaceRegex, jobRegex),
+    },
+    { slug: 'cpu', title: 'CPU', getScene: () => getJobCpuScene(cluster, namespace, job, clusterRegex, namespaceRegex) },
+    { slug: 'memory', title: 'Memory', getScene: () => getJobMemoryScene(cluster, namespace, job, clusterRegex, namespaceRegex) },
+    { slug: 'logs', title: 'Logs', getScene: () => getJobsDrilldownPlaceholderScene('Logs') },
+    { slug: 'events', title: 'Events', getScene: () => getJobsDrilldownPlaceholderScene('Events') },
+  ];
+
+  const tabs = tabDefs.map(
+    (tab) =>
+      new SceneAppPage({
+        title: tab.title,
+        url: `${baseUrl}/${tab.slug}`,
+        routePath: tab.slug,
+        getScene: tab.getScene,
+      })
+  );
+
+  return new SceneAppPage({
+    title: job,
+    titleImg: KUBERNETES_ICON,
+    renderTitle: (title) => <JobPageTitle title={title} cluster={cluster} />,
     url: baseUrl,
     routePath: baseUrl,
     getParentPage: () => parent,
@@ -822,6 +1451,10 @@ export function getJobsPage() {
       {
         routePath: `/cronjob/:cluster/:namespace/:cronjob/*`,
         getPage: getCronjobDetailPage,
+      },
+      {
+        routePath: `/job/:cluster/:namespace/:job/*`,
+        getPage: getJobDetailPage,
       },
     ],
   });

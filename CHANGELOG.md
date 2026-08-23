@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.13.0
+
+- Added a **Job Drilldown** page (`/jobs/job/:cluster/:namespace/:job`), reached from the All Jobs page's Jobs tab (its JOB column is now a link, previously plain text) and from the CronJob Drilldown's own "Runs" table (same fix). Title renders the job name, a red "job" badge, and an "in cluster X" subtitle, matching every other drilldown page's shell. Tabs: Overview, CPU, Memory (all three built out), Logs and Events still coming soon.
+  - **Overview**: a "Job information" heading with two info cards (cluster/namespace/job/controlled by - the owning CronJob, linked, or "–" for a standalone Job; start/end/success/fail), a "Job optimization" heading with Job CPU/Memory timeseries, a "Pods" table (POD/CURRENT PHASE/START/END/DURATION/RESTART POLICY) with a per-pod "phase" state-timeline panel underneath each row (new to this app - built with `SceneByFrameRepeater`), and a "Previous runs" table (JOB/START/END/DURATION/FAIL/SUCCESS/PODS-COMPLETION) listing this same recurring Job's earlier runs, reusing the CronJob Drilldown's own Runs legend and PODS/COMPLETION coloring.
+  - **CPU and Memory tabs**: same layout as every other CPU/Memory tab in this app (3 stat panels, Overview: usage, stacked Distribution, Alignment, and a Pods table) - the given queries turned out byte-for-byte identical to the CronJob Drilldown's own CPU/Memory tabs, so they're reused directly rather than duplicated. The one real difference: a Job (unlike a CronJob) has an exact identity, so these tabs resolve the queries' `pod=~""` placeholder against a genuine hidden Pod variable instead of the CronJob Drilldown's namespace-wide `.+` fallback.
+  - Found and fixed a real bug while building the per-pod phase panels: a Job with zero pods matching the current time range still comes back as one frame with an empty fields array (same "empty-result instant query" gotcha documented elsewhere in this app), which made `SceneByFrameRepeater` render one bogus placeholder panel - now filtered out before the repeater sees it.
+  - `InfoCard`'s `href` can now optionally be a per-row `(frames) => string | undefined` callback, not just a fixed string - needed for "controlled by", whose link target (the owning CronJob's name) is only known once its own query returns.
+  - Extended `InvestigateEntityKind` with `'job'`.
+  - Added minimal demo data (`kube_pod_owner`/`kube_pod_status_phase`/`kube_pod_start_time`, and a new `kube_pod_restart_policy` metric) for the existing "running" demo pod so the new Pods table and phase panels had something real to render.
+
 ## 1.12.0
 
 - Added a **CronJob Drilldown** page (`/jobs/cronjob/:cluster/:namespace/:cronjob`), reached from the All Jobs page's Cronjobs tab - its CRONJOB column is now a link (previously plain text). Title renders the cronjob name, an orange "cronjob" badge (Grafana's filled brand-gradient style), and an "in cluster X" subtitle, matching every other drilldown page's shell. Tabs: Overview, CPU, Memory (all three built out), Logs and Events still coming soon.

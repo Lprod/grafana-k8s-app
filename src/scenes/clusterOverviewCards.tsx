@@ -24,8 +24,12 @@ export interface InfoCardRow {
   // intercepted by Grafana's app shell for SPA routing, which can drop query
   // params when the destination page has its own same-named scene variable
   // (see ClusterOverviewLinks in clustersApp.tsx) - so this navigates via
-  // window.location instead of href to force a real page load.
-  href?: string;
+  // window.location instead of href to force a real page load. A callback
+  // form is for a row whose link target is itself part of the query result
+  // (e.g. "controlled by" needs the owning CronJob's own name) rather than
+  // known outright from route params - returning undefined falls back to a
+  // plain (non-link) value, e.g. for a standalone Job with no owner.
+  href?: string | ((frames: DataFrame[]) => string | undefined);
   // Optional per-row value color (e.g. status/severity tiering) - takes the
   // same frames render() gets plus the live theme (InfoCard isn't itself a
   // component per row, so this can't call useTheme2() on its own). Ignored
@@ -115,11 +119,12 @@ function InfoCardRenderer({ model }: SceneComponentProps<InfoCard>) {
           ? row.render(frames)
           : formatRowValue(row, row.fieldName ? findFieldAcrossFrames(frames, row.fieldName)?.values[0] : undefined);
         const color = row.color?.(frames, theme);
+        const href = typeof row.href === 'function' ? row.href(frames) : row.href;
         return (
           <div className={styles.row} key={row.label}>
             <div className={styles.label}>{row.label}</div>
-            {row.href ? (
-              <button className={styles.valueLink} onClick={() => window.location.assign(row.href!)}>
+            {href ? (
+              <button className={styles.valueLink} onClick={() => window.location.assign(href)}>
                 {value}
               </button>
             ) : (
