@@ -15,7 +15,7 @@ import { createAssistantContextItem, OpenAssistantButton } from '@grafana/assist
 // already a plain component passed to `SceneAppPage.renderTitle`, so there is
 // nothing to hang scene state off and nothing that needs it.
 
-export type InvestigateEntityKind = 'cluster' | 'node' | 'namespace' | 'workload' | 'pod';
+export type InvestigateEntityKind = 'cluster' | 'node' | 'namespace' | 'workload' | 'pod' | 'cronjob';
 
 export type InvestigateEntityProps = {
   kind: InvestigateEntityKind;

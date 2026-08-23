@@ -76,6 +76,12 @@ cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="d
 cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",node="demo-cluster-gce-node-2",container="cache"} 0.25
 cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",node="demo-cluster-gce-node-2",container="db-migrate"} 0.2
 cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",node="demo-cluster-gce-node-1",container="debug-shell"} 0.05
+# CronJob Drilldown's "CronJob CPU" optimization panel (demo data) - the one
+# currently-"active" pod among the Runs table's demo jobs above
+# (infra-check-29791301, still "running"). No CPU limits row - see the
+# memory-limits comment below for why CPU deliberately has none anywhere in
+# this demo.
+cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="cluster-tests",pod="infra-check-29791301-pod",node="demo-cluster-aws-node-1",container="infra-check"} 0.1
 
 # HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_requests Recording rule: active-pod memory requests per pod/container (demo data).
 # TYPE cluster:namespace:pod_memory:active:kube_pod_container_resource_requests gauge
@@ -97,6 +103,9 @@ cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster
 cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",node="demo-cluster-gce-node-2",container="cache"} 268435456
 cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",node="demo-cluster-gce-node-2",container="db-migrate"} 134217728
 cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",node="demo-cluster-gce-node-1",container="debug-shell"} 67108864
+# CronJob Drilldown's "CronJob Memory" optimization panel (demo data) - same
+# active pod as the CPU requests row above.
+cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{cluster="demo-cluster-aws",namespace="cluster-tests",pod="infra-check-29791301-pod",node="demo-cluster-aws-node-1",container="infra-check"} 67108864
 
 # HELP cluster:namespace:pod_memory:active:kube_pod_container_resource_limits Recording rule: active-pod memory limits per pod/container (demo data).
 # TYPE cluster:namespace:pod_memory:active:kube_pod_container_resource_limits gauge
@@ -116,6 +125,9 @@ cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="
 cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",node="demo-cluster-gce-node-2",container="cache"} 536870912
 cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",node="demo-cluster-gce-node-2",container="db-migrate"} 268435456
 cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",node="demo-cluster-gce-node-1",container="debug-shell"} 134217728
+# CronJob Drilldown's "CronJob Memory" optimization panel (demo data) - same
+# active pod as above.
+cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{cluster="demo-cluster-aws",namespace="cluster-tests",pod="infra-check-29791301-pod",node="demo-cluster-aws-node-1",container="infra-check"} 134217728
 
 # HELP node_namespace_pod_container:container_memory_working_set_bytes Recording rule: memory working set per pod/container (demo data).
 # TYPE node_namespace_pod_container:container_memory_working_set_bytes gauge
@@ -136,6 +148,9 @@ node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cl
 node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-2",pod="cache-0-gce",container="cache"} 31457280
 node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-2",pod="db-migrate-1-gce",container="db-migrate"} 125829120
 node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1",pod="debug-shell-gce",container="debug-shell"} 62914560
+# CronJob Drilldown's "CronJob Memory" optimization panel (demo data) - same
+# active pod as above.
+node_namespace_pod_container:container_memory_working_set_bytes{cluster="demo-cluster-aws",namespace="cluster-tests",node="demo-cluster-aws-node-1",pod="infra-check-29791301-pod",container="infra-check"} 41943040
 
 # HELP node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate Recording rule: CPU usage rate per pod/container (demo data).
 # TYPE node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate gauge
@@ -149,6 +164,9 @@ node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster
 node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-2",pod="cache-0-gce",container="cache"} 0.03
 node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-2",pod="db-migrate-1-gce",container="db-migrate"} 0.195
 node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-gce",namespace="default",node="demo-cluster-gce-node-1",pod="debug-shell-gce",container="debug-shell"} 0.045
+# CronJob Drilldown's "CronJob CPU" optimization panel (demo data) - same
+# active pod as above.
+node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster="demo-cluster-aws",namespace="cluster-tests",node="demo-cluster-aws-node-1",pod="infra-check-29791301-pod",container="infra-check"} 0.02
 
 # HELP ALERTS Firing/pending alert instances (demo data).
 # TYPE ALERTS gauge
@@ -188,6 +206,20 @@ kube_job_status_active{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster
 # HELP kube_job_status_failed The number of pods which reached Phase Failed.
 # TYPE kube_job_status_failed gauge
 kube_job_status_failed{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29160480",reason="BackoffLimitExceeded"} 1
+
+# The CronJob Drilldown's own "Runs" table (job_name=~"infra-check-[0-9]+")
+# incidentally also matches this pre-existing infra-check-29160480 entity -
+# its kube_job_status_failed row above has no matching time-bounded
+# start_time (excluded by the Runs table's own `> (time() - $__range)`
+# filter, same staleness reasoning as everywhere else in this file), so it'd
+# otherwise show a confusing all-blank/NaN row. A real cluster's
+# kube_job_status_failed also has no such time-window of its own - it
+# persists for as long as the Job object itself exists - so a real Job that
+# failed long ago genuinely can surface this same way; kube_job_spec_completions
+# added here only so PODS/COMPLETION has a real denominator instead of 0.
+# HELP kube_job_spec_completions The number of pods which are still required to finish (demo data).
+# TYPE kube_job_spec_completions gauge
+kube_job_spec_completions{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29160480"} 1
 
 # HELP kube_cronjob_labels Kubernetes labels converted to Prometheus labels.
 # TYPE kube_cronjob_labels gauge
@@ -487,6 +519,13 @@ namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespa
 namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="cache-0-gce",workload="cache",workload_type="statefulset"} 1
 namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="default",pod="db-migrate-1-aws",workload="db-migrate",workload_type="job"} 1
 namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-gce",namespace="default",pod="db-migrate-1-gce",workload="db-migrate",workload_type="job"} 1
+# CronJob Drilldown's CPU tab (demo data) - the same currently-"active" pod
+# the Overview tab's own "Cronjob optimization" panels already model
+# (infra-check-29791301-pod), attributed to the Job that owns it (not
+# directly to the CronJob - matches this metric's own real-world semantics:
+# a CronJob's pod is owned by an intermediate Job, same as db-migrate's own
+# "job" workload_type above).
+namespace_workload_pod:kube_pod_owner:relabel{cluster="demo-cluster-aws",namespace="cluster-tests",pod="infra-check-29791301-pod",workload="infra-check-29791301",workload_type="job"} 1
 # debug-shell's workload is its own full pod name (debug-shell-aws/-gce),
 # not a shared "debug-shell" - unlike the controller-owned workloads above
 # (a Deployment/DaemonSet/etc. genuinely has one name shared across
@@ -575,6 +614,17 @@ kube_statefulset_created{cluster="demo-cluster-gce",namespace="default",stateful
 kube_job_created{cluster="demo-cluster-aws",namespace="default",job_name="db-migrate"} 1786959549
 kube_job_created{cluster="demo-cluster-gce",namespace="default",job_name="db-migrate"} 1786959549
 
+# CronJob Drilldown Overview tab's "created" row (demo data) - same
+# infra-check/user-check entities the Cronjobs tab's own info/status/schedule
+# metrics already model (see the kube_cronjob_* block above), not new
+# synthetic ones.
+# HELP kube_cronjob_created Unix creation timestamp (demo data).
+# TYPE kube_cronjob_created gauge
+kube_cronjob_created{cluster="demo-cluster-aws",namespace="cluster-tests",cronjob="infra-check"} 1755427449
+kube_cronjob_created{cluster="demo-cluster-aws",namespace="cluster-tests",cronjob="user-check"} 1758019449
+kube_cronjob_created{cluster="demo-cluster-gce",namespace="cluster-tests",cronjob="infra-check"} 1755427449
+kube_cronjob_created{cluster="demo-cluster-gce",namespace="cluster-tests",cronjob="user-check"} 1758019449
+
 # HELP kube_pod_created Unix creation timestamp (demo data).
 # TYPE kube_pod_created gauge
 kube_pod_created{cluster="demo-cluster-aws",namespace="default",pod="debug-shell-aws"} 1761043149
@@ -638,6 +688,57 @@ kube_job_status_succeeded{cluster="demo-cluster-gce",namespace="default",job_nam
 # TYPE kube_job_spec_completions gauge
 kube_job_spec_completions{cluster="demo-cluster-aws",namespace="default",job_name="db-migrate"} 1
 kube_job_spec_completions{cluster="demo-cluster-gce",namespace="default",job_name="db-migrate"} 1
+
+# CronJob Drilldown Overview tab's "Runs" table (demo data) - fresh job runs
+# for the same infra-check/user-check CronJobs the Cronjobs tab already
+# models (see the Cluster Health block above), not new entities. The
+# pre-existing infra-check-29160480/user-check-29160480 rows above are too
+# old for this table's own `> (time() - $__range)` filtering (same reasoning
+# as the Jobs tab's own db-migrate note above), so these use fresh
+# minute-suffixed job names instead. One "complete" run, one "running" run
+# (no completion_time/succeeded value yet), and one "failed" run (on
+# demo-cluster-gce, reason="BackoffLimitExceeded") - covers all three
+# PODS/COMPLETION colors. Same relative-to-editing-time staleness caveat as
+# every other fixed timestamp in this file - the "running" row in particular
+# will read as "complete" or drop out of the default 1h view once enough
+# real time has passed.
+# HELP kube_job_owner Information about the Job's owner (demo data).
+# TYPE kube_job_owner gauge
+kube_job_owner{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791261",owner_kind="CronJob",owner_name="infra-check"} 1
+kube_job_owner{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791301",owner_kind="CronJob",owner_name="infra-check"} 1
+kube_job_owner{cluster="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29791256",owner_kind="CronJob",owner_name="infra-check"} 1
+kube_job_owner{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791296",owner_kind="CronJob",owner_name="user-check"} 1
+
+# HELP kube_job_status_start_time StartTime represents time when the job was acknowledged by the Job Manager (demo data).
+# TYPE kube_job_status_start_time gauge
+kube_job_status_start_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791261"} 1787475665
+kube_job_status_start_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791301"} 1787478065
+kube_job_status_start_time{cluster="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29791256"} 1787475365
+kube_job_status_start_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791296"} 1787477765
+
+# HELP kube_job_status_completion_time CompletionTime represents time when the job was completed (demo data). The
+# "running" job (infra-check-29791301) deliberately has no row here yet.
+# TYPE kube_job_status_completion_time gauge
+kube_job_status_completion_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791261"} 1787475755
+kube_job_status_completion_time{cluster="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29791256"} 1787475425
+kube_job_status_completion_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791296"} 1787477810
+
+# HELP kube_job_status_succeeded The number of pods which reached Phase Succeeded (demo data). The "running" and
+# "failed" jobs deliberately have no row here.
+# TYPE kube_job_status_succeeded gauge
+kube_job_status_succeeded{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791261"} 1
+kube_job_status_succeeded{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791296"} 1
+
+# HELP kube_job_status_failed The number of pods which reached Phase Failed (demo data).
+# TYPE kube_job_status_failed gauge
+kube_job_status_failed{cluster="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29791256",reason="BackoffLimitExceeded"} 1
+
+# HELP kube_job_spec_completions The number of pods which are still required to finish (demo data).
+# TYPE kube_job_spec_completions gauge
+kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791261"} 1
+kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791301"} 1
+kube_job_spec_completions{cluster="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29791256"} 1
+kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791296"} 1
 
 # HELP kube_namespace_status_phase The phase a namespace is currently in (demo data).
 # TYPE kube_namespace_status_phase gauge
@@ -757,6 +858,9 @@ kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="db-m
 kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="debug-shell-gce",container="debug-shell",image_spec="debug-shell:1.0"} 1
 kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="netsplit-node-gce",container="app",image_spec="app:1.0"} 1
 kube_pod_container_info{cluster="demo-cluster-gce",namespace="default",pod="broken-image-gce",container="app",image_spec="app:typo-tag"} 1
+# CronJob Drilldown's CPU tab "Scheduling: Containers with CPU requests set"
+# stat (demo data) - denominator for the same active pod modeled above.
+kube_pod_container_info{cluster="demo-cluster-aws",namespace="cluster-tests",pod="infra-check-29791301-pod",container="infra-check",image_spec="infra-check:1.0"} 1
 
 # HELP kube_pod_status_phase The pod's current phase (demo data).
 # TYPE kube_pod_status_phase gauge

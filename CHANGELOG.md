@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.0
+
+- Added a **CronJob Drilldown** page (`/jobs/cronjob/:cluster/:namespace/:cronjob`), reached from the All Jobs page's Cronjobs tab - its CRONJOB column is now a link (previously plain text). Title renders the cronjob name, an orange "cronjob" badge (Grafana's filled brand-gradient style), and an "in cluster X" subtitle, matching every other drilldown page's shell. Tabs: Overview, CPU, Memory (all three built out), Logs and Events still coming soon.
+  - **Overview**: a "Cronjob information" heading with two info cards (cluster/namespace/cronjob/status; schedule/created/next scheduled/last scheduled), a "Cronjob optimization" heading with CronJob CPU/Memory timeseries, and a "Runs" heading with a JOB/START/END/DURATION/SUCCESS/PODS-COMPLETION table showing every Job this CronJob has spawned, colored by status (green/yellow/red for complete/running/failed).
+  - **CPU and Memory tabs**: the same layout as the Namespace/Workload Drilldowns' own CPU/Memory tabs - 3 stat panels (Alerts: Firing / Scheduling: Containers with requests set / Alignment: usage/requests), an Overview: usage timeseries, a stacked Distribution: Pod usage timeseries, an Alignment: Pod Usage/Requests (%) timeseries, and a Pods table.
+- Extended `InvestigateEntityKind` with `'cronjob'` so the CronJob Drilldown's title gets the same "Investigate" button every other drilldown page has.
+
 ## 1.11.5
 
 - Gave the `oc` row-action button the same purple-to-orange gradient border the Assistant's own "Investigate" button wears, so the two read as one matched pair of row actions instead of a branded button next to a plain one. Ported from `@grafana/assistant`'s own compiled styles rather than eyeballed, so the two stay identical.
