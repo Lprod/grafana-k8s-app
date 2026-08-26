@@ -27,6 +27,7 @@ import { getNodeCpuScene } from './nodeCpuScene';
 import { getNodeMemoryScene } from './nodeMemoryScene';
 import { getNodeNetworkScene } from './nodeNetworkScene';
 import { getNodeStorageScene } from './nodeStorageScene';
+import { getNodeDependenciesScene } from './nodeDependenciesScene';
 import {
   buildNodeAlertsSeverityQuery,
   buildNodeConditionQuery,
@@ -692,6 +693,11 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
     { slug: 'memory', title: 'Memory', getScene: () => getNodeMemoryScene(cluster, clusterRegex, node, nodeRegex) },
     { slug: 'network', title: 'Network', getScene: () => getNodeNetworkScene(clusterRegex, node, nodeRegex) },
     { slug: 'storage', title: 'Storage', getScene: () => getNodeStorageScene(clusterRegex, node, nodeRegex) },
+    {
+      slug: 'dependencies',
+      title: 'Dependencies',
+      getScene: () => getNodeDependenciesScene(cluster, node, clusterRegex, nodeRegex),
+    },
     // No reference dashboard content for either tab (Logs' own panel had no
     // query configured at all; Events doesn't exist as a tab there), and the
     // demo Elasticsearch data has no node-identifying field to filter by -

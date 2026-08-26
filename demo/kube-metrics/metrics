@@ -962,3 +962,25 @@ kube_deployment_status_replicas_available{cluster="demo-cluster-aws",namespace="
 
 # HELP kube_deployment_spec_replicas (continued) desired replicas for the stuck deployment.
 kube_deployment_spec_replicas{cluster="demo-cluster-aws",namespace="default",deployment="broken-app"} 2
+
+# HELP vsphere_vm_cpu_idle_summation Idle CPU summation per VM (demo data).
+# TYPE vsphere_vm_cpu_idle_summation gauge
+# vmname == the Kubernetes node name (see buildNodeVcfInfoQuery,
+# nodeOverviewQueries.ts) - the first hop of the Node Drilldown's own
+# node -> ESXi host -> VCF cluster -> vCenter chain (Dependencies tab).
+# Split 3 aws nodes across 2 ESXi hosts and 2 gce nodes onto a 3rd, so the
+# graph shows a real many-to-one node->host mapping, not just 1:1 pairs.
+vsphere_vm_cpu_idle_summation{vmname="demo-cluster-aws-node-1",esxhostname="esx-aws-01.demo.local"} 850000
+vsphere_vm_cpu_idle_summation{vmname="demo-cluster-aws-node-2",esxhostname="esx-aws-01.demo.local"} 870000
+vsphere_vm_cpu_idle_summation{vmname="demo-cluster-aws-node-3",esxhostname="esx-aws-02.demo.local"} 860000
+vsphere_vm_cpu_idle_summation{vmname="demo-cluster-gce-node-1",esxhostname="esx-gce-01.demo.local"} 840000
+vsphere_vm_cpu_idle_summation{vmname="demo-cluster-gce-node-2",esxhostname="esx-gce-01.demo.local"} 855000
+
+# HELP vsphere_vm_cpu_demand_average Average CPU demand per ESXi host (demo data).
+# TYPE vsphere_vm_cpu_demand_average gauge
+# esxhostname -> clustername, the second hop - both aws ESXi hosts sit in one
+# VCF cluster, the gce one in a separate cluster (mirrors the two demo
+# clouds already modeled everywhere else in this dataset).
+vsphere_vm_cpu_demand_average{esxhostname="esx-aws-01.demo.local",clustername="vcf-cluster-aws-01"} 1200
+vsphere_vm_cpu_demand_average{esxhostname="esx-aws-02.demo.local",clustername="vcf-cluster-aws-01"} 1150
+vsphere_vm_cpu_demand_average{esxhostname="esx-gce-01.demo.local",clustername="vcf-cluster-gce-01"} 1100

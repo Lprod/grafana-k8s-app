@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- Added a **Dependencies** tab to the Node Drilldown (`/nodes/:cluster/:node/dependencies`) - a Node Graph panel showing the selected node's pods on one side and the physical vSphere chain it runs on (ESXi host → VCF cluster → vCenter) on the other. Pod nodes show CPU usage and % of the node's own CPU capacity, are colored green/orange/red the more of the node's capacity they occupy, and their context menu (click to open) shows their Namespace/Workload plus links straight to the Namespace/Workload/Pod Drilldowns.
+
 ## 2.0.0
 
 - Added a top-level **Search** page (`/a/debeka-k8s-app/search`, first entry in the nav, ahead of Clusters) - "Find k8s objects, fast". A full-width search box plus Clusters/Nodes/Namespaces/Workloads/Pods/Containers filter pills, mirroring Grafana Play's own reference search page:
