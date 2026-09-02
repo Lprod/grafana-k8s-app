@@ -3,6 +3,7 @@
 ## 2.0.2
 
 - Fixed the Job Drilldown's Overview/CPU/Memory tabs showing no CPU/Memory data for many Jobs: their `pod=~"..."` filter was resolved through a hidden Pod picker variable backed by a `workload="<job>"` label lookup that comes back empty for a standalone (non-CronJob-owned) Job, which Grafana then interpolates as the literal, matches-nothing regex `pod=~"()"`. Replaced it with a literal `pod=~"<job>.*"` prefix match (a Job's pod names are always the job name plus a random suffix) - the same pattern this page's own Pods table already used correctly.
+- Removed the `--context <cluster>` flag from every generated `oc` command (the row-action button's copy-to-clipboard menu) - this org's kubeconfig context names don't match Prometheus's own `cluster` label, so the flag never resolved to a real context and made every command fail outright. Commands now assume you're already `oc login`'d to the right cluster.
 
 ## 2.0.1
 

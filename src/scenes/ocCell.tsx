@@ -16,12 +16,11 @@ import { map } from 'rxjs/operators';
 // `oc get events --field-selector involvedObject.name=...` instead of the
 // newer `kubectl events --for`, which older `oc` builds don't have.
 //
-// The `--context` flag is a best-effort convenience, not a guarantee: a
-// cluster's Prometheus `cluster` label and the operator's own kubeconfig
-// context name are independent strings. It is included deliberately - a wrong
-// context makes the command fail loudly, whereas omitting it would silently
-// run against whatever cluster you happen to be logged into, which is a much
-// worse failure mode for something like `adm drain`.
+// No `--context` flag: this org's kubeconfig context names don't line up
+// with Prometheus's own `cluster` label, so a generated `--context <cluster>`
+// never actually matched a real context and just made every command fail
+// outright - commands assume you're already `oc login`'d to the right
+// cluster instead.
 
 export type OcScope = {
   cluster?: string;
@@ -43,22 +42,15 @@ function ocResourceType(workloadType?: string) {
   return workloadType === 'staticpod' ? 'pod' : workloadType;
 }
 
-function contextAndNamespace(scope: OcScope) {
-  const parts: string[] = [];
-  if (scope.cluster) {
-    parts.push(`--context ${scope.cluster}`);
-  }
-  if (scope.namespace) {
-    parts.push(`-n ${scope.namespace}`);
-  }
-  return parts.join(' ');
+function namespaceFlag(scope: OcScope) {
+  return scope.namespace ? `-n ${scope.namespace}` : '';
 }
 
 type OcCommand = { label: string; icon: IconName; command: string };
 
 export function ocCommandsFor(scope: OcScope): OcCommand[] {
-  const prefix = `oc ${contextAndNamespace(scope)}`.replace(/\s+/g, ' ').trim();
-  const clusterOnly = `oc ${scope.cluster ? `--context ${scope.cluster} ` : ''}`.replace(/\s+/g, ' ').trim();
+  const prefix = `oc ${namespaceFlag(scope)}`.replace(/\s+/g, ' ').trim();
+  const clusterOnly = 'oc';
 
   if (scope.pod) {
     const containerFlag = scope.container ? ` -c ${scope.container}` : '';
