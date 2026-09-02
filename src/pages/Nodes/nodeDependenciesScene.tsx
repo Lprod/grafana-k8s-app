@@ -11,6 +11,11 @@ import {
   SceneReactObject,
 } from '@grafana/scenes';
 import { map } from 'rxjs/operators';
+// Not re-exported from '@grafana/schema''s own top-level index (Node Graph's
+// options aren't part of the "common" schema surface) - same deep-import
+// path @grafana/scenes' own PanelBuilders.nodegraph() typing resolves to
+// internally, confirmed present in this package's own package.json#exports.
+import { LayoutAlgorithm } from '@grafana/schema/dist/esm/raw/composable/nodegraph/panelcfg/x/NodeGraphPanelCfg_types.gen';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import {
   buildNodeInfoQuery,
@@ -189,7 +194,16 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
           color: 'darkgrey',
         });
 
-        podNames.forEach((rawPodName, i) => {
+        // Heaviest-CPU-share pod first - with 30-40 pods fanned out into one
+        // layered-layout column (see below), insertion order is the only
+        // lever available for *where in that column* a pod lands, so this
+        // puts the pods most worth noticing at the top instead of leaving
+        // them at whatever position the underlying query happened to return.
+        const podOrder = podNames
+          .map((rawPodName, i) => ({ rawPodName, i, cpuUsage: cpuByPod.get(String(rawPodName)) ?? -1 }))
+          .sort((a, b) => b.cpuUsage - a.cpuUsage);
+
+        podOrder.forEach(({ rawPodName, i }) => {
           const podName = String(rawPodName);
           const namespace = podNamespaces[i] !== undefined ? String(podNamespaces[i]) : '';
           const workload = podWorkloads[i] !== undefined ? String(podWorkloads[i]) : '';
@@ -236,46 +250,52 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
           });
         });
 
-        // The physical vSphere chain - node -> ESXi host -> VCF cluster ->
-        // vCenter - the "other direction" from the node's own pods. Each
-        // hop is only added when its own query actually returned data (the
-        // demo stack has no vSphere/telegraf source, see
-        // buildNodeVcfInfoQuery's own comment - a real environment may only
-        // have some of these resolve).
-        let chainParentId = nodeId;
+        // The physical vSphere chain - vCenter -> VCF cluster -> ESXi host ->
+        // node - the "other direction" from the node's own pods. Edges point
+        // *toward* the node (the reverse of the pod edges below, which point
+        // *away* from it) so the panel's layered layout (see
+        // getNodeDependenciesScene's own `layoutAlgorithm` option) - which
+        // ranks nodes into columns by directed distance from a root - puts
+        // this whole chain in the columns left of the node and every pod in
+        // the columns to its right, node dead center, instead of an
+        // undirected jumble. Each hop is only added when its own query
+        // actually returned data (the demo stack has no vSphere/telegraf
+        // source, see buildNodeVcfInfoQuery's own comment - a real
+        // environment may only have some of these resolve).
+        let chainChildId = nodeId;
         if (esxHost) {
           const esxId = `esxi:${esxHost}`;
           nodeRows.push(emptyDetailRow(esxId, esxHost, 'ESXi Host', 'ESXi Host'));
           edgeRows.push({
-            id: 'edge:node-esxi',
-            source: nodeId,
-            target: esxId,
+            id: 'edge:esxi-node',
+            source: esxId,
+            target: chainChildId,
             color: EDGE_COLOR,
             thickness: 2,
             strokeDasharray: '4,4',
           });
-          chainParentId = esxId;
+          chainChildId = esxId;
         }
         if (vcfCluster) {
           const vcfId = `vcfcluster:${vcfCluster}`;
           nodeRows.push(emptyDetailRow(vcfId, vcfCluster, 'VCF Cluster', 'VCF Cluster'));
           edgeRows.push({
-            id: 'edge:esxi-vcfcluster',
-            source: chainParentId,
-            target: vcfId,
+            id: 'edge:vcfcluster-esxi',
+            source: vcfId,
+            target: chainChildId,
             color: EDGE_COLOR,
             thickness: 2,
             strokeDasharray: '4,4',
           });
-          chainParentId = vcfId;
+          chainChildId = vcfId;
         }
         if (vcenter) {
           const vcenterId = `vcenter:${vcenter}`;
           nodeRows.push(emptyDetailRow(vcenterId, vcenter, 'vCenter', 'vCenter'));
           edgeRows.push({
-            id: 'edge:vcfcluster-vcenter',
-            source: chainParentId,
-            target: vcenterId,
+            id: 'edge:vcenter-vcfcluster',
+            source: vcenterId,
+            target: chainChildId,
             color: EDGE_COLOR,
             thickness: 2,
             strokeDasharray: '4,4',
@@ -386,10 +406,22 @@ export function getNodeDependenciesScene(cluster: string, node: string, clusterR
   const nodeGraphPanel = PanelBuilders.nodegraph()
     .setTitle('Dependencies')
     .setDescription(
-      'Pods scheduled on this node (below) and the physical vSphere chain it runs on - ESXi host, VCF cluster, vCenter (above).'
+      'The physical vSphere chain this node runs on - vCenter, VCF cluster, ESXi host (left) - and the pods scheduled on it, heaviest CPU share first (right).'
     )
     .setData(graphData)
     .setNoValue('No dependency data for this node.')
+    // "Layered" (not the "force" physics-simulation default) ranks nodes into
+    // columns by directed distance from a root instead of letting them settle
+    // wherever a physics simulation happens to push them - with 30-40 pods on
+    // a real node, force layout turns into an unreadable, constantly-jiggling
+    // ball. Layered turns the same data into a predictable vCenter/VCF
+    // cluster/ESXi host -> node -> pods left-to-right flow instead (see the
+    // reversed vSphere-chain edge directions in buildDependencyGraphFrames
+    // above - layered layout takes its column order from edge direction).
+    // Grafana's own docs flag layered as slow past ~500 nodes and recommend
+    // force beyond that, well above what a single node's own pod count would
+    // ever reach here.
+    .setOption('layoutAlgorithm', LayoutAlgorithm.Layered)
     .setOverrides((b) =>
       b.matchFieldsWithName('id').overrideLinks([
         {
@@ -418,7 +450,10 @@ export function getNodeDependenciesScene(cluster: string, node: string, clusterR
           body: new SceneReactObject({ reactNode: <SectionHeading title="Dependencies" /> }),
         }),
         new SceneFlexItem({ ySizing: 'content', body: new SceneReactObject({ reactNode: <DependenciesLegend /> }) }),
-        new SceneFlexItem({ height: 600, body: nodeGraphPanel }),
+        // Taller than this app's usual panel height (600) - the layered
+        // layout stacks every one of a node's pods into one column, and a
+        // real node here runs 30-40 of them.
+        new SceneFlexItem({ height: 900, body: nodeGraphPanel }),
       ],
     }),
   });
