@@ -6,10 +6,9 @@ import {
   SceneFlexItem,
   SceneFlexLayout,
   SceneQueryRunner,
-  SceneVariableSet,
 } from '@grafana/scenes';
 import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
-import { FieldColorModeId, VariableHide } from '@grafana/data';
+import { FieldColorModeId } from '@grafana/data';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import {
   cronjobMemoryDistributionQuery,
@@ -24,14 +23,19 @@ import {
 import { substituteJobResourceQuery } from '../../queries/jobOverviewQueries';
 import { attachPercentField, coverageThresholds, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
-import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
+import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // The Job Drilldown's own Memory tab - same "given queries are byte-for-byte
 // identical to the CronJob Drilldown's own tab, reused directly rather than
 // duplicated" situation as jobCpuScene.tsx, just resolving the `pod=~""`
-// empty-variable token to this page's own real hidden Pod variable instead
-// of the CronJob Drilldown's namespace-wide ".+" fallback.
+// empty-variable token to a literal `<job>.*` regex instead of the CronJob
+// Drilldown's namespace-wide ".+" fallback. **Bug fixed here**: see
+// jobCpuScene.tsx's own module-level comment - this used to go through a
+// hidden Pod QueryVariable that resolved to nothing (and so `pod=~"()"`,
+// matching zero series) for any standalone Job with no
+// `namespace_workload_pod:kube_pod_owner:relabel` row.
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 
@@ -87,13 +91,9 @@ function buildMemoryStatPanel(title: string, expr: string, unit: string, thresho
 }
 
 export function getJobMemoryScene(cluster: string, namespace: string, job: string, clusterRegex: string, namespaceRegex: string) {
-  // Hidden pod variable - same reasoning as the Overview/CPU tabs' own (a
-  // Job can have more than one pod - retries/parallelism), redeclared
-  // per-tab since each tab is its own EmbeddedScene with no $variables
-  // inherited from any other tab's scene.
-  const podVariable = createPodFilterVariable(clusterRegex, namespaceRegex, { workload: job });
-  podVariable.setState({ hide: VariableHide.hideVariable });
-  const podToken = `\${${POD_VARIABLE_NAME}:regex}`;
+  // `<job>.*` - see jobCpuScene.tsx's own module-level comment for why this
+  // replaced a hidden Pod QueryVariable lookup.
+  const podToken = `${escapeRegex(job)}.*`;
   const substitute = (expr: string) => substituteJobResourceQuery(expr, clusterRegex, namespaceRegex, podToken);
 
   const statPanels = memoryStatPanelDefs.map((def) =>
@@ -239,7 +239,6 @@ export function getJobMemoryScene(cluster: string, namespace: string, job: strin
 
   return new EmbeddedScene({
     $behaviors: [attachExploreMenus],
-    $variables: new SceneVariableSet({ variables: [podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

@@ -1,6 +1,6 @@
 import React from 'react';
 import { map } from 'rxjs/operators';
-import { FieldColorModeId, GrafanaTheme2, MappingType, SpecialValueMatch, ValueMapping, VariableHide, PanelData, DataFrame } from '@grafana/data';
+import { FieldColorModeId, GrafanaTheme2, MappingType, SpecialValueMatch, ValueMapping, PanelData, DataFrame } from '@grafana/data';
 import { LegendDisplayMode, TableCellDisplayMode } from '@grafana/schema';
 import { Alert, Badge, CustomCellRendererProps, useTheme2 } from '@grafana/ui';
 import {
@@ -71,11 +71,9 @@ import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import {
   CLUSTER_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
-  POD_VARIABLE_NAME,
   THANOS_VARIABLE_NAME,
   createClusterFilterVariable,
   createNamespaceFilterVariable,
-  createPodFilterVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
@@ -893,18 +891,20 @@ function getJobOverviewScene(
   });
 
   // "Job optimization" - CPU/Memory, scoped to this Job's own pod(s) via a
-  // genuine hidden Pod variable, one level deeper than the CronJob
-  // Drilldown's own "no picker, match everything" idiom: a Job can have more
-  // than one pod (retries/parallelism), so this needs a real variable rather
-  // than a fixed literal - same "one level deeper needs a real variable"
-  // pattern as the Workload Drilldown's own CPU/Memory tabs.
-  // namespace_workload_pod:kube_pod_owner:relabel already models a Job's own
-  // pods as workload_type="job"/workload=<job name> (see the CronJob
-  // Drilldown's own demo-data note on this), so createPodFilterVariable's
-  // existing `workload` option works unchanged.
-  const podVariable = createPodFilterVariable(clusterRegex, namespaceRegex, { workload: job });
-  podVariable.setState({ hide: VariableHide.hideVariable });
-  const podToken = `\${${POD_VARIABLE_NAME}:regex}`;
+  // literal `<job>.*` regex, same convention as jobPodsTableQueries/
+  // substituteJobPodsTableQuery below (a Job's pod names are always the job
+  // name plus a random suffix). **Bug fixed here**: this used to resolve
+  // `pod=~"(...)"` via a hidden Pod QueryVariable backed by
+  // `namespace_workload_pod:kube_pod_owner:relabel{...,workload="<job>"}` -
+  // that recording rule only ever gets a `workload` row for a Job when
+  // something upstream (this codebase's own label_replace chain, or a real
+  // cluster's equivalent) actually attributes it as such, which isn't
+  // guaranteed for a standalone Job. Whenever that variable's query came back
+  // empty, `${pod:regex}` interpolated to the literal string "()" - a regex
+  // matching nothing - and every CPU/Memory panel on this tab and the
+  // dedicated CPU/Memory tabs silently showed no data. `pod=~"<job>.*"`
+  // needs no such lookup and matches every one of this Job's pods directly.
+  const podToken = `${jobRegex}.*`;
   const substituteResource = (expr: string) => substituteJobResourceQuery(expr, clusterRegex, namespaceRegex, podToken);
 
   const cpuOptimizationRunner = new SceneQueryRunner({
@@ -1206,7 +1206,6 @@ function getJobOverviewScene(
 
   return new EmbeddedScene({
     $behaviors: [attachExploreMenus],
-    $variables: new SceneVariableSet({ variables: [podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',
       children: [

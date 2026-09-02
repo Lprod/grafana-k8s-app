@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2
+
+- Fixed the Job Drilldown's Overview/CPU/Memory tabs showing no CPU/Memory data for many Jobs: their `pod=~"..."` filter was resolved through a hidden Pod picker variable backed by a `workload="<job>"` label lookup that comes back empty for a standalone (non-CronJob-owned) Job, which Grafana then interpolates as the literal, matches-nothing regex `pod=~"()"`. Replaced it with a literal `pod=~"<job>.*"` prefix match (a Job's pod names are always the job name plus a random suffix) - the same pattern this page's own Pods table already used correctly.
+
 ## 2.0.1
 
 - Added a **Dependencies** tab to the Node Drilldown (`/nodes/:cluster/:node/dependencies`) - a Node Graph panel showing the selected node's pods on one side and the physical vSphere chain it runs on (ESXi host → VCF cluster → vCenter) on the other. Pod nodes show CPU usage and % of the node's own CPU capacity, are colored green/orange/red the more of the node's capacity they occupy, and their context menu (click to open) shows their Namespace/Workload plus links straight to the Namespace/Workload/Pod Drilldowns.

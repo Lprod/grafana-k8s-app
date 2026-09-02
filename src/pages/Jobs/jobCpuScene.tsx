@@ -6,10 +6,9 @@ import {
   SceneFlexItem,
   SceneFlexLayout,
   SceneQueryRunner,
-  SceneVariableSet,
 } from '@grafana/scenes';
 import { BigValueColorMode, BigValueGraphMode, LegendDisplayMode, StackingMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
-import { FieldColorModeId, VariableHide } from '@grafana/data';
+import { FieldColorModeId } from '@grafana/data';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import {
   cronjobCpuDistributionQuery,
@@ -24,7 +23,7 @@ import {
 import { substituteJobResourceQuery } from '../../queries/jobOverviewQueries';
 import { attachPercentField, coverageThresholds, requestUsageCell, usageThresholds } from '../../scenes/tableCells';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
-import { POD_VARIABLE_NAME, THANOS_VARIABLE_NAME, createPodFilterVariable } from '../../variables/datasourceVariables';
+import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 
 // The Job Drilldown's own CPU tab - given queries are byte-for-byte
@@ -33,9 +32,18 @@ import { attachExploreMenus } from '../../scenes/panelExplore';
 // being the `pod=~""` empty-variable token: the CronJob Drilldown has no Pod
 // picker at all (substituteCronjobResourceQuery maps it to ".+", matching
 // everything namespace-wide), while this page - one level deeper, already
-// scoped to a single known Job - has a genuine hidden Pod variable to
-// resolve it to (see getJobOverviewScene's own "Job optimization" panels for
-// the same reasoning, first established there).
+// scoped to a single known Job - resolves it to a literal `<job>.*` regex
+// instead (a Job's pod names are always the job name plus a random suffix,
+// same convention as jobPodsTableQueries/substituteJobPodsTableQuery in
+// jobOverviewQueries.ts). **Bug fixed here**: this used to resolve `pod=~""`
+// via a hidden Pod *QueryVariable* (`label_values(namespace_workload_pod:
+// kube_pod_owner:relabel{...,workload="<job>"}, pod)`), which came back
+// empty whenever that recording rule had no row for this job (the case for
+// every standalone, non-CronJob-owned Job) - a multi-value variable with zero
+// resolved options interpolates `${pod:regex}` as the literal string "()", a
+// regex that matches nothing, so every CPU/Memory panel on this tab silently
+// showed no data. The `<job>.*` prefix match needs no such lookup.
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 
@@ -90,14 +98,9 @@ function buildCpuStatPanel(title: string, expr: string, unit: string, thresholds
 }
 
 export function getJobCpuScene(cluster: string, namespace: string, job: string, clusterRegex: string, namespaceRegex: string) {
-  // Hidden pod variable - same reasoning as the Overview tab's own (a Job
-  // can have more than one pod - retries/parallelism), redeclared per-tab
-  // since each tab is its own EmbeddedScene with no $variables inherited
-  // from the Overview tab's scene (same pattern as the Workload Drilldown's
-  // own per-tab hidden Pod variable).
-  const podVariable = createPodFilterVariable(clusterRegex, namespaceRegex, { workload: job });
-  podVariable.setState({ hide: VariableHide.hideVariable });
-  const podToken = `\${${POD_VARIABLE_NAME}:regex}`;
+  // `<job>.*` - see the module-level comment above for why this replaced a
+  // hidden Pod QueryVariable lookup.
+  const podToken = `${escapeRegex(job)}.*`;
   const substitute = (expr: string) => substituteJobResourceQuery(expr, clusterRegex, namespaceRegex, podToken);
 
   const statPanels = cpuStatPanelDefs.map((def) =>
@@ -245,7 +248,6 @@ export function getJobCpuScene(cluster: string, namespace: string, job: string, 
 
   return new EmbeddedScene({
     $behaviors: [attachExploreMenus],
-    $variables: new SceneVariableSet({ variables: [podVariable] }),
     body: new SceneFlexLayout({
       direction: 'column',
       children: [
