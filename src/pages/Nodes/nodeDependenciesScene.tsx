@@ -312,20 +312,31 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
             stringField('subtitle', nodeRows.map((r) => r.subtitle)),
             numberField('mainStat', nodeRows.map((r) => r.mainStat), 'cores'),
             numberField('secondaryStat', nodeRows.map((r) => r.secondaryStat), 'percentunit'),
-            // Two coloring paths on purpose: `color` per the Node Graph
-            // docs, plus a single full-circle `arc__fill` (~1, nudged just
-            // under to sidestep a known Grafana rendering bug where an arc
-            // value of exactly 1.0 shows no color at all -
-            // github.com/grafana/grafana/issues/54683) paired with its own
-            // `arc__fill_color`. A *proportional* arc (actual %-of-node
-            // fraction, e.g. 0.02 for a 2% pod) was tried first and made
-            // every node render as a barely-visible sliver, only really
-            // showing up once a hover highlight enlarged it - the arc__
-            // mechanism is meant for a ring, not a fill level. A constant
-            // near-1 arc makes the whole circle solid instead.
+            // **Bug fixed here**: this used to also emit `arc__fill`/
+            // `arc__fill_color` fields, on the theory that a near-complete
+            // (0.999) arc plus a per-row color string would render each
+            // node as a solid-colored disk. Both assumptions were wrong -
+            // per Grafana's own Node Graph source
+            // (public/app/plugins/panel/nodeGraph/{Node.tsx,utils.ts}):
+            // (a) *any* field named `arc__<name>` is parsed as its own arc
+            // section, so `arc__fill_color` wasn't read as a color source at
+            // all - it was a second, bogus arc section whose values (color
+            // *names*, not the 0-1 fractions arc sections require) broke the
+            // percent math the renderer does across every arc section on the
+            // node; (b) an arc section's own color comes only from that
+            // field's `config.color.fixedColor` - a single value for the
+            // *entire field*, not a per-row string - and `arc__fill` never
+            // had one set, so every arc rendered with no color at all. With
+            // any `arc__*` field present the renderer never falls back to
+            // plain `node.color`, so the combination made every node render
+            // colorless regardless of its own `color` value - this is why
+            // the graph came back "everything is grey" once someone actually
+            // looked closely. Dropping both arc fields removes the (never
+            // actually rendered) ring, and lets Grafana's real, genuinely
+            // per-row fallback take over: with no `arc__*` fields at all,
+            // each node's circle stroke is colored straight from this plain
+            // `color` field's own value for that row.
             stringField('color', nodeRows.map((r) => r.color)),
-            numberField('arc__fill', nodeRows.map(() => 0.999)),
-            stringField('arc__fill_color', nodeRows.map((r) => r.color)),
             stringField('detail__Type', nodeRows.map((r) => r.detailType)),
             stringField('detail__Namespace', nodeRows.map((r) => r.detailNamespace)),
             stringField('detail__Workload', nodeRows.map((r) => r.detailWorkload)),

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.3
+
+- Fixed the Node Drilldown Dependencies tab rendering every node colorless (grey) regardless of its actual pod-CPU-share tier. Root cause: the panel emitted `arc__fill`/`arc__fill_color` fields on the theory that a near-complete arc plus a per-row color string would paint a solid-colored disk - neither assumption matches Grafana's real Node Graph behavior. Any field named `arc__<name>` is parsed as its own ring segment, so `arc__fill_color` was never read as a color source at all, just a second, malformed segment (color-name strings instead of the 0-1 fractions arc segments require); an arc segment's actual color comes only from that field's own `config.color.fixedColor` - one value for the whole field, not per-row - which `arc__fill` never had set, so its segment always rendered colorless. With any `arc__*` field present, Grafana never falls back to the plain (correctly per-row) `color` field either, so every node lost its color regardless. Removed both `arc__*` fields; nodes are colored by their `color` field again.
+
 ## 2.0.2
 
 - Fixed the Job Drilldown's Overview/CPU/Memory tabs showing no CPU/Memory data for many Jobs: their `pod=~"..."` filter was resolved through a hidden Pod picker variable backed by a `workload="<job>"` label lookup that comes back empty for a standalone (non-CronJob-owned) Job, which Grafana then interpolates as the literal, matches-nothing regex `pod=~"()"`. Replaced it with a literal `pod=~"<job>.*"` prefix match (a Job's pod names are always the job name plus a random suffix) - the same pattern this page's own Pods table already used correctly.
