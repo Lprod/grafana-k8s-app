@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.6
+
+- Fixed the release pipeline itself: the `v2.0.4`/`v2.0.5` tag pushes both failed CI's plugin-validator step (`osv-scanner detected a high severity issue in package fast-uri`), so neither actually produced a GitHub release despite tagging/pushing successfully - a newly-disclosed CVE (published 2026-09-02) against `fast-uri@3.1.5`, a transitive build-time-only dependency (via `copy-webpack-plugin` → `schema-utils` → `ajv`), not a change introduced by either of those releases. Pinned it to `^3.1.7` (patched) via an `overrides` entry in `package.json`.
+
 ## 2.0.5
 
 - Fixed the Node Drilldown Dependencies tab's v2.0.4 usage-tier coloring never actually appearing (every pod/node stayed a flat fallback blue, with no CPU/Memory % text at all) - the tab's own query runner has 11 queries sharing one data request, so Grafana names every query's own value field `Value #<refId>` (e.g. `Value #nodeCapacity`) instead of the plain `Value` the code was looking for, silently failing every usage lookup. Fixed by matching the value field by type instead of a hardcoded name. Also bumped the minimum visible ring-segment size so a real but small usage percentage (typical for this demo's mostly-idle pods) still reads as a visible partial ring instead of a barely-visible sliver, and the CPU/Memory % text now shows one decimal place instead of rounding small values down to a misleading "0%".
