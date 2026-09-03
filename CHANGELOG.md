@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.4
+
+- Reworked the Node Drilldown Dependencies tab's node coloring, based on live feedback that pods/vSphere nodes all looked flatly green/blue with no real information in them:
+  - The ring around a node's circle now shows real CPU and Memory usage (% of the node's own capacity), each colored by this app's usual 0-60% orange / 60-90% green / 90-100% red thresholds - CPU as the top segment, Memory below it. The exact percentages are also shown as plain text inside the node.
+  - A pod (or the node itself) that isn't Ready now renders with a solid red fill, replacing the previous "colored by how much of the node's CPU it occupies" ring - readiness and usage are now two separate, simultaneously-visible signals instead of one ring trying to carry both.
+  - The vSphere chain nodes (ESXi host/VCF cluster/vCenter) - which have no usage data to color by - each get a distinct color per hop instead of the same flat blue, so the chain reads as a real hierarchy rather than one undifferentiated color.
+  - Added demo `kube_pod_status_ready` data so pod readiness has something real to render locally.
+
 ## 2.0.3
 
 - Fixed the Node Drilldown Dependencies tab rendering every node colorless (grey) regardless of its actual pod-CPU-share tier. Root cause: the panel emitted `arc__fill`/`arc__fill_color` fields on the theory that a near-complete arc plus a per-row color string would paint a solid-colored disk - neither assumption matches Grafana's real Node Graph behavior. Any field named `arc__<name>` is parsed as its own ring segment, so `arc__fill_color` was never read as a color source at all, just a second, malformed segment (color-name strings instead of the 0-1 fractions arc segments require); an arc segment's actual color comes only from that field's own `config.color.fixedColor` - one value for the whole field, not per-row - which `arc__fill` never had set, so its segment always rendered colorless. With any `arc__*` field present, Grafana never falls back to the plain (correctly per-row) `color` field either, so every node lost its color regardless. Removed both `arc__*` fields; nodes are colored by their `color` field again.

@@ -1,5 +1,5 @@
 import React from 'react';
-import { DataFrame, Field, FieldType } from '@grafana/data';
+import { DataFrame, Field, FieldColorModeId, FieldType } from '@grafana/data';
 import {
   CustomTransformOperator,
   EmbeddedScene,
@@ -18,9 +18,12 @@ import { map } from 'rxjs/operators';
 import { LayoutAlgorithm } from '@grafana/schema/dist/esm/raw/composable/nodegraph/panelcfg/x/NodeGraphPanelCfg_types.gen';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import {
+  buildNodeConditionQuery,
   buildNodeInfoQuery,
   buildNodeVcfInfoQuery,
+  buildPodReadyQuery,
   nodeCpuOptimizationQueries,
+  nodeMemoryOptimizationQueries,
   nodePodsTableQueries,
   substituteClusterNodeAndPod,
 } from '../../queries/nodeOverviewQueries';
@@ -32,10 +35,19 @@ import { SectionHeading } from '../../scenes/sectionHeading';
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 
-// Edges are deliberately never tier-colored (see the pod-edge/infra-edge
-// construction below) - the "this pod is hogging the node" highlight lives
-// entirely on the node's own circle fill, per explicit follow-up ask.
+// Edges stay a plain neutral color - see the pod-edge/infra-edge
+// construction below for what carries the real signal instead.
 const EDGE_COLOR = '#999';
+
+// Distinct per-hop colors for the vSphere chain, deliberately *not* using
+// orange/green/red (those are reserved for the CPU/Mem usage-tier rings
+// below) - there's no metric to color these by (no per-ESXi-host/VCF-cluster
+// usage data in this app), so this is a plain categorical distinction rather
+// than a data-driven one, replacing the earlier "everything is the same
+// flat blue" look.
+const ESXI_COLOR = '#5794F2';
+const VCF_CLUSTER_COLOR = '#8F3BB8';
+const VCENTER_COLOR = '#1F60C4';
 
 function frameByRef(frames: DataFrame[], refId: string) {
   return frames.find((f) => f.refId === refId);
@@ -59,54 +71,63 @@ function stringField(name: string, values: Array<string | null>): Field {
   return { name, type: FieldType.string, config: {}, values };
 }
 
-function numberField(name: string, values: Array<number | null>, unit?: string): Field {
-  return { name, type: FieldType.number, config: unit ? { unit } : {}, values };
+function numberField(name: string, values: Array<number | null>, unit?: string, decimals?: number): Field {
+  return { name, type: FieldType.number, config: { unit, decimals }, values };
 }
 
-// A pod "hogging" its node is a different scale than this app's usual
-// usageThresholds (tableCells.tsx) - that one colors *request/limit
-// efficiency* (a cost-planning read, where under 60% is orange for wasted
-// capacity). Here there's no request/limit involved at all, just "how much
-// of the node's shared physical CPU pool does this one pod occupy" - a
-// plain the-bigger-the-worse ramp instead.
-type ShareTier = 'low' | 'med' | 'high';
+function boolField(name: string, values: boolean[]): Field {
+  return { name, type: FieldType.boolean, config: {}, values };
+}
 
-function nodeShareTier(fraction: number | undefined): ShareTier {
+// Node Graph's own rendering (public/app/plugins/panel/nodeGraph/Node.tsx in
+// the actual Grafana source - checked directly rather than guessed, see the
+// session notes) only colors an arc__* *segment* from that FIELD's own
+// `config.color.fixedColor` - a single color for the entire column, not a
+// per-row value. There is no per-row/threshold-driven arc coloring at all.
+// To still get this app's usual 0-60% orange / 60-90% green / 90-100% red
+// read (`usageThresholds` in tableCells.tsx) on a per-row basis, each metric
+// gets *three* arc fields, one per tier - only the row's own actual tier
+// gets a non-zero value, the other two stay 0 and are skipped entirely by
+// the renderer (it filters out zero-valued sections) - so exactly one
+// correctly-colored segment renders per metric, sized by the real fraction.
+interface UsageBucket {
+  low: number;
+  med: number;
+  high: number;
+}
+
+function usageBucket(fraction: number | undefined): UsageBucket {
   if (fraction === undefined || Number.isNaN(fraction)) {
-    return 'low';
+    return { low: 0, med: 0, high: 0 };
   }
-  if (fraction >= 0.7) {
-    return 'high';
+  const v = Math.min(Math.max(fraction, 0), 1);
+  if (v >= 0.9) {
+    return { low: 0, med: 0, high: v };
   }
-  if (fraction >= 0.3) {
-    return 'med';
+  if (v >= 0.6) {
+    return { low: 0, med: v, high: 0 };
   }
-  return 'low';
+  return { low: v, med: 0, high: 0 };
 }
 
-function nodeShareColor(tier: ShareTier): string {
-  switch (tier) {
-    case 'high':
-      return 'red';
-    case 'med':
-      return 'orange';
-    default:
-      return 'green';
-  }
+function arcField(name: string, values: number[], fixedColor: string): Field {
+  return { name, type: FieldType.number, config: { color: { mode: FieldColorModeId.Fixed, fixedColor } }, values };
 }
 
 interface GraphNodeRow {
   id: string;
   title: string;
   subtitle: string;
-  mainStat: number | null;
-  secondaryStat: number | null;
+  cpuFraction: number | undefined;
+  memFraction: number | undefined;
   color: string;
+  highlighted: boolean;
   detailType: string;
   detailNamespace: string;
   detailWorkload: string;
   detailCpuUsage: string;
-  detailNodeShare: string;
+  detailMemUsage: string;
+  detailReady: string;
   namespace: string;
   workload: string;
   workloadType: string;
@@ -122,19 +143,21 @@ interface GraphEdgeRow {
   strokeDasharray: string;
 }
 
-function emptyDetailRow(id: string, title: string, subtitle: string, detailType: string): GraphNodeRow {
+function emptyDetailRow(id: string, title: string, subtitle: string, detailType: string, color: string): GraphNodeRow {
   return {
     id,
     title,
     subtitle,
-    mainStat: null,
-    secondaryStat: null,
-    color: 'blue',
+    cpuFraction: undefined,
+    memFraction: undefined,
+    color,
+    highlighted: false,
     detailType,
     detailNamespace: '–',
     detailWorkload: '–',
     detailCpuUsage: '–',
-    detailNodeShare: '–',
+    detailMemUsage: '–',
+    detailReady: '–',
     namespace: '',
     workload: '',
     workloadType: '',
@@ -157,10 +180,16 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
       map((frames) => {
         const podsInfoFrame = frameByRef(frames, 'podsInfo');
         const podsCpuFrame = frameByRef(frames, 'podsCpuUsage');
+        const podsMemFrame = frameByRef(frames, 'podsMemUsage');
+        const podsReadyFrame = frameByRef(frames, 'podsReady');
         const nodeInfoFrame = frameByRef(frames, 'nodeInfo');
         const vcfInfoFrame = frameByRef(frames, 'vcfInfo');
+        const nodeConditionFrame = frameByRef(frames, 'nodeCondition');
 
-        const nodeCapacity = singleValue(frameByRef(frames, 'nodeCapacity'));
+        const nodeCpuCapacity = singleValue(frameByRef(frames, 'nodeCapacity'));
+        const nodeCpuUsage = singleValue(frameByRef(frames, 'nodeCpuUsage'));
+        const nodeMemCapacity = singleValue(frameByRef(frames, 'nodeMemCapacity'));
+        const nodeMemUsage = singleValue(frameByRef(frames, 'nodeMemUsage'));
         // "vcf_vcenter" is kube_node_info's own "provider" label (see
         // buildNodeVcfInfoQuery's own comment on the Overview tab) - only
         // esxhostname/clustername are a genuine vSphere lookup.
@@ -168,12 +197,33 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
         const esxHost = singleString(vcfInfoFrame, 'esxhostname');
         const vcfCluster = singleString(vcfInfoFrame, 'clustername');
 
+        // Same "no bad-condition rows means healthy" convention as this
+        // node's own Overview tab health banner (NodeHealthBanner) -
+        // buildNodeConditionQuery only ever returns rows for a *bad*
+        // condition, an empty result is the healthy/Ready case.
+        const conditionNames = columnValues(nodeConditionFrame, 'condition') as string[];
+        const nodeNotReady = conditionNames.length > 0;
+        const nodeReadyDetail = nodeNotReady
+          ? conditionNames.map((c) => (c === 'Ready' ? 'Not Ready' : c)).join(', ')
+          : 'Ready';
+
+        const readyPodNames = new Set((columnValues(podsReadyFrame, 'pod') as string[]).map(String));
+
         const cpuByPod = new Map<string, number>();
         const cpuPodNames = columnValues(podsCpuFrame, 'pod') as string[];
         const cpuValues = columnValues(podsCpuFrame, 'Value') as number[];
         cpuPodNames.forEach((podName, i) => {
           if (typeof cpuValues[i] === 'number') {
             cpuByPod.set(String(podName), cpuValues[i]);
+          }
+        });
+
+        const memByPod = new Map<string, number>();
+        const memPodNames = columnValues(podsMemFrame, 'pod') as string[];
+        const memValues = columnValues(podsMemFrame, 'Value') as number[];
+        memPodNames.forEach((podName, i) => {
+          if (typeof memValues[i] === 'number') {
+            memByPod.set(String(podName), memValues[i]);
           }
         });
 
@@ -186,12 +236,22 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
         const edgeRows: GraphEdgeRow[] = [];
 
         const nodeId = `node:${node}`;
+        const nodeCpuFraction =
+          nodeCpuCapacity !== undefined && nodeCpuCapacity > 0 && nodeCpuUsage !== undefined
+            ? Math.min(nodeCpuUsage / nodeCpuCapacity, 1)
+            : undefined;
+        const nodeMemFraction =
+          nodeMemCapacity !== undefined && nodeMemCapacity > 0 && nodeMemUsage !== undefined
+            ? Math.min(nodeMemUsage / nodeMemCapacity, 1)
+            : undefined;
         nodeRows.push({
-          ...emptyDetailRow(nodeId, node, 'Kubernetes Node', 'Kubernetes Node'),
-          // Node itself isn't colored by the pod-share scale (it IS the
-          // 100% reference, not a slice of itself) - a neutral tint, same
-          // "darkgrey" family as this page's own node Badge.
-          color: 'darkgrey',
+          ...emptyDetailRow(nodeId, node, 'Kubernetes Node', 'Kubernetes Node', 'darkgrey'),
+          cpuFraction: nodeCpuFraction,
+          memFraction: nodeMemFraction,
+          highlighted: nodeNotReady,
+          detailReady: nodeReadyDetail,
+          detailCpuUsage: nodeCpuFraction !== undefined ? `${Math.round(nodeCpuFraction * 100)}% CPU` : '–',
+          detailMemUsage: nodeMemFraction !== undefined ? `${Math.round(nodeMemFraction * 100)}% Memory` : '–',
         });
 
         // Heaviest-CPU-share pod first - with 30-40 pods fanned out into one
@@ -209,50 +269,59 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
           const workload = podWorkloads[i] !== undefined ? String(podWorkloads[i]) : '';
           const workloadType = podWorkloadTypes[i] !== undefined ? String(podWorkloadTypes[i]) : '';
           const cpuUsage = cpuByPod.get(podName);
-          const fraction =
-            nodeCapacity !== undefined && nodeCapacity > 0 && cpuUsage !== undefined
-              ? Math.min(cpuUsage / nodeCapacity, 1)
+          const memUsage = memByPod.get(podName);
+          const cpuFraction =
+            nodeCpuCapacity !== undefined && nodeCpuCapacity > 0 && cpuUsage !== undefined
+              ? Math.min(cpuUsage / nodeCpuCapacity, 1)
               : undefined;
-          const tier = nodeShareTier(fraction);
-          const color = nodeShareColor(tier);
+          const memFraction =
+            nodeMemCapacity !== undefined && nodeMemCapacity > 0 && memUsage !== undefined
+              ? Math.min(memUsage / nodeMemCapacity, 1)
+              : undefined;
+          const ready = readyPodNames.has(podName);
           const podId = `pod:${podName}`;
 
           nodeRows.push({
             id: podId,
             title: podName,
             subtitle: namespace,
-            mainStat: cpuUsage ?? null,
-            secondaryStat: fraction ?? null,
-            color,
+            cpuFraction,
+            memFraction,
+            // Fallback ring color, only ever visible if both cpu/mem
+            // fractions come back 0/unknown (no arc segment to draw at
+            // all) - the real signal is `highlighted` (ready state) plus
+            // the arc segments built below.
+            color: 'blue',
+            highlighted: !ready,
             detailType: 'Pod',
             detailNamespace: namespace || '–',
             detailWorkload: workload ? `${workload} (${workloadType})` : '–',
-            detailCpuUsage: cpuUsage !== undefined ? `${cpuUsage.toFixed(2)} cores` : '–',
-            detailNodeShare: fraction !== undefined ? `${Math.round(fraction * 100)}% of node capacity` : '–',
+            detailCpuUsage: cpuFraction !== undefined ? `${Math.round(cpuFraction * 100)}% of node CPU capacity` : '–',
+            detailMemUsage: memFraction !== undefined ? `${Math.round(memFraction * 100)}% of node memory capacity` : '–',
+            detailReady: ready ? 'Ready' : 'Not ready',
             namespace,
             workload,
             workloadType,
             pod: podName,
           });
 
-          // Edges stay a plain neutral color - the pod-share highlight lives
-          // on the *node* circle itself (see `color` above), not the line
-          // connecting it, per explicit follow-up ask. Thickness still scales
-          // with the pod's own share of the node, as a second, more subtle
-          // signal.
+          // Edges stay a plain neutral color - the usage/ready highlight
+          // lives on the *node* circle itself, not the line connecting it,
+          // per explicit follow-up ask. Thickness still scales with the
+          // pod's own CPU share of the node, as a second, uncolored signal.
           edgeRows.push({
             id: `edge:node-pod:${podName}`,
             source: nodeId,
             target: podId,
             color: EDGE_COLOR,
-            thickness: 1 + (fraction ?? 0) * 4,
+            thickness: 1 + (cpuFraction ?? 0) * 4,
             strokeDasharray: '',
           });
         });
 
         // The physical vSphere chain - vCenter -> VCF cluster -> ESXi host ->
         // node - the "other direction" from the node's own pods. Edges point
-        // *toward* the node (the reverse of the pod edges below, which point
+        // *toward* the node (the reverse of the pod edges above, which point
         // *away* from it) so the panel's layered layout (see
         // getNodeDependenciesScene's own `layoutAlgorithm` option) - which
         // ranks nodes into columns by directed distance from a root - puts
@@ -265,7 +334,7 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
         let chainChildId = nodeId;
         if (esxHost) {
           const esxId = `esxi:${esxHost}`;
-          nodeRows.push(emptyDetailRow(esxId, esxHost, 'ESXi Host', 'ESXi Host'));
+          nodeRows.push(emptyDetailRow(esxId, esxHost, 'ESXi Host', 'ESXi Host', ESXI_COLOR));
           edgeRows.push({
             id: 'edge:esxi-node',
             source: esxId,
@@ -278,7 +347,7 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
         }
         if (vcfCluster) {
           const vcfId = `vcfcluster:${vcfCluster}`;
-          nodeRows.push(emptyDetailRow(vcfId, vcfCluster, 'VCF Cluster', 'VCF Cluster'));
+          nodeRows.push(emptyDetailRow(vcfId, vcfCluster, 'VCF Cluster', 'VCF Cluster', VCF_CLUSTER_COLOR));
           edgeRows.push({
             id: 'edge:vcfcluster-esxi',
             source: vcfId,
@@ -291,7 +360,7 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
         }
         if (vcenter) {
           const vcenterId = `vcenter:${vcenter}`;
-          nodeRows.push(emptyDetailRow(vcenterId, vcenter, 'vCenter', 'vCenter'));
+          nodeRows.push(emptyDetailRow(vcenterId, vcenter, 'vCenter', 'vCenter', VCENTER_COLOR));
           edgeRows.push({
             id: 'edge:vcenter-vcfcluster',
             source: vcenterId,
@@ -302,6 +371,9 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
           });
         }
 
+        const cpuBuckets = nodeRows.map((r) => usageBucket(r.cpuFraction));
+        const memBuckets = nodeRows.map((r) => usageBucket(r.memFraction));
+
         const nodesFrame: DataFrame = {
           name: 'nodes',
           refId: 'nodes',
@@ -310,38 +382,49 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
             stringField('id', nodeRows.map((r) => r.id)),
             stringField('title', nodeRows.map((r) => r.title)),
             stringField('subtitle', nodeRows.map((r) => r.subtitle)),
-            numberField('mainStat', nodeRows.map((r) => r.mainStat), 'cores'),
-            numberField('secondaryStat', nodeRows.map((r) => r.secondaryStat), 'percentunit'),
-            // **Bug fixed here**: this used to also emit `arc__fill`/
-            // `arc__fill_color` fields, on the theory that a near-complete
-            // (0.999) arc plus a per-row color string would render each
-            // node as a solid-colored disk. Both assumptions were wrong -
-            // per Grafana's own Node Graph source
-            // (public/app/plugins/panel/nodeGraph/{Node.tsx,utils.ts}):
-            // (a) *any* field named `arc__<name>` is parsed as its own arc
-            // section, so `arc__fill_color` wasn't read as a color source at
-            // all - it was a second, bogus arc section whose values (color
-            // *names*, not the 0-1 fractions arc sections require) broke the
-            // percent math the renderer does across every arc section on the
-            // node; (b) an arc section's own color comes only from that
-            // field's `config.color.fixedColor` - a single value for the
-            // *entire field*, not a per-row string - and `arc__fill` never
-            // had one set, so every arc rendered with no color at all. With
-            // any `arc__*` field present the renderer never falls back to
-            // plain `node.color`, so the combination made every node render
-            // colorless regardless of its own `color` value - this is why
-            // the graph came back "everything is grey" once someone actually
-            // looked closely. Dropping both arc fields removes the (never
-            // actually rendered) ring, and lets Grafana's real, genuinely
-            // per-row fallback take over: with no `arc__*` fields at all,
-            // each node's circle stroke is colored straight from this plain
-            // `color` field's own value for that row.
+            numberField(
+              'mainStat',
+              nodeRows.map((r) => (r.cpuFraction !== undefined ? Math.round(r.cpuFraction * 100) : null)),
+              '% CPU',
+              0
+            ),
+            numberField(
+              'secondaryStat',
+              nodeRows.map((r) => (r.memFraction !== undefined ? Math.round(r.memFraction * 100) : null)),
+              '% Mem',
+              0
+            ),
+            // Ready/not-ready is shown via `highlighted` (a hard-coded solid
+            // fill on the node's circle, not a themable color - see
+            // Node.tsx's own `highlightedNodeColor`) rather than through
+            // `color`, freeing the ring itself up entirely for the CPU/Mem
+            // usage-tier arcs below - Node Graph can only show one or the
+            // other per node (any `arc__*` field with a non-zero value
+            // suppresses the plain `color` ring outright), and the user
+            // explicitly asked for the *node* to reflect ready state, the
+            // *values inside it* to reflect usage.
+            boolField('highlighted', nodeRows.map((r) => r.highlighted)),
+            // Fallback ring color for rows with no arc data at all (the
+            // vSphere chain nodes, or a pod/node with genuinely 0%/unknown
+            // usage on both metrics) - ignored by the renderer whenever a
+            // real arc segment exists.
             stringField('color', nodeRows.map((r) => r.color)),
+            // Three-bucket-per-metric trick (see usageBucket's own comment
+            // above) - orange/green/red per this app's usual 60%/90% split
+            // (`usageThresholds`, tableCells.tsx), CPU declared before Mem so
+            // the CPU segment always starts at the top of the ring.
+            arcField('arc__cpu_low', cpuBuckets.map((b) => b.low), 'orange'),
+            arcField('arc__cpu_med', cpuBuckets.map((b) => b.med), 'green'),
+            arcField('arc__cpu_high', cpuBuckets.map((b) => b.high), 'red'),
+            arcField('arc__mem_low', memBuckets.map((b) => b.low), 'orange'),
+            arcField('arc__mem_med', memBuckets.map((b) => b.med), 'green'),
+            arcField('arc__mem_high', memBuckets.map((b) => b.high), 'red'),
             stringField('detail__Type', nodeRows.map((r) => r.detailType)),
+            stringField('detail__Ready', nodeRows.map((r) => r.detailReady)),
             stringField('detail__Namespace', nodeRows.map((r) => r.detailNamespace)),
             stringField('detail__Workload', nodeRows.map((r) => r.detailWorkload)),
             stringField('detail__CPU_usage', nodeRows.map((r) => r.detailCpuUsage)),
-            stringField('detail__Node_share', nodeRows.map((r) => r.detailNodeShare)),
+            stringField('detail__Memory_usage', nodeRows.map((r) => r.detailMemUsage)),
             // Not shown by the panel itself (Node Graph only renders the
             // field names above) - carried purely so the "id" field's own
             // link overrides below can interpolate `${__data.fields.X}` per
@@ -375,11 +458,13 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
 
 function DependenciesLegend() {
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, alignItems: 'center', padding: '4px 0', opacity: 0.7 }}>
-      <span>Pod color = share of this node&apos;s CPU capacity:</span>
-      <span style={{ color: 'green' }}>low</span>
-      <span style={{ color: 'orange' }}>moderate</span>
-      <span style={{ color: 'red' }}>dominates the node</span>
+    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, alignItems: 'center', padding: '4px 0', opacity: 0.7, flexWrap: 'wrap' }}>
+      <span>Solid red fill = not ready.</span>
+      <span>Ring: CPU (top) / Memory (bottom) usage -</span>
+      <span style={{ color: 'orange' }}>0-60%</span>
+      <span style={{ color: 'green' }}>60-90%</span>
+      <span style={{ color: 'red' }}>90-100%</span>
+      <span>- exact values shown inside each node.</span>
     </div>
   );
 }
@@ -393,7 +478,13 @@ export function getNodeDependenciesScene(cluster: string, node: string, clusterR
     queries: [
       { refId: 'podsInfo', expr: substitutePod(nodePodsTableQueries.info), format: 'table', instant: true },
       { refId: 'podsCpuUsage', expr: substitutePod(nodePodsTableQueries.cpu_usage), format: 'table', instant: true },
+      { refId: 'podsMemUsage', expr: substitutePod(nodePodsTableQueries.mem_usage), format: 'table', instant: true },
+      { refId: 'podsReady', expr: buildPodReadyQuery(clusterRegex), format: 'table', instant: true },
       { refId: 'nodeCapacity', expr: substituteNode(nodeCpuOptimizationQueries.cpuCapacity), format: 'table', instant: true },
+      { refId: 'nodeCpuUsage', expr: substituteNode(nodeCpuOptimizationQueries.cpuUsage), format: 'table', instant: true },
+      { refId: 'nodeMemCapacity', expr: substituteNode(nodeMemoryOptimizationQueries.memCapacity), format: 'table', instant: true },
+      { refId: 'nodeMemUsage', expr: substituteNode(nodeMemoryOptimizationQueries.memUsage), format: 'table', instant: true },
+      { refId: 'nodeCondition', expr: buildNodeConditionQuery(clusterRegex, node), format: 'table', instant: true },
       { refId: 'nodeInfo', expr: buildNodeInfoQuery(clusterRegex, node), format: 'table', instant: true },
       { refId: 'vcfInfo', expr: buildNodeVcfInfoQuery(node), format: 'table', instant: true },
     ],
@@ -417,7 +508,7 @@ export function getNodeDependenciesScene(cluster: string, node: string, clusterR
   const nodeGraphPanel = PanelBuilders.nodegraph()
     .setTitle('Dependencies')
     .setDescription(
-      'The physical vSphere chain this node runs on - vCenter, VCF cluster, ESXi host (left) - and the pods scheduled on it, heaviest CPU share first (right).'
+      'The physical vSphere chain this node runs on - vCenter, VCF cluster, ESXi host (left) - and the pods scheduled on it, heaviest CPU share first (right). Ring = CPU/Memory usage tier, solid red fill = not ready.'
     )
     .setData(graphData)
     .setNoValue('No dependency data for this node.')

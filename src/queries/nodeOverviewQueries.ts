@@ -43,6 +43,17 @@ export function buildNodeAlertsSeverityQuery(clusterRegex: string, node: string)
   return `count by (severity) (ALERTS{alertstate="firing", cluster="${clusterRegex}", node="${node}", alertname!~"ArgoCDSyncAlert"})`;
 }
 
+// Pod readiness (Dependencies tab's pod-node highlight) - kube_pod_status_ready
+// only carries condition="true"/"false" per pod, no "node" label of its own
+// (same shape as real kube-state-metrics), so this isn't node-scoped here -
+// matched against this node's own already-node-scoped pod list by name in
+// buildDependencyGraphFrames instead. Absence from the result = not ready,
+// same "absence means the healthy case" convention as buildNodeConditionQuery
+// above.
+export function buildPodReadyQuery(clusterRegex: string): string {
+  return `kube_pod_status_ready{cluster="${clusterRegex}", namespace=~".+", condition="true"} == 1`;
+}
+
 // kube_node_info's own labels - internal_ip/os_image/kernel_version/
 // kubelet_version/container_runtime_version/provider all live on the one
 // series, so one query covers the Overview tab's left+middle+right-hand
