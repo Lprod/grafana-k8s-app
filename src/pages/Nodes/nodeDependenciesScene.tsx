@@ -57,8 +57,23 @@ function columnValues(frame: DataFrame | undefined, name: string): unknown[] {
   return frame?.fields.find((f) => f.name === name)?.values ?? [];
 }
 
-function singleValue(frame: DataFrame | undefined, name = 'Value'): number | undefined {
-  const v = frame?.fields.find((f) => f.name === name)?.values?.[0];
+// This runner has 11 queries sharing one SceneQueryRunner, so Grafana
+// disambiguates every query's own "Value" field as "Value #<refId>" (e.g.
+// "Value #nodeCapacity") - confirmed live via a temporary console.warn dump
+// of the actual frames this transform receives, not assumed. Matching by
+// TYPE instead of a literal 'Value' name sidesteps needing to hardcode that
+// suffix per refId (and stays correct even if a query set ever changes
+// between single- and multi-query).
+function valueField(frame: DataFrame | undefined): Field | undefined {
+  return frame?.fields.find((f) => f.type === FieldType.number);
+}
+
+function columnValueValues(frame: DataFrame | undefined): unknown[] {
+  return valueField(frame)?.values ?? [];
+}
+
+function singleValue(frame: DataFrame | undefined): number | undefined {
+  const v = valueField(frame)?.values?.[0];
   return typeof v === 'number' ? v : undefined;
 }
 
@@ -96,11 +111,20 @@ interface UsageBucket {
   high: number;
 }
 
+// Real usage in this demo is mostly single-digit percent, which would
+// otherwise draw an arc segment only a couple pixels long around a 40px
+// node - technically non-zero but not perceptible as a ring at all. Same
+// "give a non-zero value a visible minimum" floor this app's own
+// `requestUsageCell` (tableCells.tsx) already applies to its bar width -
+// only the *ring size* is floored here, the mainStat/secondaryStat text
+// next to it still shows the real, unrounded percentage.
+const MIN_VISIBLE_ARC = 0.12;
+
 function usageBucket(fraction: number | undefined): UsageBucket {
-  if (fraction === undefined || Number.isNaN(fraction)) {
+  if (fraction === undefined || Number.isNaN(fraction) || fraction <= 0) {
     return { low: 0, med: 0, high: 0 };
   }
-  const v = Math.min(Math.max(fraction, 0), 1);
+  const v = Math.max(Math.min(fraction, 1), MIN_VISIBLE_ARC);
   if (v >= 0.9) {
     return { low: 0, med: 0, high: v };
   }
@@ -211,7 +235,7 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
 
         const cpuByPod = new Map<string, number>();
         const cpuPodNames = columnValues(podsCpuFrame, 'pod') as string[];
-        const cpuValues = columnValues(podsCpuFrame, 'Value') as number[];
+        const cpuValues = columnValueValues(podsCpuFrame) as number[];
         cpuPodNames.forEach((podName, i) => {
           if (typeof cpuValues[i] === 'number') {
             cpuByPod.set(String(podName), cpuValues[i]);
@@ -220,7 +244,7 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
 
         const memByPod = new Map<string, number>();
         const memPodNames = columnValues(podsMemFrame, 'pod') as string[];
-        const memValues = columnValues(podsMemFrame, 'Value') as number[];
+        const memValues = columnValueValues(podsMemFrame) as number[];
         memPodNames.forEach((podName, i) => {
           if (typeof memValues[i] === 'number') {
             memByPod.set(String(podName), memValues[i]);
@@ -382,17 +406,21 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
             stringField('id', nodeRows.map((r) => r.id)),
             stringField('title', nodeRows.map((r) => r.title)),
             stringField('subtitle', nodeRows.map((r) => r.subtitle)),
+            // One decimal, not zero - most of this demo's real usage is
+            // single-digit percent, where 0-decimal rounding would show a
+            // misleading flat "0 % Mem" instead of the real (small but
+            // non-zero) value.
             numberField(
               'mainStat',
-              nodeRows.map((r) => (r.cpuFraction !== undefined ? Math.round(r.cpuFraction * 100) : null)),
+              nodeRows.map((r) => (r.cpuFraction !== undefined ? r.cpuFraction * 100 : null)),
               '% CPU',
-              0
+              1
             ),
             numberField(
               'secondaryStat',
-              nodeRows.map((r) => (r.memFraction !== undefined ? Math.round(r.memFraction * 100) : null)),
+              nodeRows.map((r) => (r.memFraction !== undefined ? r.memFraction * 100 : null)),
               '% Mem',
-              0
+              1
             ),
             // Ready/not-ready is shown via `highlighted` (a hard-coded solid
             // fill on the node's circle, not a themable color - see
