@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0
+
+- Linked every place this app surfaces a VMware/vSphere entity through to its own drilldown in the sibling `grafana-vmware-app` plugin (id `debeka-vmware-app`): the Node Drilldown Overview tab's `vcf_clustername`/`vcf_esx_host`/`vcf_vcenter` info-card rows (Clusters/Hosts drilldowns, and the Overview page - scoped to one vCenter - for `vcf_vcenter`), the Node Drilldown Dependencies tab's Node Graph (its VCF Cluster/ESXi Host chain nodes get real "View VMware cluster"/"View ESXi host" context-menu links instead of dead ones), and the Cluster Drilldown Overview tab's `provider` info-card row (same vCenter-scoped Overview link). Also fixed an unrelated but adjacent gap noticed while doing this: the Pod Drilldown's own right info card had a `node:` row with no link at all (unlike its `cluster:`/`namespace:` neighbors) - now links to this app's own Node Drilldown.
+- New shared `src/scenes/vmwareLinks.ts` for these cross-plugin URLs. Deliberately doesn't carry over this app's `${__url.params}`/time-range query string the way in-app cross-page links do - both plugins happen to name their own Thanos datasource template variable `datasource` but default it to different UIDs, so forwarding it would hand the VMware app a datasource UID that isn't even one of its own variable's options.
+
 ## 2.0.6
 
 - Fixed the release pipeline itself: the `v2.0.4`/`v2.0.5` tag pushes both failed CI's plugin-validator step (`osv-scanner detected a high severity issue in package fast-uri`), so neither actually produced a GitHub release despite tagging/pushing successfully - a newly-disclosed CVE (published 2026-09-02) against `fast-uri@3.1.5`, a transitive build-time-only dependency (via `copy-webpack-plugin` → `schema-utils` → `ajv`), not a change introduced by either of those releases. Pinned it to `^3.1.7` (patched) via an `overrides` entry in `package.json`.

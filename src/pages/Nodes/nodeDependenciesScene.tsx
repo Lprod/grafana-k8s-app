@@ -17,6 +17,7 @@ import { map } from 'rxjs/operators';
 // internally, confirmed present in this package's own package.json#exports.
 import { LayoutAlgorithm } from '@grafana/schema/dist/esm/raw/composable/nodegraph/panelcfg/x/NodeGraphPanelCfg_types.gen';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
+import { VMWARE_CLUSTERS_URL, VMWARE_HOSTS_URL } from '../../scenes/vmwareLinks';
 import {
   buildNodeConditionQuery,
   buildNodeInfoQuery,
@@ -156,6 +157,12 @@ interface GraphNodeRow {
   workload: string;
   workloadType: string;
   pod: string;
+  // Only set on the esxi:/vcfcluster: rows below - carried purely so the
+  // "id" field's own link overrides can interpolate a real VMware-app
+  // drilldown URL for those two row kinds, same mechanism as
+  // namespace/workload/pod above.
+  esxhost: string;
+  vcfcluster: string;
 }
 
 interface GraphEdgeRow {
@@ -186,6 +193,8 @@ function emptyDetailRow(id: string, title: string, subtitle: string, detailType:
     workload: '',
     workloadType: '',
     pod: '',
+    esxhost: '',
+    vcfcluster: '',
   };
 }
 
@@ -327,6 +336,8 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
             workload,
             workloadType,
             pod: podName,
+            esxhost: '',
+            vcfcluster: '',
           });
 
           // Edges stay a plain neutral color - the usage/ready highlight
@@ -358,7 +369,7 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
         let chainChildId = nodeId;
         if (esxHost) {
           const esxId = `esxi:${esxHost}`;
-          nodeRows.push(emptyDetailRow(esxId, esxHost, 'ESXi Host', 'ESXi Host', ESXI_COLOR));
+          nodeRows.push({ ...emptyDetailRow(esxId, esxHost, 'ESXi Host', 'ESXi Host', ESXI_COLOR), esxhost: esxHost });
           edgeRows.push({
             id: 'edge:esxi-node',
             source: esxId,
@@ -371,7 +382,10 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
         }
         if (vcfCluster) {
           const vcfId = `vcfcluster:${vcfCluster}`;
-          nodeRows.push(emptyDetailRow(vcfId, vcfCluster, 'VCF Cluster', 'VCF Cluster', VCF_CLUSTER_COLOR));
+          nodeRows.push({
+            ...emptyDetailRow(vcfId, vcfCluster, 'VCF Cluster', 'VCF Cluster', VCF_CLUSTER_COLOR),
+            vcfcluster: vcfCluster,
+          });
           edgeRows.push({
             id: 'edge:vcfcluster-esxi',
             source: vcfId,
@@ -462,6 +476,8 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
             stringField('workload', nodeRows.map((r) => r.workload)),
             stringField('workload_type', nodeRows.map((r) => r.workloadType)),
             stringField('pod', nodeRows.map((r) => r.pod)),
+            stringField('esxhost', nodeRows.map((r) => r.esxhost)),
+            stringField('vcfcluster', nodeRows.map((r) => r.vcfcluster)),
           ],
         };
 
@@ -525,13 +541,18 @@ export function getNodeDependenciesScene(cluster: string, node: string, clusterR
 
   // Field overrides live on the "id" field (present/unique on every row,
   // same field the wider Grafana community uses for this - see the node
-  // graph's own docs on data links) rather than "pod" directly, since "id"
-  // is prefixed uniquely per node kind (pod:/node:/esxi:/...) while "pod" is
-  // blank for non-pod rows. Known rough edge: because Node Graph's own
-  // link config is per-*field*, not per-row-kind, the This-Node/ESXi/VCF
-  // Cluster/vCenter rows will also carry these 3 menu entries - just with
-  // blank namespace/workload/pod segments, since only pod rows populate
-  // them. Nothing to click through to there in practice, so left as a
+  // graph's own docs on data links) rather than "pod"/"esxhost"/"vcfcluster"
+  // directly, since "id" is prefixed uniquely per node kind (pod:/node:/
+  // esxi:/...) while those are each blank outside their own row kind. Known
+  // rough edge: because Node Graph's own link config is per-*field*, not
+  // per-row-kind, every row carries all 5 of these menu entries - pod rows
+  // get 2 blank ESXi-host/VMware-cluster entries alongside their real 3,
+  // and the ESXi/VCF Cluster rows (added below, into the sibling
+  // grafana-vmware-app plugin's own Hosts/Clusters drilldowns - see
+  // vmwareLinks.ts) get 3 blank namespace/workload/pod entries alongside
+  // their own real one. The This-Node/vCenter rows have nothing to click
+  // through to either way (no VMware-app page for a bare vCenter name).
+  // Nothing to click through to on the blank ones in practice, so left as a
   // cosmetic follow-up rather than blocking this feature on it.
   const nodeGraphPanel = PanelBuilders.nodegraph()
     .setTitle('Dependencies')
@@ -565,6 +586,16 @@ export function getNodeDependenciesScene(cluster: string, node: string, clusterR
         {
           title: 'View pod',
           url: `${WORKLOADS_URL}/${encodeURIComponent(cluster)}/\${__data.fields.namespace}/\${__data.fields.workload_type}/\${__data.fields.workload}/pods/\${__data.fields.pod}\${__url.params}`,
+        },
+        // Into the sibling grafana-vmware-app plugin - no `${__url.params}`
+        // here (unlike the 3 in-app links above), see vmwareLinks.ts for why.
+        {
+          title: 'View ESXi host (VMware app)',
+          url: `${VMWARE_HOSTS_URL}/\${__data.fields.esxhost}`,
+        },
+        {
+          title: 'View VMware cluster (VMware app)',
+          url: `${VMWARE_CLUSTERS_URL}/\${__data.fields.vcfcluster}`,
         },
       ])
     )
