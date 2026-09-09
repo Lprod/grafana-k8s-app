@@ -29,6 +29,7 @@ import { getNodeMemoryScene } from './nodeMemoryScene';
 import { getNodeNetworkScene } from './nodeNetworkScene';
 import { getNodeStorageScene } from './nodeStorageScene';
 import { getNodeDependenciesScene } from './nodeDependenciesScene';
+import { vmwareClusterUrl, vmwareHostUrl, vmwareOverviewUrl } from '../../scenes/vmwareLinks';
 import {
   buildNodeAlertsSeverityQuery,
   buildNodeConditionQuery,
@@ -384,9 +385,34 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
   const rightCard = new InfoCard({
     $data: rightRunner,
     rows: [
-      { label: 'vcf_vcenter:', render: (frames) => findFieldAcrossFrames(frames, 'provider')?.values[0] ?? '–' },
-      { label: 'vcf_clustername:', render: (frames) => findFieldAcrossFrames(frames, 'clustername')?.values[0] ?? '–' },
-      { label: 'vcf_esx_host:', render: (frames) => findFieldAcrossFrames(frames, 'esxhostname')?.values[0] ?? '–' },
+      {
+        label: 'vcf_vcenter:',
+        render: (frames) => findFieldAcrossFrames(frames, 'provider')?.values[0] ?? '–',
+        // Links into the sibling VMware app's own Overview page, which
+        // always shows exactly one whole vCenter - see vmwareLinks.ts.
+        href: (frames) => {
+          const vcenter = findFieldAcrossFrames(frames, 'provider')?.values[0];
+          return vcenter ? vmwareOverviewUrl(String(vcenter)) : undefined;
+        },
+      },
+      {
+        label: 'vcf_clustername:',
+        render: (frames) => findFieldAcrossFrames(frames, 'clustername')?.values[0] ?? '–',
+        // Links into the sibling VMware app's own Clusters Drilldown - see
+        // vmwareLinks.ts.
+        href: (frames) => {
+          const clustername = findFieldAcrossFrames(frames, 'clustername')?.values[0];
+          return clustername ? vmwareClusterUrl(String(clustername)) : undefined;
+        },
+      },
+      {
+        label: 'vcf_esx_host:',
+        render: (frames) => findFieldAcrossFrames(frames, 'esxhostname')?.values[0] ?? '–',
+        href: (frames) => {
+          const esxhostname = findFieldAcrossFrames(frames, 'esxhostname')?.values[0];
+          return esxhostname ? vmwareHostUrl(String(esxhostname)) : undefined;
+        },
+      },
     ],
   });
 
