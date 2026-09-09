@@ -26,12 +26,33 @@ import { THANOS_VARIABLE_NAME } from '../variables/datasourceVariables';
 // confirmed it correctly caught a restart in the last hour or so, but came
 // back completely empty for one from earlier the same day, on a query that
 // otherwise plots `kube_pod_container_status_restarts_total` itself
-// (a plain graph, no function) rising 0->1 at the right time just fine, and
-// which any query narrow enough to still be inside full-resolution data also
-// caught. `increase()` is a different story: `counter` is exactly the
-// aggregate Thanos keeps *so that* `rate()`/`increase()` stay correct across
-// that compaction, since those two are the ones every Prometheus-compatible
+// (a plain graph, no function) rising 0->1 at the right time just fine.
+// `increase()` is a different story: `counter` is exactly the aggregate
+// Thanos keeps *so that* `rate()`/`increase()` stay correct across that
+// compaction, since those two are the ones every Prometheus-compatible
 // downsampling scheme is built to preserve.
+//
+// A *fixed* window (2h), not `$__rate_interval` - confirmed live that even
+// `increase()` still needs a window this wide to reliably see across a
+// downsampled block (consistent with Thanos's 1h-resolution blocks: a window
+// narrower than ~2 downsampled points can't be sure of catching one on each
+// side of the real change). `$__rate_interval` grows with the dashboard's own
+// time range and was nowhere near that wide for a same-day restart - it
+// isn't sized off how compacted the *data* is, only off how wide the
+// *panel* is. Grafana's own Prometheus-annotations docs use a fixed window
+// for exactly this kind of query (5m/10m in their examples; this one needs
+// to be wider only because of the downsampling above), not `$__rate_interval`.
+//
+// `interval` (Min step) is *also* set explicitly, matching the window,
+// because a wide window alone isn't enough: annotation queries are evaluated
+// at every step across the dashboard's time range, and every step whose
+// own 2h lookback still reaches the event produces its own annotation -
+// confirmed live as a smear covering the *entire* 2h window following the
+// real event, not a single line at it. Capping the step to the same 2h
+// collapses that back down to (close to) one marker. The trade-off: the
+// marker can land anywhere up to ~2h after the real event, wherever
+// Grafana's step grid happens to fall - this option trades precision for
+// actually showing up at all against data this coarse.
 //
 // NOTE for anyone testing this against the local demo stack: it will show
 // nothing there, and that is expected, not a bug. `demo/kube-metrics/metrics`
@@ -68,10 +89,20 @@ export type ChangeAnnotationScope = {
 // container/pod/esxhostname the marker is about) - pass `textSource: Text` to
 // write `text` itself as a constant string instead, for a query whose result
 // has no label left to pull from (see createNodeChangeAnnotations).
+//
+// `interval` is the query's own Min step, *not* just the lookback window
+// inside `expr` - Grafana evaluates an annotation query at every step across
+// the dashboard's time range regardless of how wide the expression's own
+// range-vector/subquery window is, so leaving it unset lets that step shrink
+// far below the window on a wide dashboard, and every one of those steps
+// whose own lookback still reaches the event produces its own annotation - a
+// smear across the whole window instead of one marker. Passing the same
+// duration used inside `expr` collapses that back down to (close to) one.
 function annotationLayer(
   name: string,
   iconColor: string,
   expr: string,
+  interval: string,
   text: string,
   textSource: AnnotationEventFieldSource = AnnotationEventFieldSource.Field
 ) {
@@ -83,11 +114,12 @@ function annotationLayer(
       hide: false,
       iconColor,
       datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-      // `expr` isn't part of the base DataQuery type - AnnotationQuery's
-      // `target` is generic over it, and the Prometheus datasource's own
-      // PromQuery shape isn't re-exported from any @grafana/* package this
-      // plugin depends on, so the cast is the only way to name the field.
-      target: { refId: name, expr } as AnnotationQuery['target'],
+      // `expr`/`interval` aren't part of the base DataQuery type -
+      // AnnotationQuery's `target` is generic over it, and the Prometheus
+      // datasource's own PromQuery shape isn't re-exported from any
+      // @grafana/* package this plugin depends on, so the cast is the only
+      // way to name the fields.
+      target: { refId: name, expr, interval } as AnnotationQuery['target'],
       // Field mappings, not the legacy titleFormat/textFormat pair - the
       // annotation tooltip should name the specific pod/workload the marker
       // belongs to rather than repeating the layer's own name.
@@ -108,10 +140,15 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
   const base = `cluster="${cluster}", namespace="${namespace}"`;
   const layers: dataLayers.AnnotationsDataLayer[] = [];
 
+  // 2h, not $__rate_interval - see the file-level comment above for why a
+  // fixed, downsampling-sized window (and a matching Min step) replaces it
+  // across every layer in this function.
+  const window = '2h';
+
   const generationMetric = scope.workloadType ? GENERATION_METRIC[scope.workloadType] : undefined;
   if (generationMetric && scope.workload) {
     const selector = `${generationMetric}{${base}, ${scope.workloadType}="${escapeLabelValue(scope.workload)}"}`;
-    layers.push(annotationLayer('Rollouts', 'green', `increase(${selector}[$__rate_interval]) > 0`, scope.workloadType!));
+    layers.push(annotationLayer('Rollouts', 'green', `increase(${selector}[${window}]) > 0`, window, scope.workloadType!));
   }
 
   // Restarts are scoped to the exact pod on a Pod Drilldown and to every pod
@@ -126,7 +163,7 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
       : undefined;
   if (podSelector) {
     const selector = `kube_pod_container_status_restarts_total{${base}, ${podSelector}}`;
-    layers.push(annotationLayer('Container restarts', 'red', `increase(${selector}[$__rate_interval]) > 0`, 'container'));
+    layers.push(annotationLayer('Container restarts', 'red', `increase(${selector}[${window}]) > 0`, window, 'container'));
 
     // Catches the case "Container restarts" can't: a pod that was replaced
     // outright (kubectl delete pod, a rollout, an eviction) rather than
@@ -143,7 +180,7 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
     // can still miss the transition - the same undercount risk the
     // restarts_total query already has for two crashes inside one interval.
     const phaseSelector = `kube_pod_status_phase{${base}, ${podSelector}, phase="Running"}`;
-    layers.push(annotationLayer('Pod restarts', 'orange', `increase(${phaseSelector}[$__rate_interval]) > 0`, 'pod'));
+    layers.push(annotationLayer('Pod restarts', 'orange', `increase(${phaseSelector}[${window}]) > 0`, window, 'pod'));
   }
 
   // The set's own `name` is what SceneDataLayerControls labels the toggle
@@ -191,6 +228,13 @@ export type NodeAnnotationScope = {
 // into don't land on the same bucket, the co-occurrence this whole query
 // depends on was never preserved anywhere for any function to recover
 // afterwards.
+//
+// Not `$__rate_interval` for the outer window either, same reasoning and the
+// same live-confirmed symptom as the layers above: it isn't sized off the
+// data's own resolution, and without an explicit `interval` (Min step)
+// matching it, every dashboard step whose own lookback still reached the
+// migration produced its own marker - confirmed as a smear spanning the
+// entire lookback window that followed the real event, not one line at it.
 export function createNodeChangeAnnotations(scope: NodeAnnotationScope): SceneDataLayerSet {
   const node = escapeLabelValue(scope.node);
   // A subquery ([range:resolution]), not a plain range selector like the
@@ -205,8 +249,9 @@ export function createNodeChangeAnnotations(scope: NodeAnnotationScope): SceneDa
   // every resampled point *between* two real samples instead of on one - a
   // real vMotion's overlap only showed up once the step was widened to
   // actually match the data's own resolution.
+  const window = '1h';
   const inner = `count(count by (esxhostname) (vsphere_vm_mem_memorySizeMB{vmname="${node}"}))`;
-  const expr = `max_over_time(${inner}[$__rate_interval:5m]) > 1`;
-  const layer = annotationLayer('vMotion', 'purple', expr, 'vMotion', AnnotationEventFieldSource.Text);
+  const expr = `max_over_time(${inner}[${window}:5m]) > 1`;
+  const layer = annotationLayer('vMotion', 'purple', expr, window, 'vMotion', AnnotationEventFieldSource.Text);
   return new SceneDataLayerSet({ name: layer.state.name, layers: [layer] });
 }

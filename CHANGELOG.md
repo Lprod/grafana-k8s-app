@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.5
+
+- Fixed all four annotation markers (Rollouts, Container restarts, Pod restarts, vMotion) drawing as a smear spanning the whole lookback window instead of a single line, confirmed live: `$__rate_interval` scales with the dashboard's own time range, not with how compacted the underlying Thanos data is, and without an explicit query-level `interval` (Min step) matching it, every one of the (much finer) evaluation steps within that window whose own lookback still reached the event produced its own marker. Switched to a fixed window per query (2h for Rollouts/Container restarts/Pod restarts, matching Thanos's 1h-resolution downsampled blocks - a narrower window can't reliably straddle two downsampled points; 1h for vMotion, keeping its already-fixed 5m subquery resolution) with `interval` set to that same window, per Grafana's own Prometheus-annotations documentation (`grafana.com/docs/grafana/latest/datasources/prometheus/annotations/`), which uses fixed windows for exactly this shape of query rather than `$__rate_interval`. Trade-off: the marker can land up to that window's width after the real event, wherever Grafana's step grid happens to fall - not pixel-precise, but reliably one line instead of a multi-hour band.
+
 ## 2.2.4
 
 - Fixed **vMotion markers** still not catching a real migration, confirmed live in Explore: the `max_over_time` subquery's resolution (`1m`, added in `v2.2.2`) was a guess at typical Telegraf/vCenter scrape cadence, and this environment's real one is closer to 5m - querying at a *finer* resolution than the real data doesn't sample more of it, it just risks every resampled point landing between two real samples instead of on one. Widened to `5m`.
