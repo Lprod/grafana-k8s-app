@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.1
+
+- Fixed the release pipeline again: the `v2.2.0` tag push failed CI's plugin-validator step the same way `v2.0.4`/`v2.0.5` did (`osv-scanner detected a high severity issue in package js-yaml`, CVE/GHSA-2883-xcg3-v3hh - CPU exhaustion via `maxTotalMergeKeys`), another newly-disclosed transitive-dependency CVE unrelated to `v2.2.0`'s own changes. `js-yaml` shows up twice in the tree at two different major versions - `4.3.1` via eslint's `@eslint/eslintrc` (and, deduped, `fork-ts-checker-webpack-plugin`'s `cosmiconfig`), `3.15.1` via jest's `@istanbuljs/load-nyc-config` - both dev-tooling-only, never bundled into the shipped plugin. Pinned both independently via `overrides` (`^4.3.2` for the top-level one, `^3.15.2` scoped under `@istanbuljs/load-nyc-config` for the other) rather than one blanket override, since forcing the nyc-config loader onto js-yaml 4.x would hand it a package whose API changed incompatibly from 3.x.
+
 ## 2.2.0
 
 - Added **vMotion markers** to the Node Drilldown: a new "vMotion" annotation layer, drawn as a vertical line across every timeseries panel on all tabs, marking the moment vSphere live-migrated a node's underlying VM to a different ESXi host - invisible to Kubernetes itself (no reboot, no pod eviction), so nothing else on the page would ever show it. Detected from `vsphere_vm_mem_memorySizeMB{vmname=<node>}`: normally exactly one `esxhostname` reports for a node, and the count briefly reads 2 during the handoff between hosts, which a `changes(...) > 0` query (the same shape the existing Rollouts/restart markers use) picks up. Toggle lives in the page controls next to the other layers.
