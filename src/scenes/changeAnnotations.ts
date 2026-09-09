@@ -12,12 +12,13 @@ import { THANOS_VARIABLE_NAME } from '../variables/datasourceVariables';
 // covers all of that page's tabs at once, with one toggle in the page
 // controls instead of one per tab.
 //
-// Both expressions follow the shape Grafana's own Prometheus-annotations
-// documentation prescribes ("Service restart annotations" / "Scaling event
-// annotations"): a `changes(...) > 0` range query, so a data point - and
-// therefore an annotation - only exists at the instant the underlying value
-// actually moved. A plain gauge like `kube_deployment_created` would instead
-// produce one annotation per step interval across the whole window.
+// Every expression here follows the shape Grafana's own Prometheus-
+// annotations documentation prescribes ("Service restart annotations" /
+// "Scaling event annotations"): a `changes(...) > 0` range query, so a data
+// point - and therefore an annotation - only exists at the instant the
+// underlying value actually moved. A plain gauge like `kube_deployment_created`
+// would instead produce one annotation per step interval across the whole
+// window.
 //
 // NOTE for anyone testing this against the local demo stack: it will show
 // nothing there, and that is expected, not a bug. `demo/kube-metrics/metrics`
@@ -50,7 +51,17 @@ export type ChangeAnnotationScope = {
   workloadType?: string;
 };
 
-function annotationLayer(name: string, iconColor: string, expr: string, textField: string) {
+// `text` is a field name to pull from the result by default (e.g. the
+// container/pod/esxhostname the marker is about) - pass `textSource: Text` to
+// write `text` itself as a constant string instead, for a query whose result
+// has no label left to pull from (see createNodeChangeAnnotations).
+function annotationLayer(
+  name: string,
+  iconColor: string,
+  expr: string,
+  text: string,
+  textSource: AnnotationEventFieldSource = AnnotationEventFieldSource.Field
+) {
   return new dataLayers.AnnotationsDataLayer({
     name,
     query: {
@@ -67,7 +78,7 @@ function annotationLayer(name: string, iconColor: string, expr: string, textFiel
       // Field mappings, not the legacy titleFormat/textFormat pair - the
       // annotation tooltip should name the specific pod/workload the marker
       // belongs to rather than repeating the layer's own name.
-      mappings: { text: { source: AnnotationEventFieldSource.Field, value: textField } },
+      mappings: { text: { source: textSource, value: text } },
     },
   });
 }
@@ -103,6 +114,23 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
   if (podSelector) {
     const selector = `kube_pod_container_status_restarts_total{${base}, ${podSelector}}`;
     layers.push(annotationLayer('Container restarts', 'red', `changes(${selector}[$__rate_interval]) > 0`, 'container'));
+
+    // Catches the case "Container restarts" can't: a pod that was replaced
+    // outright (kubectl delete pod, a rollout, an eviction) rather than
+    // crash-looping in place. kube_pod_container_status_restarts_total is
+    // per-container and resets to 0 on the replacement pod, so changes()
+    // never fires there - and on a Deployment/ReplicaSet the new pod usually
+    // gets a new name too, so there is no single continuous series to diff a
+    // value change on at all. kube_pod_status_phase sidesteps that: every new
+    // pod object (whatever its name) emits its own Pending=1 sample and then
+    // flips Running from 0 to 1 as it comes up, and *that* transition is a
+    // change on the new pod's own series regardless of whether its name is
+    // new or reused. Narrow scrape-interval races (pod reaches Running
+    // between two scrapes, so kube-state-metrics only ever observes it at 1)
+    // can still miss the transition - the same undercount risk the
+    // restarts_total query already has for two crashes inside one interval.
+    const phaseSelector = `kube_pod_status_phase{${base}, ${podSelector}, phase="Running"}`;
+    layers.push(annotationLayer('Pod restarts', 'orange', `changes(${phaseSelector}[$__rate_interval]) > 0`, 'pod'));
   }
 
   // The set's own `name` is what SceneDataLayerControls labels the toggle
@@ -111,4 +139,47 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
   // there is no per-layer label in AnnotationsDataLayerRenderer - so the name
   // spells out the layers in the order their switches appear.
   return layers.length > 0 ? new SceneDataLayerSet({ name: layers.map((l) => l.state.name).join(' / '), layers }) : undefined;
+}
+
+export type NodeAnnotationScope = {
+  node: string;
+};
+
+// vMotion markers for the Node Drilldown. A node's underlying VM can be
+// live-migrated to a different ESXi host with nothing Kubernetes-visible
+// happening - no reboot, no pod eviction, nothing in kube-state-metrics -
+// so vsphere_vm_mem_memorySizeMB{vmname=$node} (confirmed against a live
+// cluster: vmname is the node's own name, same identity buildNodeVcfInfoQuery
+// already relies on, and this metric carries no k8s "cluster" label at all)
+// is the only place it shows up.
+//
+// `count by (esxhostname) (...)` normally has exactly one group - the node
+// lives on one host at a time - so the outer `count(...)` collapsing that
+// down to a single label-less series is normally 1. During the live
+// migration itself the VM briefly reports under both the source and
+// destination esxhostname, so the count reads 2 for that instant before
+// dropping back to 1 - a real value change on one continuous series, so
+// this fits the same changes(...) > 0 shape the layers above use (unlike a
+// plain "series A stops, series B starts" diff, which changes() can't see
+// across two differently-labeled series at all). If a given vSphere/telegraf
+// setup never actually captures that overlapping sample, this under-detects
+// the same way the other layers can miss two events inside one scrape
+// interval - unverified against a real migration event, since the demo stack
+// has no vSphere source either.
+//
+// The outer count() strips every label off the result (esxhostname
+// included), so there is no per-event field left for the tooltip to name the
+// new host from - it's a static "vMotion" instead (`textSource: Text`).
+export function createNodeChangeAnnotations(scope: NodeAnnotationScope): SceneDataLayerSet {
+  const node = escapeLabelValue(scope.node);
+  // A subquery ([range:resolution]), not a plain range selector like the
+  // other layers use - `count(...)` is itself an aggregation, not a bare
+  // metric selector, and only a bare selector can take a direct [range]; an
+  // arbitrary expression needs the subquery form to be sampled over a range
+  // at all. Resolution left empty so Prometheus defaults it to the global
+  // scrape interval, the finest grain available.
+  const inner = `count(count by (esxhostname) (vsphere_vm_mem_memorySizeMB{vmname="${node}"}))`;
+  const expr = `changes(${inner}[$__rate_interval:]) > 0`;
+  const layer = annotationLayer('vMotion', 'purple', expr, 'vMotion', AnnotationEventFieldSource.Text);
+  return new SceneDataLayerSet({ name: layer.state.name, layers: [layer] });
 }

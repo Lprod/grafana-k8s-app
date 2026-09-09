@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.0
+
+- Added **vMotion markers** to the Node Drilldown: a new "vMotion" annotation layer, drawn as a vertical line across every timeseries panel on all tabs, marking the moment vSphere live-migrated a node's underlying VM to a different ESXi host - invisible to Kubernetes itself (no reboot, no pod eviction), so nothing else on the page would ever show it. Detected from `vsphere_vm_mem_memorySizeMB{vmname=<node>}`: normally exactly one `esxhostname` reports for a node, and the count briefly reads 2 during the handoff between hosts, which a `changes(...) > 0` query (the same shape the existing Rollouts/restart markers use) picks up. Toggle lives in the page controls next to the other layers.
+- Fixed **"Container restarts" markers** (Pod/Workload Drilldown) never firing for a pod that was replaced outright (`kubectl delete pod`, a rollout, an eviction) rather than crash-looping in place - `kube_pod_container_status_restarts_total` is per-container and resets to 0 on the replacement pod, so the existing `changes(...)` query had nothing to catch there. Added a second layer, **"Pod restarts"**, based on `kube_pod_status_phase{phase="Running"}` instead, which reliably flips 0→1 for any new pod object regardless of whether its name is new or reused.
+
 ## 2.0.6
 
 - Fixed the release pipeline itself: the `v2.0.4`/`v2.0.5` tag pushes both failed CI's plugin-validator step (`osv-scanner detected a high severity issue in package fast-uri`), so neither actually produced a GitHub release despite tagging/pushing successfully - a newly-disclosed CVE (published 2026-09-02) against `fast-uri@3.1.5`, a transitive build-time-only dependency (via `copy-webpack-plugin` → `schema-utils` → `ajv`), not a change introduced by either of those releases. Pinned it to `^3.1.7` (patched) via an `overrides` entry in `package.json`.

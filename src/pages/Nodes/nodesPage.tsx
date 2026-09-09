@@ -6,6 +6,7 @@ import {
   SceneAppPage,
   SceneAppPageLike,
   SceneControlsSpacer,
+  SceneDataLayerControls,
   SceneDataTransformer,
   SceneFlexItem,
   SceneFlexLayout,
@@ -42,6 +43,7 @@ import {
   NodePodsTableQueryKey,
 } from '../../queries/nodeOverviewQueries';
 import { InfoCard, NodeHealthBanner, findFieldAcrossFrames } from '../../scenes/clusterOverviewCards';
+import { createNodeChangeAnnotations } from '../../scenes/changeAnnotations';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import {
   UsageIcon,
@@ -726,10 +728,14 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
     getParentPage: () => parent,
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
+    // vMotion markers across all tabs - see createNodeChangeAnnotations for
+    // why it lives on the page rather than each tab's own EmbeddedScene.
+    $data: createNodeChangeAnnotations({ node }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
     controls: [
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
+      new SceneDataLayerControls(),
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
