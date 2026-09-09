@@ -184,28 +184,29 @@ export type NodeAnnotationScope = {
 // asks a weaker, better-fitting question instead - "did this ever reach 2?" -
 // answerable from a single sample rather than needing to catch a transition,
 // and one of the aggregates (min/max/sum/count/counter) Thanos's downsampling
-// keeps per series. That still isn't a full fix for an already-downsampled
+// keeps per series. There's still a real ceiling on an already-downsampled
 // window, though: `count by (esxhostname)` is computed query-time from two
 // *separate* underlying esxhostname-labeled series, each downsampled
 // independently - if the block boundaries Thanos happened to compact them
 // into don't land on the same bucket, the co-occurrence this whole query
 // depends on was never preserved anywhere for any function to recover
-// afterwards. Confirmed exactly that live: a same-day-but-hours-old vMotion
-// still didn't fire after switching to max_over_time.
+// afterwards.
 export function createNodeChangeAnnotations(scope: NodeAnnotationScope): SceneDataLayerSet {
   const node = escapeLabelValue(scope.node);
   // A subquery ([range:resolution]), not a plain range selector like the
   // other layers use - `count(...)` is itself an aggregation, not a bare
   // metric selector, and only a bare selector can take a direct [range]; an
   // arbitrary expression needs the subquery form to be sampled over a range
-  // at all. Resolution is explicit (1m), not left empty: an *empty*
-  // resolution defaults to Prometheus's global `evaluation_interval` server
-  // setting, which has nothing to do with how often vsphere/telegraf actually
-  // scrapes and can easily be coarser than that - confirmed live that leaving
-  // it empty was long enough to step right over the ~3-minute overlap window
-  // without ever landing a sample inside it.
+  // at all. Resolution is explicit, not left empty (an *empty* resolution
+  // defaults to Prometheus's global `evaluation_interval` server setting,
+  // unrelated to how often vsphere/telegraf actually scrapes) - and 5m, not
+  // 1m: confirmed live in Explore that a step finer than the real vSphere
+  // scrape interval (~5m) doesn't resample more data, it just risks landing
+  // every resampled point *between* two real samples instead of on one - a
+  // real vMotion's overlap only showed up once the step was widened to
+  // actually match the data's own resolution.
   const inner = `count(count by (esxhostname) (vsphere_vm_mem_memorySizeMB{vmname="${node}"}))`;
-  const expr = `max_over_time(${inner}[$__rate_interval:1m]) > 1`;
+  const expr = `max_over_time(${inner}[$__rate_interval:5m]) > 1`;
   const layer = annotationLayer('vMotion', 'purple', expr, 'vMotion', AnnotationEventFieldSource.Text);
   return new SceneDataLayerSet({ name: layer.state.name, layers: [layer] });
 }

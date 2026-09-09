@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.4
+
+- Fixed **vMotion markers** still not catching a real migration, confirmed live in Explore: the `max_over_time` subquery's resolution (`1m`, added in `v2.2.2`) was a guess at typical Telegraf/vCenter scrape cadence, and this environment's real one is closer to 5m - querying at a *finer* resolution than the real data doesn't sample more of it, it just risks every resampled point landing between two real samples instead of on one. Widened to `5m`.
+
 ## 2.2.3
 
 - Fixed **Container restarts**/**Pod restarts**/**Rollouts** markers going silent for anything more than a few hours old, confirmed live: this app queries through Thanos, which compacts data older than its full-resolution retention window into downsampled 5m/1h blocks holding only a handful of per-series aggregates (count/sum/min/max/**counter**), not individual samples - `changes()` has no way to read that. Switched all three to `increase(...) > 0`, since `counter` is precisely the aggregate Thanos keeps so `rate()`/`increase()` stay correct across that compaction.
