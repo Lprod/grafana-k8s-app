@@ -12,18 +12,31 @@ import { THANOS_VARIABLE_NAME } from '../variables/datasourceVariables';
 // covers all of that page's tabs at once, with one toggle in the page
 // controls instead of one per tab.
 //
-// Every expression here follows the shape Grafana's own Prometheus-
-// annotations documentation prescribes ("Service restart annotations" /
-// "Scaling event annotations"): a `changes(...) > 0` range query, so a data
-// point - and therefore an annotation - only exists at the instant the
-// underlying value actually moved. A plain gauge like `kube_deployment_created`
-// would instead produce one annotation per step interval across the whole
-// window.
+// Every expression here is an `increase(...) > 0` (or, for vMotion, a
+// `max_over_time(...) > 1`) range query, so a data point - and therefore an
+// annotation - only exists at the instant the underlying value actually
+// moved. A plain gauge like `kube_deployment_created` would instead produce
+// one annotation per step interval across the whole window.
+//
+// `increase()`, not `changes()` (confirmed live, on a real cluster): this app
+// queries through Thanos, which keeps full-resolution data for only a few
+// hours before compacting older ranges into downsampled 5m/1h blocks that
+// store, per series, a handful of aggregates (count/sum/min/max/**counter**)
+// rather than every raw sample. `changes()` has no way to read that -
+// confirmed it correctly caught a restart in the last hour or so, but came
+// back completely empty for one from earlier the same day, on a query that
+// otherwise plots `kube_pod_container_status_restarts_total` itself
+// (a plain graph, no function) rising 0->1 at the right time just fine, and
+// which any query narrow enough to still be inside full-resolution data also
+// caught. `increase()` is a different story: `counter` is exactly the
+// aggregate Thanos keeps *so that* `rate()`/`increase()` stay correct across
+// that compaction, since those two are the ones every Prometheus-compatible
+// downsampling scheme is built to preserve.
 //
 // NOTE for anyone testing this against the local demo stack: it will show
 // nothing there, and that is expected, not a bug. `demo/kube-metrics/metrics`
 // is a static file served by nginx, so no counter in it ever changes and
-// `changes(...)` is always 0 - the same documented limitation that already
+// `increase(...)` is always 0 - the same documented limitation that already
 // makes the Kubernetes home page's "Restarting containers" panel and the
 // Network/Storage tabs' `rate()`-based panels read zero.
 
@@ -98,7 +111,7 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
   const generationMetric = scope.workloadType ? GENERATION_METRIC[scope.workloadType] : undefined;
   if (generationMetric && scope.workload) {
     const selector = `${generationMetric}{${base}, ${scope.workloadType}="${escapeLabelValue(scope.workload)}"}`;
-    layers.push(annotationLayer('Rollouts', 'green', `changes(${selector}[$__rate_interval]) > 0`, scope.workloadType!));
+    layers.push(annotationLayer('Rollouts', 'green', `increase(${selector}[$__rate_interval]) > 0`, scope.workloadType!));
   }
 
   // Restarts are scoped to the exact pod on a Pod Drilldown and to every pod
@@ -113,12 +126,12 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
       : undefined;
   if (podSelector) {
     const selector = `kube_pod_container_status_restarts_total{${base}, ${podSelector}}`;
-    layers.push(annotationLayer('Container restarts', 'red', `changes(${selector}[$__rate_interval]) > 0`, 'container'));
+    layers.push(annotationLayer('Container restarts', 'red', `increase(${selector}[$__rate_interval]) > 0`, 'container'));
 
     // Catches the case "Container restarts" can't: a pod that was replaced
     // outright (kubectl delete pod, a rollout, an eviction) rather than
     // crash-looping in place. kube_pod_container_status_restarts_total is
-    // per-container and resets to 0 on the replacement pod, so changes()
+    // per-container and resets to 0 on the replacement pod, so increase()
     // never fires there - and on a Deployment/ReplicaSet the new pod usually
     // gets a new name too, so there is no single continuous series to diff a
     // value change on at all. kube_pod_status_phase sidesteps that: every new
@@ -130,7 +143,7 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
     // can still miss the transition - the same undercount risk the
     // restarts_total query already has for two crashes inside one interval.
     const phaseSelector = `kube_pod_status_phase{${base}, ${podSelector}, phase="Running"}`;
-    layers.push(annotationLayer('Pod restarts', 'orange', `changes(${phaseSelector}[$__rate_interval]) > 0`, 'pod'));
+    layers.push(annotationLayer('Pod restarts', 'orange', `increase(${phaseSelector}[$__rate_interval]) > 0`, 'pod'));
   }
 
   // The set's own `name` is what SceneDataLayerControls labels the toggle
@@ -158,18 +171,27 @@ export type NodeAnnotationScope = {
 // down to a single label-less series is normally 1. During the live
 // migration itself the VM briefly reports under both the source and
 // destination esxhostname, so the count reads 2 for that instant before
-// dropping back to 1 - a real value change on one continuous series, so
-// this fits the same changes(...) > 0 shape the layers above use (unlike a
-// plain "series A stops, series B starts" diff, which changes() can't see
-// across two differently-labeled series at all). If a given vSphere/telegraf
-// setup never actually captures that overlapping sample, this under-detects
-// the same way the other layers can miss two events inside one scrape
-// interval - unverified against a real migration event, since the demo stack
-// has no vSphere source either.
+// dropping back to 1 (confirmed live: this lasted under 3 minutes for a real
+// migration) - unlike a plain "series A stops, series B starts" diff, this is
+// a real value change on one continuous series, so there's something here
+// for a range function to actually catch.
 //
-// The outer count() strips every label off the result (esxhostname
-// included), so there is no per-event field left for the tooltip to name the
-// new host from - it's a static "vMotion" instead (`textSource: Text`).
+// Not `increase()` like the layers above, though, despite this also being a
+// Thanos-backed query with the exact same downsampling exposure - this
+// signal goes back down (1 -> 2 -> 1) within the same window, and increase()
+// only looks at the *net* change between the window's first and last value,
+// which would just cancel back out to ~0 and miss it entirely. max_over_time
+// asks a weaker, better-fitting question instead - "did this ever reach 2?" -
+// answerable from a single sample rather than needing to catch a transition,
+// and one of the aggregates (min/max/sum/count/counter) Thanos's downsampling
+// keeps per series. That still isn't a full fix for an already-downsampled
+// window, though: `count by (esxhostname)` is computed query-time from two
+// *separate* underlying esxhostname-labeled series, each downsampled
+// independently - if the block boundaries Thanos happened to compact them
+// into don't land on the same bucket, the co-occurrence this whole query
+// depends on was never preserved anywhere for any function to recover
+// afterwards. Confirmed exactly that live: a same-day-but-hours-old vMotion
+// still didn't fire after switching to max_over_time.
 export function createNodeChangeAnnotations(scope: NodeAnnotationScope): SceneDataLayerSet {
   const node = escapeLabelValue(scope.node);
   // A subquery ([range:resolution]), not a plain range selector like the
@@ -179,14 +201,11 @@ export function createNodeChangeAnnotations(scope: NodeAnnotationScope): SceneDa
   // at all. Resolution is explicit (1m), not left empty: an *empty*
   // resolution defaults to Prometheus's global `evaluation_interval` server
   // setting, which has nothing to do with how often vsphere/telegraf actually
-  // scrapes and can easily be coarser than that - confirmed live (a real
-  // vMotion's overlap window, where the count briefly reads 2, lasted under
-  // 3 minutes) that leaving it empty was long enough to step right over that
-  // window without ever landing a sample inside it, unlike the other layers'
-  // plain-selector changes() queries, which sample every real scraped point
-  // rather than resampling at a fixed synthetic step.
+  // scrapes and can easily be coarser than that - confirmed live that leaving
+  // it empty was long enough to step right over the ~3-minute overlap window
+  // without ever landing a sample inside it.
   const inner = `count(count by (esxhostname) (vsphere_vm_mem_memorySizeMB{vmname="${node}"}))`;
-  const expr = `changes(${inner}[$__rate_interval:1m]) > 0`;
+  const expr = `max_over_time(${inner}[$__rate_interval:1m]) > 1`;
   const layer = annotationLayer('vMotion', 'purple', expr, 'vMotion', AnnotationEventFieldSource.Text);
   return new SceneDataLayerSet({ name: layer.state.name, layers: [layer] });
 }

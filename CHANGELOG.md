@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.3
+
+- Fixed **Container restarts**/**Pod restarts**/**Rollouts** markers going silent for anything more than a few hours old, confirmed live: this app queries through Thanos, which compacts data older than its full-resolution retention window into downsampled 5m/1h blocks holding only a handful of per-series aggregates (count/sum/min/max/**counter**), not individual samples - `changes()` has no way to read that. Switched all three to `increase(...) > 0`, since `counter` is precisely the aggregate Thanos keeps so `rate()`/`increase()` stay correct across that compaction.
+- Made **vMotion markers** more robust the same way, but with `max_over_time(...) > 1` instead of `increase()` - the signal here goes back down within the same window (host count briefly 1→2→1), which `increase()`'s *net*-change-only view would just cancel back out and miss. This isn't a full fix for an old-enough vMotion, though (confirmed live): the count is computed from two separately-downsampled `esxhostname` series, and if Thanos happened to compact them into non-overlapping time buckets, the brief co-occurrence this query depends on is gone from storage entirely - no query-side function can recover it after the fact.
+
 ## 2.2.2
 
 - Fixed the new **vMotion markers** (Node Drilldown, added in `v2.2.0`) never actually firing, confirmed live: the underlying signal is real (the OpenShift Ops team confirmed in Explore that `esxhostname` count briefly reads 2 for under 3 minutes during a real migration), but the query's subquery (`[$__rate_interval:]`) left its resolution empty, which defaults to Prometheus's *global* `evaluation_interval` server setting rather than the actual scrape cadence - coarse enough in this environment to step over that whole 3-minute window without ever landing a sample inside it. Fixed by giving the subquery an explicit `1m` resolution.
