@@ -176,10 +176,17 @@ export function createNodeChangeAnnotations(scope: NodeAnnotationScope): SceneDa
   // other layers use - `count(...)` is itself an aggregation, not a bare
   // metric selector, and only a bare selector can take a direct [range]; an
   // arbitrary expression needs the subquery form to be sampled over a range
-  // at all. Resolution left empty so Prometheus defaults it to the global
-  // scrape interval, the finest grain available.
+  // at all. Resolution is explicit (1m), not left empty: an *empty*
+  // resolution defaults to Prometheus's global `evaluation_interval` server
+  // setting, which has nothing to do with how often vsphere/telegraf actually
+  // scrapes and can easily be coarser than that - confirmed live (a real
+  // vMotion's overlap window, where the count briefly reads 2, lasted under
+  // 3 minutes) that leaving it empty was long enough to step right over that
+  // window without ever landing a sample inside it, unlike the other layers'
+  // plain-selector changes() queries, which sample every real scraped point
+  // rather than resampling at a fixed synthetic step.
   const inner = `count(count by (esxhostname) (vsphere_vm_mem_memorySizeMB{vmname="${node}"}))`;
-  const expr = `changes(${inner}[$__rate_interval:]) > 0`;
+  const expr = `changes(${inner}[$__rate_interval:1m]) > 0`;
   const layer = annotationLayer('vMotion', 'purple', expr, 'vMotion', AnnotationEventFieldSource.Text);
   return new SceneDataLayerSet({ name: layer.state.name, layers: [layer] });
 }

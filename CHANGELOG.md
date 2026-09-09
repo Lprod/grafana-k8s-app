@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.2
+
+- Fixed the new **vMotion markers** (Node Drilldown, added in `v2.2.0`) never actually firing, confirmed live: the underlying signal is real (the OpenShift Ops team confirmed in Explore that `esxhostname` count briefly reads 2 for under 3 minutes during a real migration), but the query's subquery (`[$__rate_interval:]`) left its resolution empty, which defaults to Prometheus's *global* `evaluation_interval` server setting rather than the actual scrape cadence - coarse enough in this environment to step over that whole 3-minute window without ever landing a sample inside it. Fixed by giving the subquery an explicit `1m` resolution.
+
 ## 2.2.1
 
 - Fixed the release pipeline again: the `v2.2.0` tag push failed CI's plugin-validator step the same way `v2.0.4`/`v2.0.5` did (`osv-scanner detected a high severity issue in package js-yaml`, CVE/GHSA-2883-xcg3-v3hh - CPU exhaustion via `maxTotalMergeKeys`), another newly-disclosed transitive-dependency CVE unrelated to `v2.2.0`'s own changes. `js-yaml` shows up twice in the tree at two different major versions - `4.3.1` via eslint's `@eslint/eslintrc` (and, deduped, `fork-ts-checker-webpack-plugin`'s `cosmiconfig`), `3.15.1` via jest's `@istanbuljs/load-nyc-config` - both dev-tooling-only, never bundled into the shipped plugin. Pinned both independently via `overrides` (`^4.3.2` for the top-level one, `^3.15.2` scoped under `@istanbuljs/load-nyc-config` for the other) rather than one blanket override, since forcing the nyc-config loader onto js-yaml 4.x would hand it a package whose API changed incompatibly from 3.x.
