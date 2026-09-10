@@ -13,10 +13,11 @@ import { THANOS_VARIABLE_NAME } from '../variables/datasourceVariables';
 // controls instead of one per tab.
 //
 // Every expression here is an `increase(...) > 0` (or, for vMotion, a
-// `max_over_time(...) > 1`) range query, so a data point - and therefore an
-// annotation - only exists at the instant the underlying value actually
-// moved. A plain gauge like `kube_deployment_created` would instead produce
-// one annotation per step interval across the whole window.
+// `max_over_time(...) > 1`) range query wrapped in an edge filter (see
+// withEdgeFilter() below), so a data point - and therefore an annotation - only
+// exists at the instant the underlying value actually moved. A plain gauge
+// like `kube_deployment_created` would instead produce one annotation per
+// step interval across the whole window.
 //
 // `increase()`, not `changes()` (confirmed live, on a real cluster): this app
 // queries through Thanos, which keeps full-resolution data for only a few
@@ -43,16 +44,19 @@ import { THANOS_VARIABLE_NAME } from '../variables/datasourceVariables';
 // for exactly this kind of query (5m/10m in their examples; this one needs
 // to be wider only because of the downsampling above), not `$__rate_interval`.
 //
-// `interval` (Min step) is *also* set explicitly, matching the window,
-// because a wide window alone isn't enough: annotation queries are evaluated
-// at every step across the dashboard's time range, and every step whose
-// own 2h lookback still reaches the event produces its own annotation -
-// confirmed live as a smear covering the *entire* 2h window following the
-// real event, not a single line at it. Capping the step to the same 2h
-// collapses that back down to (close to) one marker. The trade-off: the
-// marker can land anywhere up to ~2h after the real event, wherever
-// Grafana's step grid happens to fall - this option trades precision for
-// actually showing up at all against data this coarse.
+// A wide window alone isn't enough, though: annotation queries are evaluated
+// at every step across the dashboard's time range, and every step whose own
+// lookback still reaches the event produces its own annotation - confirmed
+// live as a smear spanning the *entire* window following the real event, not
+// a single line at it. An earlier version of this fixed that by also setting
+// `interval` (Min step) to match the window, collapsing every one of those
+// steps down to a single (coarse) one - but that meant the marker could only
+// ever land on that coarse step's own grid, up to a full window-width after
+// the real event (confirmed live: a vMotion at ~14:00 showed up at 15:00,
+// the first hourly tick whose lookback reached it). withEdgeFilter() below is the
+// better fix: it turns *any* "was this still true a moment ago" query into a
+// once-only marker regardless of how fine the step is, so `interval` can go
+// back to being small (for precise placement) without the smear returning.
 //
 // NOTE for anyone testing this against the local demo stack: it will show
 // nothing there, and that is expected, not a bug. `demo/kube-metrics/metrics`
@@ -60,6 +64,25 @@ import { THANOS_VARIABLE_NAME } from '../variables/datasourceVariables';
 // `increase(...)` is always 0 - the same documented limitation that already
 // makes the Kubernetes home page's "Restarting containers" panel and the
 // Network/Storage tabs' `rate()`-based panels read zero.
+
+// Turns a filtered range expression that stays true for a while (e.g.
+// `increase(x[2h]) > 0`, true at every step for the full 2h after a restart)
+// into one that's true only at the *first* such step: `current unless past`
+// keeps only the results with no match in `past`, so a result that was
+// *already* present a step ago (i.e. not new) drops out. `past` must be the
+// exact same expression as `current` but with `offset $__interval` attached
+// to its own range-vector selector or subquery - not to the comparison as a
+// whole, which `offset` can't attach to - which is why this takes the two
+// full expressions rather than adding the offset itself: where `offset`
+// belongs depends on whether the caller's selector is bare (Rollouts/
+// restarts) or a subquery (vMotion). `$__interval` is Grafana's own per-step
+// spacing, substituted as a literal duration - not a guess at data
+// resolution like `$__rate_interval`, just "however far apart this
+// dashboard's own evaluation points are," which is exactly the "one step
+// back" this needs regardless of zoom level.
+function withEdgeFilter(current: string, past: string): string {
+  return `(${current}) unless (${past})`;
+}
 
 // kube-state-metrics bumps `metadata_generation` on every spec change, which
 // is the closest thing to a "a rollout happened here" signal that exists
@@ -90,14 +113,10 @@ export type ChangeAnnotationScope = {
 // write `text` itself as a constant string instead, for a query whose result
 // has no label left to pull from (see createNodeChangeAnnotations).
 //
-// `interval` is the query's own Min step, *not* just the lookback window
-// inside `expr` - Grafana evaluates an annotation query at every step across
-// the dashboard's time range regardless of how wide the expression's own
-// range-vector/subquery window is, so leaving it unset lets that step shrink
-// far below the window on a wide dashboard, and every one of those steps
-// whose own lookback still reaches the event produces its own annotation - a
-// smear across the whole window instead of one marker. Passing the same
-// duration used inside `expr` collapses that back down to (close to) one.
+// `interval` is the query's own Min step (see withEdgeFilter above for why
+// this can now stay small/precise instead of matching the window - the smear
+// that used to require a coarse interval is handled by the expression
+// itself).
 function annotationLayer(
   name: string,
   iconColor: string,
@@ -141,14 +160,21 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
   const layers: dataLayers.AnnotationsDataLayer[] = [];
 
   // 2h, not $__rate_interval - see the file-level comment above for why a
-  // fixed, downsampling-sized window (and a matching Min step) replaces it
-  // across every layer in this function.
+  // fixed, downsampling-sized window replaces it across every layer in this
+  // function. `interval` (Min step) stays small/precise (5m) - it no longer
+  // needs to match `window` now that withEdgeFilter() collapses the smear on
+  // its own.
   const window = '2h';
+  const interval = '5m';
 
   const generationMetric = scope.workloadType ? GENERATION_METRIC[scope.workloadType] : undefined;
   if (generationMetric && scope.workload) {
     const selector = `${generationMetric}{${base}, ${scope.workloadType}="${escapeLabelValue(scope.workload)}"}`;
-    layers.push(annotationLayer('Rollouts', 'green', `increase(${selector}[${window}]) > 0`, window, scope.workloadType!));
+    const expr = withEdgeFilter(
+      `increase(${selector}[${window}]) > 0`,
+      `increase(${selector}[${window}] offset $__interval) > 0`
+    );
+    layers.push(annotationLayer('Rollouts', 'green', expr, interval, scope.workloadType!));
   }
 
   // Restarts are scoped to the exact pod on a Pod Drilldown and to every pod
@@ -163,7 +189,11 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
       : undefined;
   if (podSelector) {
     const selector = `kube_pod_container_status_restarts_total{${base}, ${podSelector}}`;
-    layers.push(annotationLayer('Container restarts', 'red', `increase(${selector}[${window}]) > 0`, window, 'container'));
+    const restartsExpr = withEdgeFilter(
+      `increase(${selector}[${window}]) > 0`,
+      `increase(${selector}[${window}] offset $__interval) > 0`
+    );
+    layers.push(annotationLayer('Container restarts', 'red', restartsExpr, interval, 'container'));
 
     // Catches the case "Container restarts" can't: a pod that was replaced
     // outright (kubectl delete pod, a rollout, an eviction) rather than
@@ -180,7 +210,11 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
     // can still miss the transition - the same undercount risk the
     // restarts_total query already has for two crashes inside one interval.
     const phaseSelector = `kube_pod_status_phase{${base}, ${podSelector}, phase="Running"}`;
-    layers.push(annotationLayer('Pod restarts', 'orange', `increase(${phaseSelector}[${window}]) > 0`, window, 'pod'));
+    const podRestartsExpr = withEdgeFilter(
+      `increase(${phaseSelector}[${window}]) > 0`,
+      `increase(${phaseSelector}[${window}] offset $__interval) > 0`
+    );
+    layers.push(annotationLayer('Pod restarts', 'orange', podRestartsExpr, interval, 'pod'));
   }
 
   // The set's own `name` is what SceneDataLayerControls labels the toggle
@@ -229,12 +263,12 @@ export type NodeAnnotationScope = {
 // depends on was never preserved anywhere for any function to recover
 // afterwards.
 //
-// Not `$__rate_interval` for the outer window either, same reasoning and the
-// same live-confirmed symptom as the layers above: it isn't sized off the
-// data's own resolution, and without an explicit `interval` (Min step)
-// matching it, every dashboard step whose own lookback still reached the
-// migration produced its own marker - confirmed as a smear spanning the
-// entire lookback window that followed the real event, not one line at it.
+// Not `$__rate_interval` for the outer window either, same reasoning as the
+// layers above - it isn't sized off the data's own resolution - and wrapped
+// in the same withEdgeFilter() for the same reason: confirmed live as a
+// smear spanning the entire lookback window after the real migration
+// (specifically, a marker on *every* hourly tick for the whole hour
+// following it) before the edge filter was added.
 export function createNodeChangeAnnotations(scope: NodeAnnotationScope): SceneDataLayerSet {
   const node = escapeLabelValue(scope.node);
   // A subquery ([range:resolution]), not a plain range selector like the
@@ -251,7 +285,13 @@ export function createNodeChangeAnnotations(scope: NodeAnnotationScope): SceneDa
   // actually match the data's own resolution.
   const window = '1h';
   const inner = `count(count by (esxhostname) (vsphere_vm_mem_memorySizeMB{vmname="${node}"}))`;
-  const expr = `max_over_time(${inner}[${window}:5m]) > 1`;
-  const layer = annotationLayer('vMotion', 'purple', expr, window, 'vMotion', AnnotationEventFieldSource.Text);
+  // offset attaches to the subquery bracket itself (shifting its whole
+  // reference point back by one step), not to the comparison - see
+  // withEdgeFilter's own comment for why that placement is load-bearing.
+  const expr = withEdgeFilter(
+    `max_over_time(${inner}[${window}:5m]) > 1`,
+    `max_over_time(${inner}[${window}:5m] offset $__interval) > 1`
+  );
+  const layer = annotationLayer('vMotion', 'purple', expr, '5m', 'vMotion', AnnotationEventFieldSource.Text);
   return new SceneDataLayerSet({ name: layer.state.name, layers: [layer] });
 }
