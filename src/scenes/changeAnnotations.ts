@@ -179,12 +179,30 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
   const layers: dataLayers.AnnotationsDataLayer[] = [];
 
   // 2h, not $__rate_interval - see the file-level comment above for why a
-  // fixed, downsampling-sized window replaces it across every layer in this
-  // function. `interval` (Min step) stays small/precise (5m) - it no longer
-  // needs to match `window` now that withEdgeFilter() collapses the smear on
-  // its own.
+  // fixed, downsampling-sized window replaces it for Rollouts (still
+  // edge-filtered - see withEdgeFilter() above - so `window` only affects
+  // downsampling reach here, not shape). `interval` (Min step) stays
+  // small/precise (5m) - it no longer needs to match `window` now that
+  // withEdgeFilter() collapses the smear on its own.
   const window = '2h';
   const interval = '5m';
+
+  // Restarts use a much shorter window than Rollouts (10m, not 2h) -
+  // confirmed live that 2h was the wrong knob for shape: increase() over a
+  // window stays positive for the *entire* window after even a single
+  // restart, isolated or not, so every single restart drew as a fake 2h-wide
+  // band regardless of whether anything else happened. 10m instead, sized
+  // off Kubernetes' own CrashLoopBackOff behavior: its backoff delay between
+  // restarts caps out at 5m, so a genuinely still-looping pod always restarts
+  // again within 10m and keeps renewing the band, while an isolated restart
+  // (nothing else follows within 10m) reverts to a single short blip close to
+  // a line - which is what "restart" markers were asked to look like, band
+  // only for an actually-recurring incident. Trade-off, not yet hit but real:
+  // 10m is too narrow to reliably span two of Thanos's 1h-downsampled points
+  // the way 2h can, so a single isolated restart old enough to already be
+  // downsampled risks going undetected again, the same failure mode `v2.2.3`
+  // fixed for the 2h-windowed layers.
+  const restartWindow = '10m';
 
   const generationMetric = scope.workloadType ? GENERATION_METRIC[scope.workloadType] : undefined;
   if (generationMetric && scope.workload) {
@@ -212,7 +230,9 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
     // CrashLoopBackOff should draw as a growing band, not collapse to a
     // single point at its first restart.
     const selector = `kube_pod_container_status_restarts_total{${base}, ${podSelector}}`;
-    layers.push(annotationLayer('Container restarts', 'red', `increase(${selector}[${window}]) > 0`, interval, 'container'));
+    layers.push(
+      annotationLayer('Container restarts', 'red', `increase(${selector}[${restartWindow}]) > 0`, interval, 'container')
+    );
 
     // Catches the case "Container restarts" can't: a pod that was replaced
     // outright (kubectl delete pod, a rollout, an eviction) rather than
@@ -232,7 +252,9 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
     // workload stuck repeatedly recreating pods is the same kind of ongoing
     // incident a single edge-filtered point would hide.
     const phaseSelector = `kube_pod_status_phase{${base}, ${podSelector}, phase="Running"}`;
-    layers.push(annotationLayer('Pod restarts', 'orange', `increase(${phaseSelector}[${window}]) > 0`, interval, 'pod'));
+    layers.push(
+      annotationLayer('Pod restarts', 'orange', `increase(${phaseSelector}[${restartWindow}]) > 0`, interval, 'pod')
+    );
   }
 
   // The set's own `name` is what SceneDataLayerControls labels the toggle
