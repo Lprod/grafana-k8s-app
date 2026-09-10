@@ -13,11 +13,30 @@ import { THANOS_VARIABLE_NAME } from '../variables/datasourceVariables';
 // controls instead of one per tab.
 //
 // Every expression here is an `increase(...) > 0` (or, for vMotion, a
-// `max_over_time(...) > 1`) range query wrapped in an edge filter (see
-// withEdgeFilter() below), so a data point - and therefore an annotation - only
-// exists at the instant the underlying value actually moved. A plain gauge
-// like `kube_deployment_created` would instead produce one annotation per
-// step interval across the whole window.
+// `max_over_time(...) > 1`) range query. Rollouts and vMotion are genuinely
+// instantaneous, one-time events, so those two are wrapped in an edge filter
+// (see withEdgeFilter() below) that turns a data point into a single marker
+// at the exact instant the underlying value moved, rather than one at every
+// step across the whole lookback window.
+//
+// Container restarts and Pod restarts are deliberately *not* edge-filtered,
+// despite being built from the same `increase(...) > 0` shape - unlike a
+// single Rollout, a restart can be an *ongoing* incident (a CrashLoopBackOff
+// still actively restarting), not a one-time event, and confirmed live that
+// this app's users read a stretch of restart markers as "the loop was active
+// this whole time," which an edge-filtered single point can't show at all.
+// Left unfiltered, the query is simply true at every step for as long as a
+// restart keeps landing within the window, which draws as one continuous
+// band that keeps growing while the loop is still active and stops only once
+// it genuinely has been quiet for a full window - exactly that shape,
+// confirmed live once edge-filtering was removed. Edge-filtering an ongoing
+// incident like this also doubles the query's own cost (two full-window
+// `increase()` lookups per step instead of one) for no benefit, and is the
+// leading suspect (not fully root-caused) for an earlier live symptom: the
+// band going silent partway through a real, still-ongoing CrashLoopBackOff -
+// evaluating that doubled cost at every step across a wide dashboard range
+// is expensive enough to plausibly hit a query timeout or sample limit
+// partway through.
 //
 // `increase()`, not `changes()` (confirmed live, on a real cluster): this app
 // queries through Thanos, which keeps full-resolution data for only a few
@@ -188,12 +207,12 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
       ? `pod=~"${escapeLabelValue(scope.workload)}.*"`
       : undefined;
   if (podSelector) {
+    // No withEdgeFilter() here - see the file-level comment above for why a
+    // restart, unlike a Rollout, stays unfiltered: a still-active
+    // CrashLoopBackOff should draw as a growing band, not collapse to a
+    // single point at its first restart.
     const selector = `kube_pod_container_status_restarts_total{${base}, ${podSelector}}`;
-    const restartsExpr = withEdgeFilter(
-      `increase(${selector}[${window}]) > 0`,
-      `increase(${selector}[${window}] offset $__interval) > 0`
-    );
-    layers.push(annotationLayer('Container restarts', 'red', restartsExpr, interval, 'container'));
+    layers.push(annotationLayer('Container restarts', 'red', `increase(${selector}[${window}]) > 0`, interval, 'container'));
 
     // Catches the case "Container restarts" can't: a pod that was replaced
     // outright (kubectl delete pod, a rollout, an eviction) rather than
@@ -209,12 +228,11 @@ export function createChangeAnnotations(scope: ChangeAnnotationScope): SceneData
     // between two scrapes, so kube-state-metrics only ever observes it at 1)
     // can still miss the transition - the same undercount risk the
     // restarts_total query already has for two crashes inside one interval.
+    // Also left unfiltered, same reasoning as Container restarts above - a
+    // workload stuck repeatedly recreating pods is the same kind of ongoing
+    // incident a single edge-filtered point would hide.
     const phaseSelector = `kube_pod_status_phase{${base}, ${podSelector}, phase="Running"}`;
-    const podRestartsExpr = withEdgeFilter(
-      `increase(${phaseSelector}[${window}]) > 0`,
-      `increase(${phaseSelector}[${window}] offset $__interval) > 0`
-    );
-    layers.push(annotationLayer('Pod restarts', 'orange', podRestartsExpr, interval, 'pod'));
+    layers.push(annotationLayer('Pod restarts', 'orange', `increase(${phaseSelector}[${window}]) > 0`, interval, 'pod'));
   }
 
   // The set's own `name` is what SceneDataLayerControls labels the toggle

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.7
+
+- **Container restarts**/**Pod restarts** no longer use the edge filter added in `v2.2.6` - confirmed live it cut a still-ongoing CrashLoopBackOff's markers off partway through (a real one kept restarting past 6am with no dips in its restart rate, but the markers stopped at 6am), and doubling the query's own cost per step (two full-window lookups instead of one) is the leading suspect. On reflection this was also the wrong shape for a restart in the first place, confirmed live: users read a run of restart markers as "the loop was active this whole time," not noise to collapse into one point - unlike a Rollout or a vMotion, a restart isn't always a one-time event. Both now draw as a continuous band for as long as the underlying `increase(...) > 0` stays true, growing live while a loop is active and ending only once it's genuinely been quiet for a full window. Rollouts and vMotion keep the `v2.2.6` edge filter - both are genuinely instantaneous events, and don't share the cost concern (one series each, not "however many pods a workload is currently crash-looping through").
+
 ## 2.2.6
 
 - Fixed all four annotation markers (Rollouts, Container restarts, Pod restarts, vMotion) landing up to a full window-width late (confirmed live: a ~14:00 vMotion showed up at 15:00) - `v2.2.5`'s fix for the smear (matching the query's Min step to the fixed window) worked, but meant the marker could only ever land on that coarse step's own grid, as late as the whole window after the real event. Replaced that with an edge filter (`current unless past`, `past` being the same expression shifted back by one Min step via `offset $__interval`) that suppresses a result already true a step ago, collapsing the smear down to its first tick regardless of how fine the step is - so the Min step goes back to being small (5m) for much closer-to-real-time placement, without the multi-hour band returning.
