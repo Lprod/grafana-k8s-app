@@ -1,19 +1,19 @@
 import React from 'react';
-import { DisplayValue } from '@grafana/data';
+import { DisplayValue, Field } from '@grafana/data';
 import { Badge, BadgeColor, CustomCellRendererProps, useTheme2 } from '@grafana/ui';
 import { ThresholdsMode } from '@grafana/schema';
 import type { CustomTransformOperator } from '@grafana/scenes';
 import { map } from 'rxjs/operators';
-import usageLowIcon from '../img/usage-low.png';
-import usageMedIcon from '../img/usage-med.png';
-import usageHighIcon from '../img/usage-high.png';
 
 export type UsageTier = 'low' | 'med' | 'high' | 'unknown';
 
-const TIER_ICON: Record<Exclude<UsageTier, 'unknown'>, string> = {
-  low: usageLowIcon,
-  med: usageMedIcon,
-  high: usageHighIcon,
+// How full the meter glyph reads per tier, as a fraction of its inner
+// height - the same quarter/half/three-quarters progression the three
+// usage-*.png bitmaps this replaced were drawn with.
+const TIER_FILL: Record<Exclude<UsageTier, 'unknown'>, number> = {
+  low: 0.33,
+  med: 0.55,
+  high: 0.78,
 };
 
 export const PERCENT_FIELD_NAMES = [
@@ -113,16 +113,32 @@ export function formatDisplay(display: DisplayValue | { text: string; prefix?: s
   return `${display.prefix ?? ''}${display.text}${display.suffix ?? ''}`;
 }
 
-// Plain (untinted) icon - the PNG's own colors are used as-is.
+// Fill-level meter glyph, drawn in the row's own tier color.
+//
+// This used to be three imported PNGs (img/usage-{low,med,high}.png), which
+// were pure-white bitmaps: fine on the dark theme's table background,
+// completely invisible on the light theme's white one - in every CPU/Memory
+// cell across Clusters/Nodes/Namespaces/Workloads and their drilldown
+// tables, and in ResourceUsageLegend's own "low / med / high" key. Inline
+// SVG fixes that and additionally lets the glyph carry the same tier color
+// as the value beside it, instead of staying neutral.
+//
+// 'unknown' deliberately keeps a different *shape* (a plain dot, not a
+// meter): "no data for this row" is not a fill level.
 export function UsageIcon({ tier, size = 14 }: { tier: UsageTier; size?: number }) {
+  const theme = useTheme2();
+  const color = usageColorFromTier(theme, tier);
+
   if (tier === 'unknown') {
     return (
       <span
+        role="img"
+        aria-label="usage unknown"
         style={{
           width: size,
           height: size,
           borderRadius: '50%',
-          backgroundColor: '#8E8E8E',
+          backgroundColor: color,
           display: 'inline-block',
           flexShrink: 0,
         }}
@@ -130,14 +146,24 @@ export function UsageIcon({ tier, size = 14 }: { tier: UsageTier; size?: number 
     );
   }
 
+  const innerTop = 3;
+  const innerBottom = 19.4;
+  const fillHeight = (innerBottom - innerTop) * TIER_FILL[tier];
+
   return (
-    <img
-      src={TIER_ICON[tier]}
-      alt={`${tier} usage`}
+    <svg
       width={size}
       height={size}
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label={`${tier} usage`}
       style={{ display: 'inline-block', flexShrink: 0 }}
-    />
+    >
+      {/* left wall, right wall, closed bottom - an open-topped meter */}
+      <path d="M6 3h1.6v18H6zM16.4 3H18v18h-1.6zM6 19.4h12V21H6z" fill={color} />
+      {/* the level itself, rising from the bottom */}
+      <rect x="7.6" y={innerBottom - fillHeight} width="8.8" height={fillHeight} fill={color} />
+    </svg>
   );
 }
 
@@ -159,10 +185,17 @@ function IconValueCell({
   color: string;
   display: DisplayValue | { text: string; prefix?: string; suffix?: string };
 }) {
+  const text = formatDisplay(display);
+  // Native `title` so a value too wide for its column is still readable on
+  // hover. Grafana adds one of these itself on panel titles and table column
+  // headers, but not on a custom cell renderer's own output.
   return (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <span
+      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+      title={tier === 'unknown' ? text : `${text} (${tier} usage)`}
+    >
       <UsageIcon tier={tier} />
-      <span style={{ color }}>{formatDisplay(display)}</span>
+      <span style={{ color }}>{text}</span>
     </span>
   );
 }
@@ -219,7 +252,74 @@ export function attachFieldValues(targetFieldName: string, sourceFieldName: stri
     );
 }
 
-const DESIRED_PODS_KEY = 'desiredPodsValues';
+// Reorders a table frame's rows by a caller-supplied rank over one field,
+// highest rank first. Grafana's own `sortBy` panel option can only sort a
+// string column alphabetically, which is the wrong order for a severity
+// ("critical" < "info" < "warning" alphabetically puts info above warning),
+// and a hidden numeric rank column to sort by instead isn't an option either
+// - `excludeByName` genuinely removes a field and `custom.hideFrom` is a
+// no-op on the Table panel (see attachFieldValues above). Sorting the rows in
+// the data pipeline avoids both: the table renders what it is handed, worst
+// first, and clicking any header still re-sorts as before.
+//
+// Rows whose value has no rank (rank returns undefined) keep their relative
+// order and sort last, so the common "nothing is wrong" case is left in
+// whatever order the join or merge produced rather than shuffled.
+//
+// Crucially this also reorders the per-row arrays attachFieldValues stashed
+// into `config.custom` (percentValues, desiredPodsValues). Those are indexed
+// by row, so reordering only `field.values` would silently pair every row
+// with another row's percentage or desired-pod count - which is exactly what
+// happened the first time this ran against the Workloads table.
+export function sortRowsByRank(
+  fieldName: string,
+  rank: (value: unknown, rowIndex: number, field: Field) => number | undefined
+): CustomTransformOperator {
+  return () => (source) =>
+    source.pipe(
+      map((frames) =>
+        frames.map((frame) => {
+          const field = frame.fields.find((f) => f.name === fieldName);
+          if (!field || frame.length === 0) {
+            return frame;
+          }
+          const order = field.values
+            .map((value, index) => ({ index, rank: rank(value, index, field) }))
+            .sort((a, b) => {
+              const ra = a.rank ?? -Infinity;
+              const rb = b.rank ?? -Infinity;
+              return rb === ra ? a.index - b.index : rb - ra;
+            })
+            .map((entry) => entry.index);
+
+          const reorder = <T,>(values: T[]) => order.map((i) => values[i]);
+
+          return {
+            ...frame,
+            fields: frame.fields.map((f) => {
+              const custom = f.config.custom as Record<string, unknown> | undefined;
+              const reorderedCustom = custom
+                ? Object.fromEntries(
+                    Object.entries(custom).map(([key, value]) => [
+                      key,
+                      Array.isArray(value) && value.length === frame.length ? reorder(value) : value,
+                    ])
+                  )
+                : custom;
+
+              return {
+                ...f,
+                values: reorder(f.values),
+                config: custom ? { ...f.config, custom: reorderedCustom } : f.config,
+              };
+            }),
+          };
+        })
+      )
+    );
+}
+
+export const DESIRED_PODS_KEY = 'desiredPodsValues';
 
 export function attachDesiredPodsField(readyFieldName: string, desiredFieldName: string): CustomTransformOperator {
   return attachFieldValues(readyFieldName, desiredFieldName, DESIRED_PODS_KEY);
@@ -252,6 +352,7 @@ export function readyDesiredPodsCell() {
 
     return (
       <div
+        title={`${ready} of ${desired} pod${desired === 1 ? '' : 's'} ready`}
         style={{
           position: 'relative',
           height: 20,
@@ -317,10 +418,12 @@ export function requestUsageCell() {
     const barWidth =
       fraction === null || fraction === undefined || Number.isNaN(fraction) ? 0 : Math.min(100, Math.max(2, fraction * 100));
 
+    const text = formatDisplay(display);
+
     return (
-      <div style={{ width: '100%', minWidth: 90 }}>
+      <div style={{ width: '100%', minWidth: 90 }} title={`${text} - ${percentText} used`}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-          <span>{formatDisplay(display)}</span>
+          <span>{text}</span>
           <Badge color={badgeColorForTier(tier)} text={percentText} />
         </div>
         <div

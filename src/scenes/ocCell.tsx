@@ -1,6 +1,6 @@
 import React from 'react';
-import { AppEvents, DataTransformContext, FieldType, GrafanaTheme2, IconName } from '@grafana/data';
-import { getAppEvents } from '@grafana/runtime';
+import { copyToClipboard } from './copyLink';
+import { DataTransformContext, FieldType, GrafanaTheme2, IconName } from '@grafana/data';
 import { Button, CustomCellRendererProps, Dropdown, Menu, useStyles2 } from '@grafana/ui';
 import { css } from '@emotion/css';
 import { CustomTransformOperator, FieldConfigOverridesBuilder } from '@grafana/scenes';
@@ -70,8 +70,16 @@ export function ocCommandsFor(scope: OcScope): OcCommand[] {
   const resourceType = ocResourceType(scope.workloadType);
   if (scope.workload && resourceType) {
     return [
-      { label: `Describe ${resourceType}`, icon: 'info-circle', command: `${prefix} describe ${resourceType} ${scope.workload}` },
-      { label: 'Tail logs', icon: 'file-alt', command: `${prefix} logs ${resourceType}/${scope.workload} --tail=200 -f` },
+      {
+        label: `Describe ${resourceType}`,
+        icon: 'info-circle',
+        command: `${prefix} describe ${resourceType} ${scope.workload}`,
+      },
+      {
+        label: 'Tail logs',
+        icon: 'file-alt',
+        command: `${prefix} logs ${resourceType}/${scope.workload} --tail=200 -f`,
+      },
       { label: 'Get YAML', icon: 'code-branch', command: `${prefix} get ${resourceType} ${scope.workload} -o yaml` },
       // A workload's pods can only be selected exactly via its own
       // spec.selector, which isn't available from metrics - so this greps the
@@ -113,38 +121,6 @@ export function ocCommandsFor(scope: OcScope): OcCommand[] {
   }
 
   return [];
-}
-
-function copy(command: string) {
-  // `navigator.clipboard` is only defined in a secure context (https or
-  // localhost). Grafana is normally served over one, but fall back to the
-  // legacy execCommand path rather than silently doing nothing when it isn't.
-  const succeeded = () => getAppEvents().publish({ type: AppEvents.alertSuccess.name, payload: ['Copied', command] });
-  const failed = () => getAppEvents().publish({ type: AppEvents.alertError.name, payload: ['Could not copy to the clipboard'] });
-
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(command).then(succeeded, failed);
-    return;
-  }
-
-  const area = document.createElement('textarea');
-  area.value = command;
-  area.style.position = 'fixed';
-  area.style.opacity = '0';
-  document.body.appendChild(area);
-  area.select();
-  try {
-    // Deliberate legacy fallback: this branch only runs where
-    // navigator.clipboard is undefined (non-secure context), and there is no
-    // non-deprecated alternative there.
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    document.execCommand('copy');
-    succeeded();
-  } catch {
-    failed();
-  } finally {
-    document.body.removeChild(area);
-  }
 }
 
 function fieldValue(frame: CustomCellRendererProps['frame'], rowIndex: number, fieldName: string): string | undefined {
@@ -229,7 +205,13 @@ export function OcActionButton({ scope }: { scope: OcScope }) {
   const menu = (
     <Menu>
       {commands.map((c) => (
-        <Menu.Item key={c.label} label={c.label} icon={c.icon} description={c.command} onClick={() => copy(c.command)} />
+        <Menu.Item
+          key={c.label}
+          label={c.label}
+          icon={c.icon}
+          description={c.command}
+          onClick={() => copyToClipboard(c.command)}
+        />
       ))}
     </Menu>
   );
