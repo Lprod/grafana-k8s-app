@@ -72,6 +72,9 @@ function buildTopStatPanel(title: string, expr: string, linkUrl?: string) {
     .setThresholds(flatStatThresholds)
     .setOption('colorMode', BigValueColorMode.Background)
     .setOption('graphMode', BigValueGraphMode.None)
+    // Same reasoning as buildIssueCountStatPanel below: an inventory count
+    // with nothing to count is 0, not "No data".
+    .setNoValue('0')
     .setData(runner);
   if (linkUrl) {
     builder.setOverrides((b) => b.matchFieldsWithName('Value').overrideLinks([{ title: `View ${title}`, url: linkUrl }]));
@@ -192,15 +195,23 @@ function buildIssueCountStatPanel(def: IssueQueryDef, detailView: DetailViewSele
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [{ refId: 'count', expr: `count(${def.expr})` }],
   });
-  return PanelBuilders.stat()
-    .setTitle(def.title)
-    .setUnit('short')
-    .setThresholds(issueCountThresholds)
-    .setOption('colorMode', BigValueColorMode.Value)
-    .setOption('graphMode', BigValueGraphMode.Area)
-    .setData(runner)
-    .setHeaderActions(new ViewDetailLink({ onSelect: () => detailView.select(issueKey) }))
-    .build();
+  return (
+    PanelBuilders.stat()
+      .setTitle(def.title)
+      .setUnit('short')
+      .setThresholds(issueCountThresholds)
+      .setOption('colorMode', BigValueColorMode.Value)
+      .setOption('graphMode', BigValueGraphMode.Area)
+      .setData(runner)
+      // `count(<selector>)` returns no series at all - not a zero - when
+      // nothing matches, so Grafana renders its generic "No data". On a wall
+      // of twelve issue counters that reads as "this tile is broken" rather
+      // than "nothing wrong here", especially next to eleven siblings showing
+      // real numbers. An explicit "0" says what's actually true.
+      .setNoValue('0')
+      .setHeaderActions(new ViewDetailLink({ onSelect: () => detailView.select(issueKey) }))
+      .build()
+  );
 }
 
 function buildIssueSection(title: string, defs: Record<string, IssueQueryDef>, detailView: DetailViewSelection) {
@@ -237,6 +248,7 @@ export function getKubernetesOverviewScene() {
   // built for - it only touches whichever of those columns the currently
   // selected query actually returns.
   const detailTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Issue details')
     .setData(detailQueryRunner)
     .setNoValue(kubernetesIssueQueries[initialKey].noValueText)
@@ -262,6 +274,7 @@ export function getKubernetesOverviewScene() {
     ],
   });
   const imagesTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Deployed container images (as of ${__to:date:YYYY-MM-DD HH:mm:ss})')
     .setData(imagesData)
     .setOption('sortBy', [{ displayName: 'Containers', desc: true }])

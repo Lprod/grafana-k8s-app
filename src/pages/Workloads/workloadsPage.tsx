@@ -58,6 +58,8 @@ import {
   usageColorFromTier,
   usageThresholds,
   usageTierCell,
+  sortRowsByRank,
+  DESIRED_PODS_KEY,
 } from '../../scenes/tableCells';
 import { InfoCard, NamespaceHealthBanner, findFieldAcrossFrames } from '../../scenes/clusterOverviewCards';
 import { LogsEventsLevelToggle } from '../../scenes/logsEventsLevelToggle';
@@ -88,6 +90,7 @@ import { SectionHeading } from '../../scenes/sectionHeading';
 import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { createChangeAnnotations } from '../../scenes/changeAnnotations';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
+import { copyLinkControl } from '../../scenes/copyLink';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -216,10 +219,27 @@ function getWorkloadsListScene() {
           renameByName: {},
         },
       },
+      // Worst first. This table has no Alerts column (unlike Clusters, Nodes
+      // and Namespaces), so the health signal it does carry is the Pods
+      // column: rank by how many replicas are *missing*, so a 0/2 deployment
+      // sorts above a 2/3 one and everything fully ready keeps the order the
+      // merge produced. "Desired" is no longer its own field by this point -
+      // attachDesiredPodsField stashed it onto the ready field's own config,
+      // which is exactly where the rank reads it back from.
+      sortRowsByRank('Value #ready_pods', (value, rowIndex, field) => {
+        const desired = (field.config?.custom?.[DESIRED_PODS_KEY] as Array<number | null | undefined> | undefined)?.[
+          rowIndex
+        ];
+        if (desired === null || desired === undefined) {
+          return 0;
+        }
+        return Math.max(0, Number(desired) - (Number(value) || 0));
+      }),
     ],
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Workloads')
     .setData(transformedData)
     .setOverrides((b) =>
@@ -440,9 +460,9 @@ function getWorkloadOverviewScene(
   const leftCard = new InfoCard({
     $data: leftRunner,
     rows: [
-      { label: 'cluster:', render: () => cluster, href: clusterUrl },
-      { label: 'namespace:', render: () => namespace, href: namespaceUrl },
-      { label: 'egress ip:', fieldName: 'egressip' },
+      { label: 'Cluster', render: () => cluster, href: clusterUrl },
+      { label: 'Namespace', render: () => namespace, href: namespaceUrl },
+      { label: 'Egress IP', fieldName: 'egressip' },
     ],
   });
 
@@ -468,7 +488,7 @@ function getWorkloadOverviewScene(
     $data: rightRunner,
     rows: [
       {
-        label: 'ready replicas:',
+        label: 'Ready replicas',
         render: (frames) => {
           const readyValue = findFieldAcrossFrames(frames, 'Value #ready')?.values[0];
           const desiredValue = findFieldAcrossFrames(frames, 'Value #desired')?.values[0];
@@ -478,8 +498,8 @@ function getWorkloadOverviewScene(
           return `${readyValue} / ${desiredValue}`;
         },
       },
-      { label: 'create date:', fieldName: 'Value #created', unit: 'dateTimeFromNow' },
-      { label: 'workload type:', render: () => formatWorkloadTypeLabel(workloadType) },
+      { label: 'Created', fieldName: 'Value #created', unit: 'dateTimeFromNow' },
+      { label: 'Workload type', render: () => formatWorkloadTypeLabel(workloadType) },
     ],
   });
 
@@ -665,6 +685,7 @@ function getWorkloadOverviewScene(
   });
 
   const podsTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(podsData)
     // cluster/namespace aren't columns here (the page is already scoped to
@@ -950,6 +971,7 @@ function getWorkloadDetailPage(
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
     // Pod Drilldown - nested one level deeper than this page's own tabs
@@ -992,6 +1014,7 @@ export function getWorkloadsPage() {
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     // Deliberately excludes the filter variables - see the same note in
     // the pre-existing stub this file replaces.

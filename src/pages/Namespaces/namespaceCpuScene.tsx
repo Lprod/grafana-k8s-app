@@ -201,6 +201,7 @@ export function getNamespaceCpuScene(cluster: string, namespace: string, cluster
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Workloads')
     .setData(tableData)
     .setOverrides((b) =>

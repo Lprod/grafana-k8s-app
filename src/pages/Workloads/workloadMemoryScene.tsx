@@ -198,6 +198,7 @@ export function getWorkloadMemoryScene(
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(tableData)
     .setOverrides((b) =>

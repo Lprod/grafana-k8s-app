@@ -19,6 +19,7 @@ import {
   createNamespaceFilterVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
+import { copyLinkControl } from '../../scenes/copyLink';
 
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
@@ -71,6 +72,7 @@ export function getKubernetesHomePage() {
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });

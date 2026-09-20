@@ -50,6 +50,7 @@ import {
   requestUsageCell,
   usageColorFromTier,
   usageTierCell,
+  sortRowsByRank,
 } from '../../scenes/tableCells';
 import { InfoCard, NamespaceHealthBanner } from '../../scenes/clusterOverviewCards';
 import { LogsEventsLevelToggle } from '../../scenes/logsEventsLevelToggle';
@@ -76,6 +77,7 @@ import { attachExploreMenus } from '../../scenes/panelExplore';
 import { SectionHeading } from '../../scenes/sectionHeading';
 import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
+import { copyLinkControl } from '../../scenes/copyLink';
 
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -170,10 +172,16 @@ function getNamespacesListScene() {
           renameByName: {},
         },
       },
+      // Rows with firing alerts first; everything else keeps the order the
+      // join produced (sortRowsByRank is stable on equal ranks), so the
+      // common all-quiet case still reads in its familiar order instead of
+      // an arbitrary one. Clicking any header re-sorts as before.
+      sortRowsByRank('Value #alerts', (value) => Number(value) || 0),
     ],
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Namespaces')
     .setData(transformedData)
     .setOverrides((b) =>
@@ -383,9 +391,9 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
   const infoCard = new InfoCard({
     $data: infoRunner,
     rows: [
-      { label: 'cluster:', fieldName: 'cluster', href: `${CLUSTERS_URL}/${encodeURIComponent(cluster)}` },
+      { label: 'Cluster', fieldName: 'cluster', href: `${CLUSTERS_URL}/${encodeURIComponent(cluster)}` },
       {
-        label: 'workloads:',
+        label: 'Workloads',
         // Prometheus only disambiguates to "Value #info" when it receives
         // more than one query in the SAME request. Now that "egressip" goes
         // to RQLite via a Mixed datasource, Thanos gets the "info" query
@@ -395,7 +403,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
         fieldName: 'Value',
         href: `${PLUGIN_BASE_URL}/${ROUTES.Workloads}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}&var-${NAMESPACE_VARIABLE_NAME}=${encodeURIComponent(namespace)}`,
       },
-      { label: 'egress ip:', fieldName: 'egressip' },
+      { label: 'Egress IP', fieldName: 'egressip' },
     ],
   });
 
@@ -541,6 +549,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
   });
 
   const workloadsTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Workloads')
     .setData(workloadsData)
     .setOverrides((b) =>
@@ -841,6 +850,7 @@ function getNamespaceDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; n
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
@@ -864,6 +874,7 @@ export function getNamespacesPage() {
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     // Deliberately excludes the filter variables - see the same note in
     // the pre-existing stub this file replaces.

@@ -74,6 +74,7 @@ function buildEfficiencyTable(def: (typeof kubernetesEfficiencyTableQueries)[num
   // record on for the last two), so the standard Drilldown link set applies
   // as-is - same links the Overview tab's own issue table has.
   return PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle(def.title)
     .setData(data)
     .setNoValue(def.noValueText)

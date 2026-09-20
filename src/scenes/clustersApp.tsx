@@ -61,11 +61,12 @@ import { getAlertsPage } from '../pages/Alerts/alertsPage';
 import { getJobsPage } from '../pages/Jobs/jobsPage';
 import { getKubernetesHomePage } from '../pages/Kubernetes/kubernetesPage';
 import { getSearchPage } from '../pages/Search/searchPage';
-import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds } from './tableCells';
+import { UsageIcon, linkedValueCell, usageColorFromTier, usageThresholds, sortRowsByRank } from './tableCells';
 import { PanelTimeRangeCompare } from './panelTimeRangeCompare';
 import { attachExploreMenus } from './panelExplore';
 import { SectionHeading } from './sectionHeading';
 import { InvestigateEntityButton } from './investigateEntityButton';
+import { copyLinkControl } from './copyLink';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
@@ -159,10 +160,16 @@ function getClustersListScene() {
           renameByName: {},
         },
       },
+      // Rows with firing alerts first; everything else keeps the order the
+      // join produced (sortRowsByRank is stable on equal ranks), so the
+      // common all-quiet case still reads in its familiar order instead of
+      // an arbitrary one. Clicking any header re-sorts as before.
+      sortRowsByRank('Value #alerts', (value) => Number(value) || 0),
     ],
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Clusters')
     .setData(transformedData)
     .setOverrides((b) =>
@@ -342,13 +349,13 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
   const infoCard = new InfoCard({
     $data: infoRunner,
     rows: [
-      { label: 'cluster name:', fieldName: 'cluster' },
+      { label: 'Cluster', fieldName: 'cluster' },
       {
-        label: 'nodes count:',
+        label: 'Nodes',
         fieldName: 'Value',
         href: `${PLUGIN_BASE_URL}/${ROUTES.Nodes}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}`,
       },
-      { label: 'provider:', fieldName: 'provider' },
+      { label: 'Provider', fieldName: 'provider' },
     ],
   });
 
@@ -370,9 +377,9 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
   const capacityCard = new InfoCard({
     $data: capacityData,
     rows: [
-      { label: 'cpu:', fieldName: 'Value #cpu', unit: 'cores' },
-      { label: 'memory:', fieldName: 'Value #memory', unit: 'bytes' },
-      { label: 'disk size:', fieldName: 'Value #disk', unit: 'bytes' },
+      { label: 'CPU', fieldName: 'Value #cpu', unit: 'cores' },
+      { label: 'Memory', fieldName: 'Value #memory', unit: 'bytes' },
+      { label: 'Disk size', fieldName: 'Value #disk', unit: 'bytes' },
     ],
   });
 
@@ -472,6 +479,7 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
   });
 
   const nodesTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Nodes')
     .setData(nodesData)
     .setOverrides((b) =>
@@ -754,6 +762,7 @@ function getClusterCpuScene(cluster: string, clusterRegex: string) {
   });
 
   const namespacesTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Namespaces')
     .setData(namespacesTableData)
     .setOverrides((b) =>
@@ -910,6 +919,7 @@ function getClusterCpuScene(cluster: string, clusterRegex: string) {
   });
 
   const nodesTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Nodes')
     .setData(nodesTableData)
     .setOverrides((b) =>
@@ -1125,6 +1135,7 @@ function getClusterMemoryScene(cluster: string, clusterRegex: string) {
   });
 
   const namespacesTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Namespaces')
     .setData(namespacesTableData)
     .setOverrides((b) =>
@@ -1280,6 +1291,7 @@ function getClusterMemoryScene(cluster: string, clusterRegex: string) {
   });
 
   const nodesTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Nodes')
     .setData(nodesTableData)
     .setOverrides((b) =>
@@ -1823,6 +1835,7 @@ function getClusterDetailPage(routeMatch: SceneRouteMatch<{ cluster: string }>, 
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });
@@ -1843,6 +1856,7 @@ const clustersPage = new SceneAppPage({
     new SceneControlsSpacer(),
     new SceneTimePicker({}),
     new SceneRefreshPicker({ refresh: '1m' }),
+    copyLinkControl(),
   ],
   preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   drilldowns: [

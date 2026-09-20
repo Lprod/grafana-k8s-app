@@ -190,6 +190,7 @@ export function getPodMemoryScene(clusterRegex: string, namespaceRegex: string, 
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Containers')
     .setData(tableData)
     .setOverrides((b) =>

@@ -71,6 +71,7 @@ import { attachExploreMenus } from '../../scenes/panelExplore';
 import { SectionHeading } from '../../scenes/sectionHeading';
 import { createChangeAnnotations } from '../../scenes/changeAnnotations';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
+import { copyLinkControl } from '../../scenes/copyLink';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -221,14 +222,14 @@ function getPodOverviewScene(
     $data: leftRunner,
     rows: [
       {
-        label: 'status:',
+        label: 'Status',
         render: (frames) => findFieldAcrossFrames(frames, 'phase')?.values[0] ?? '–',
         color: (frames, theme) => podStatusColor(findFieldAcrossFrames(frames, 'phase')?.values[0], theme),
       },
       // dateTimeAsIso -> "YYYY-MM-DD HH:mm:ss", browser-local time zone.
-      { label: 'pod start time:', fieldName: 'Value #startTime', unit: 'dateTimeAsIso' },
+      { label: 'Started', fieldName: 'Value #startTime', unit: 'dateTimeAsIso' },
       {
-        label: 'number of restarts:',
+        label: 'Restarts',
         fieldName: 'Value #restarts',
         color: (frames, theme) => podRestartsColor(findFieldAcrossFrames(frames, 'Value #restarts')?.values[0], theme),
       },
@@ -243,12 +244,12 @@ function getPodOverviewScene(
   const rightCard = new InfoCard({
     $data: rightRunner,
     rows: [
-      { label: 'cluster:', render: () => cluster, href: clusterUrl },
+      { label: 'Cluster', render: () => cluster, href: clusterUrl },
       {
-        label: 'node:',
+        label: 'Node',
         render: (frames) => findFieldAcrossFrames(frames, 'node')?.values[0] ?? '–',
       },
-      { label: 'namespace:', render: () => namespace, href: namespaceUrl },
+      { label: 'Namespace', render: () => namespace, href: namespaceUrl },
     ],
   });
 
@@ -395,6 +396,7 @@ function getPodOverviewScene(
   });
 
   const containersTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Containers')
     .setData(containersData)
     .setOverrides((b) =>
@@ -653,6 +655,7 @@ export function getPodDetailPage(
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });

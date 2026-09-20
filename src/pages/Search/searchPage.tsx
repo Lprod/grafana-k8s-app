@@ -29,6 +29,7 @@ import {
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
+import { copyLinkControl } from '../../scenes/copyLink';
 
 const SEARCH_URL = `${PLUGIN_BASE_URL}/${ROUTES.Search}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -63,7 +64,10 @@ function linkOverride(
   displayName: string,
   url?: string
 ): FieldConfigOverridesBuilder<any> {
-  const withName = b.matchFieldsWithName(fieldName).overrideDisplayName(displayName).overrideCustomFieldConfig('align', 'left');
+  const withName = b
+    .matchFieldsWithName(fieldName)
+    .overrideDisplayName(displayName)
+    .overrideCustomFieldConfig('align', 'left');
   return url ? withName.overrideLinks([{ title: `View ${displayName.toLowerCase()}`, url }]) : withName;
 }
 
@@ -99,7 +103,12 @@ const CATEGORY_DEFS: Record<Category, CategoryDef> = {
     secondaryField: 'cluster',
     buildSuggestionUrl: (row) => `${NODES_URL}/${encode(row.cluster)}/${encode(row.node)}`,
     buildOverrides: (b) => {
-      const withNode = linkOverride(b, 'node', 'Node', `${NODES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}`);
+      const withNode = linkOverride(
+        b,
+        'node',
+        'Node',
+        `${NODES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}`
+      );
       return linkOverride(withNode, 'cluster', 'Cluster', `${CLUSTERS_URL}/\${__value.text}\${__url.params}`);
     },
   },
@@ -110,7 +119,12 @@ const CATEGORY_DEFS: Record<Category, CategoryDef> = {
     secondaryField: 'cluster',
     buildSuggestionUrl: (row) => `${NAMESPACES_URL}/${encode(row.cluster)}/${encode(row.namespace)}`,
     buildOverrides: (b) => {
-      const withNamespace = linkOverride(b, 'namespace', 'Namespace', `${NAMESPACES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}`);
+      const withNamespace = linkOverride(
+        b,
+        'namespace',
+        'Namespace',
+        `${NAMESPACES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}`
+      );
       return linkOverride(withNamespace, 'cluster', 'Cluster', `${CLUSTERS_URL}/\${__value.text}\${__url.params}`);
     },
   },
@@ -119,7 +133,8 @@ const CATEGORY_DEFS: Record<Category, CategoryDef> = {
     indexByName: { workload: 0, workload_type: 1, namespace: 2, cluster: 3 },
     primaryField: 'workload',
     secondaryField: 'namespace',
-    buildSuggestionUrl: (row) => `${WORKLOADS_URL}/${encode(row.cluster)}/${encode(row.namespace)}/${encode(row.workload_type)}/${encode(row.workload)}`,
+    buildSuggestionUrl: (row) =>
+      `${WORKLOADS_URL}/${encode(row.cluster)}/${encode(row.namespace)}/${encode(row.workload_type)}/${encode(row.workload)}`,
     buildOverrides: (b) => {
       const withWorkload = linkOverride(
         b,
@@ -224,8 +239,16 @@ function buildCategoryPipeline(category: Category) {
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
     queries: [buildSearchTarget(category, searchRegex)],
   });
-  const transformedData = new SceneDataTransformer({ $data: queryRunner, transformations: mergeAndOrganize(def.indexByName) });
-  const panel = PanelBuilders.table().setTitle(def.title).setData(transformedData).setOverrides(def.buildOverrides).build();
+  const transformedData = new SceneDataTransformer({
+    $data: queryRunner,
+    transformations: mergeAndOrganize(def.indexByName),
+  });
+  const panel = PanelBuilders.table()
+    .setTitle(def.title)
+    .setData(transformedData)
+    .setOverrides(def.buildOverrides)
+    .setOption('enablePagination', true)
+    .build();
   return { transformedData, panel };
 }
 
@@ -300,7 +323,13 @@ function getStyles(theme: GrafanaTheme2) {
 //   one matching row - not as empty "No data" tables.
 // - If nothing matches anywhere once committed, a warning banner replaces
 //   the tables ("No results found").
-function SearchControls({ searchVariable, resultsLayout }: { searchVariable: TextBoxVariable; resultsLayout: SceneFlexLayout }) {
+function SearchControls({
+  searchVariable,
+  resultsLayout,
+}: {
+  searchVariable: TextBoxVariable;
+  resultsLayout: SceneFlexLayout;
+}) {
   const styles = useStyles2(getStyles);
   const [searchText, setSearchText] = useState('');
   const [selected, setSelected] = useState<Set<Category>>(new Set());
@@ -346,7 +375,9 @@ function SearchControls({ searchVariable, resultsLayout }: { searchVariable: Tex
   // treat as "don't render", so the component (and its query) stays alive.
   useEffect(() => {
     resultsLayout.setState({
-      children: CATEGORY_ORDER.filter((c) => pipelines[c]).map((c) => new SceneFlexItem({ key: c, body: pipelines[c]!.panel })),
+      children: CATEGORY_ORDER.filter((c) => pipelines[c]).map(
+        (c) => new SceneFlexItem({ key: c, body: pipelines[c]!.panel })
+      ),
     });
   }, [pipelines, resultsLayout]);
 
@@ -374,7 +405,10 @@ function SearchControls({ searchVariable, resultsLayout }: { searchVariable: Tex
   const [rowsByCategory, setRowsByCategory] = useState<Partial<Record<Category, Row[]>>>({});
   useEffect(() => {
     const apply = (category: Category) => () => {
-      setRowsByCategory((prev) => ({ ...prev, [category]: framesToRows(pipelines[category]!.transformedData.state.data?.series) }));
+      setRowsByCategory((prev) => ({
+        ...prev,
+        [category]: framesToRows(pipelines[category]!.transformedData.state.data?.series),
+      }));
     };
     const subs = Object.keys(pipelines).map((category) => {
       const c = category as Category;
@@ -429,7 +463,12 @@ function SearchControls({ searchVariable, resultsLayout }: { searchVariable: Tex
       />
       <div className={styles.pills}>
         {CATEGORY_ORDER.map((category) => (
-          <FilterPill key={category} label={CATEGORY_LABELS[category]} selected={selected.has(category)} onClick={() => toggle(category)} />
+          <FilterPill
+            key={category}
+            label={CATEGORY_LABELS[category]}
+            selected={selected.has(category)}
+            onClick={() => toggle(category)}
+          />
         ))}
       </div>
       {searchText.trim() === '' && <div className={styles.hint}>Type to search across your Kubernetes objects.</div>}
@@ -443,7 +482,11 @@ function SearchControls({ searchVariable, resultsLayout }: { searchVariable: Tex
                 {rowsByCategory[category]!.map((row, i) => {
                   const def = CATEGORY_DEFS[category];
                   return (
-                    <button key={i} className={styles.row} onClick={() => window.location.assign(def.buildSuggestionUrl(row))}>
+                    <button
+                      key={i}
+                      className={styles.row}
+                      onClick={() => window.location.assign(def.buildSuggestionUrl(row))}
+                    >
                       <div>
                         <div className={styles.primary}>{row[def.primaryField]}</div>
                         {def.secondaryField && <div className={styles.secondary}>{row[def.secondaryField]}</div>}
@@ -475,7 +518,9 @@ function getSearchScene(searchVariable: TextBoxVariable) {
       children: [
         new SceneFlexItem({
           ySizing: 'content',
-          body: new SceneReactObject({ reactNode: <SearchControls searchVariable={searchVariable} resultsLayout={resultsLayout} /> }),
+          body: new SceneReactObject({
+            reactNode: <SearchControls searchVariable={searchVariable} resultsLayout={resultsLayout} />,
+          }),
         }),
         new SceneFlexItem({ body: resultsLayout }),
       ],
@@ -507,6 +552,7 @@ export function getSearchPage() {
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });

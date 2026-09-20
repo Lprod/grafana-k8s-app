@@ -207,6 +207,7 @@ export function getJobCpuScene(cluster: string, namespace: string, job: string, 
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(tableData)
     .setOverrides((b) =>

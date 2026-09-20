@@ -198,6 +198,7 @@ export function getWorkloadCpuScene(
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(tableData)
     .setOverrides((b) =>

@@ -186,6 +186,7 @@ export function getCronjobMemoryScene(cluster: string, namespace: string, cluste
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(tableData)
     .setOverrides((b) =>

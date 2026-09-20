@@ -220,6 +220,7 @@ export function getNamespaceMemoryScene(cluster: string, namespace: string, clus
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Workloads')
     .setData(tableData)
     .setOverrides((b) =>

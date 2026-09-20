@@ -200,6 +200,7 @@ export function getJobMemoryScene(cluster: string, namespace: string, job: strin
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(tableData)
     .setOverrides((b) =>

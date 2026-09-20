@@ -15,6 +15,7 @@ import {
 } from '../../variables/datasourceVariables';
 import { ResourceSimulatorObject } from './ResourceSimulatorObject';
 import { attachExploreMenus } from '../../scenes/panelExplore';
+import { copyLinkControl } from '../../scenes/copyLink';
 
 export function getResourceSimulatorScene() {
   return new EmbeddedScene({
@@ -27,7 +28,12 @@ export function getResourceSimulatorScene() {
         createNamespaceFilterVariable({ isMulti: false }),
       ],
     }),
-    controls: [new VariableValueSelectors({}), new SceneControlsSpacer(), new SceneRefreshPicker({})],
+    controls: [
+      new VariableValueSelectors({}),
+      new SceneControlsSpacer(),
+      new SceneRefreshPicker({}),
+      copyLinkControl(),
+    ],
     body: new SceneFlexLayout({
       direction: 'column',
       children: [new SceneFlexItem({ minHeight: 760, body: new ResourceSimulatorObject() })],

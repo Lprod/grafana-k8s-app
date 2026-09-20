@@ -36,6 +36,8 @@ import {
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 import { applyEntityDrilldownLinks } from '../../scenes/drilldownLinks';
+import { sortRowsByRank } from '../../scenes/tableCells';
+import { copyLinkControl } from '../../scenes/copyLink';
 
 const ALERTS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Alerts}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
@@ -43,6 +45,13 @@ const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 // Value mappings drive the Severity column's colored background: exact
 // matches for the known severities, everything else keeps the default
 // (uncolored) cell styling since Grafana mappings have no generic "else".
+// Worst first. Same ordering severityMappings below already encodes, as a
+// sort rank - the table shows the row order it is handed, and "critical"
+// sorting above "warning" above "info" is not something Grafana's own
+// alphabetical column sort can produce. Users can still click any header to
+// re-sort.
+const SEVERITY_RANK: Record<string, number> = { critical: 3, warning: 2, info: 1, none: 0 };
+
 const severityMappings: ValueMapping[] = [
   {
     type: MappingType.ValueToText,
@@ -227,10 +236,14 @@ function getAlertsScene() {
           },
         },
       },
+      // Last, so it sorts the fully assembled rows (organize can reorder and
+      // rename fields, but never reorders rows).
+      sortRowsByRank('severity', (value) => SEVERITY_RANK[String(value)]),
     ],
   });
 
   const alertsTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Firing Alerts at ${__to:date:YYYY-MM-DD HH-mm-ss}')
     .setData(alertsTableData)
     .setOverrides((b) =>
@@ -306,6 +319,7 @@ export function getAlertsPage() {
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     // Deliberately excludes the filter variables - see the same note in
     // namespacesPage.ts.

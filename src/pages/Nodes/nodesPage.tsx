@@ -51,6 +51,7 @@ import {
   usageColorFromTier,
   usageThresholds,
   usageTierCell,
+  sortRowsByRank,
 } from '../../scenes/tableCells';
 import {
   CLUSTER_VARIABLE_NAME,
@@ -66,6 +67,7 @@ import { attachExploreMenus } from '../../scenes/panelExplore';
 import { SectionHeading } from '../../scenes/sectionHeading';
 import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
+import { copyLinkControl } from '../../scenes/copyLink';
 
 const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -89,7 +91,14 @@ function NodePageTitle({ title, cluster }: { title: string; cluster: string }) {
             collision reasoning as every other drilldown's own page title. */}
         <button
           onClick={() => window.location.assign(clusterUrl)}
-          style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: theme.colors.text.link, cursor: 'pointer' }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            font: 'inherit',
+            color: theme.colors.text.link,
+            cursor: 'pointer',
+          }}
         >
           {cluster}
         </button>
@@ -173,10 +182,16 @@ function getNodesListScene() {
           renameByName: {},
         },
       },
+      // Rows with firing alerts first; everything else keeps the order the
+      // join produced (sortRowsByRank is stable on equal ranks), so the
+      // common all-quiet case still reads in its familiar order instead of
+      // an arbitrary one. Clicking any header re-sorts as before.
+      sortRowsByRank('Value #alerts', (value) => Number(value) || 0),
     ],
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Nodes')
     .setData(transformedData)
     .setOverrides((b) =>
@@ -341,10 +356,10 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
   const leftCard = new InfoCard({
     $data: leftRunner,
     rows: [
-      { label: 'clustername:', render: () => cluster, href: clusterUrl },
-      { label: 'node:', render: () => node },
-      { label: 'node_ip:', render: (frames) => findFieldAcrossFrames(frames, 'internal_ip')?.values[0] ?? '–' },
-      { label: 'node_os_image:', render: (frames) => findFieldAcrossFrames(frames, 'os_image')?.values[0] ?? '–' },
+      { label: 'Cluster', render: () => cluster, href: clusterUrl },
+      { label: 'Node', render: () => node },
+      { label: 'IP address', render: (frames) => findFieldAcrossFrames(frames, 'internal_ip')?.values[0] ?? '–' },
+      { label: 'Operating system', render: (frames) => findFieldAcrossFrames(frames, 'os_image')?.values[0] ?? '–' },
     ],
   });
 
@@ -356,10 +371,10 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
   const middleCard = new InfoCard({
     $data: middleRunner,
     rows: [
-      { label: 'node_kernel_version:', render: (frames) => findFieldAcrossFrames(frames, 'kernel_version')?.values[0] ?? '–' },
-      { label: 'node_kubelet_version:', render: (frames) => findFieldAcrossFrames(frames, 'kubelet_version')?.values[0] ?? '–' },
+      { label: 'Kernel', render: (frames) => findFieldAcrossFrames(frames, 'kernel_version')?.values[0] ?? '–' },
+      { label: 'Kubelet', render: (frames) => findFieldAcrossFrames(frames, 'kubelet_version')?.values[0] ?? '–' },
       {
-        label: 'node_container_runtime_version:',
+        label: 'Container runtime',
         render: (frames) => findFieldAcrossFrames(frames, 'container_runtime_version')?.values[0] ?? '–',
       },
     ],
@@ -382,9 +397,9 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
   const rightCard = new InfoCard({
     $data: rightRunner,
     rows: [
-      { label: 'vcf_vcenter:', render: (frames) => findFieldAcrossFrames(frames, 'provider')?.values[0] ?? '–' },
-      { label: 'vcf_clustername:', render: (frames) => findFieldAcrossFrames(frames, 'clustername')?.values[0] ?? '–' },
-      { label: 'vcf_esx_host:', render: (frames) => findFieldAcrossFrames(frames, 'esxhostname')?.values[0] ?? '–' },
+      { label: 'vCenter', render: (frames) => findFieldAcrossFrames(frames, 'provider')?.values[0] ?? '–' },
+      { label: 'VCF cluster', render: (frames) => findFieldAcrossFrames(frames, 'clustername')?.values[0] ?? '–' },
+      { label: 'ESXi host', render: (frames) => findFieldAcrossFrames(frames, 'esxhostname')?.values[0] ?? '–' },
     ],
   });
 
@@ -523,6 +538,7 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
   });
 
   const podsTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(podsData)
     // `cluster` isn't a column here (the page is already scoped to one), so
@@ -554,7 +570,12 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
         .matchFieldsWithName('namespace')
         .overrideDisplayName('NAMESPACE')
         .overrideCustomFieldConfig('align', 'left')
-        .overrideLinks([{ title: 'View namespace', url: `${NAMESPACES_URL}/${encodeURIComponent(cluster)}/\${__value.text}\${__url.params}` }])
+        .overrideLinks([
+          {
+            title: 'View namespace',
+            url: `${NAMESPACES_URL}/${encodeURIComponent(cluster)}/\${__value.text}\${__url.params}`,
+          },
+        ])
         .matchFieldsWithName('phase')
         .overrideDisplayName('STATUS')
         .overrideCustomFieldConfig('align', 'left')
@@ -688,7 +709,11 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
   const baseUrl = `${NODES_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(node)}`;
 
   const tabDefs: NodeTabDef[] = [
-    { slug: 'overview', title: 'Overview', getScene: () => getNodeOverviewScene(cluster, node, clusterRegex, nodeRegex) },
+    {
+      slug: 'overview',
+      title: 'Overview',
+      getScene: () => getNodeOverviewScene(cluster, node, clusterRegex, nodeRegex),
+    },
     { slug: 'cpu', title: 'CPU', getScene: () => getNodeCpuScene(cluster, clusterRegex, node, nodeRegex) },
     { slug: 'memory', title: 'Memory', getScene: () => getNodeMemoryScene(cluster, clusterRegex, node, nodeRegex) },
     { slug: 'network', title: 'Network', getScene: () => getNodeNetworkScene(clusterRegex, node, nodeRegex) },
@@ -733,8 +758,16 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
-    preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
+    preserveUrlKeys: [
+      'from',
+      'to',
+      'timezone',
+      'refresh',
+      `var-${THANOS_VARIABLE_NAME}`,
+      `var-${LOGS_DATASOURCE_VARIABLE_NAME}`,
+    ],
   });
 }
 
@@ -760,6 +793,7 @@ export function getNodesPage() {
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     // Deliberately excludes the filter variables - see the same note in
     // namespacesPage.ts.
