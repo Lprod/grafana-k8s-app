@@ -76,6 +76,7 @@ import { copyLinkControl } from '../../scenes/copyLink';
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
+const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 
 function PodPageTitle({ title, cluster, namespace }: { title: string; cluster: string; namespace: string }) {
@@ -248,6 +249,15 @@ function getPodOverviewScene(
       {
         label: 'Node',
         render: (frames) => findFieldAcrossFrames(frames, 'node')?.values[0] ?? '–',
+        // Links into this app's own Node Drilldown - the node's own name
+        // is only known from the query result (unlike cluster/namespace
+        // above, already known from route params), so this needs the
+        // callback form of href, same as the vcf_clustername/vcf_esx_host
+        // rows on the Node Drilldown's own right info card (nodesPage.tsx).
+        href: (frames) => {
+          const node = findFieldAcrossFrames(frames, 'node')?.values[0];
+          return node ? `${NODES_URL}/${encodeURIComponent(cluster)}/${encodeURIComponent(String(node))}` : undefined;
+        },
       },
       { label: 'Namespace', render: () => namespace, href: namespaceUrl },
     ],

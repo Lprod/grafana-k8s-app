@@ -6,6 +6,7 @@ import {
   SceneAppPage,
   SceneAppPageLike,
   SceneControlsSpacer,
+  SceneDataLayerControls,
   SceneDataTransformer,
   SceneFlexItem,
   SceneFlexLayout,
@@ -28,6 +29,7 @@ import { getNodeMemoryScene } from './nodeMemoryScene';
 import { getNodeNetworkScene } from './nodeNetworkScene';
 import { getNodeStorageScene } from './nodeStorageScene';
 import { getNodeDependenciesScene } from './nodeDependenciesScene';
+import { vmwareClusterUrl, vmwareHostUrl, vmwareOverviewUrl } from '../../scenes/vmwareLinks';
 import {
   buildNodeAlertsSeverityQuery,
   buildNodeConditionQuery,
@@ -42,6 +44,7 @@ import {
   NodePodsTableQueryKey,
 } from '../../queries/nodeOverviewQueries';
 import { InfoCard, NodeHealthBanner, findFieldAcrossFrames } from '../../scenes/clusterOverviewCards';
+import { createNodeChangeAnnotations } from '../../scenes/changeAnnotations';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import {
   UsageIcon,
@@ -397,9 +400,34 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
   const rightCard = new InfoCard({
     $data: rightRunner,
     rows: [
-      { label: 'vCenter', render: (frames) => findFieldAcrossFrames(frames, 'provider')?.values[0] ?? '–' },
-      { label: 'VCF cluster', render: (frames) => findFieldAcrossFrames(frames, 'clustername')?.values[0] ?? '–' },
-      { label: 'ESXi host', render: (frames) => findFieldAcrossFrames(frames, 'esxhostname')?.values[0] ?? '–' },
+      {
+        label: 'vCenter',
+        render: (frames) => findFieldAcrossFrames(frames, 'provider')?.values[0] ?? '–',
+        // Links into the sibling VMware app's own Overview page, which
+        // always shows exactly one whole vCenter - see vmwareLinks.ts.
+        href: (frames) => {
+          const vcenter = findFieldAcrossFrames(frames, 'provider')?.values[0];
+          return vcenter ? vmwareOverviewUrl(String(vcenter)) : undefined;
+        },
+      },
+      {
+        label: 'VCF cluster',
+        render: (frames) => findFieldAcrossFrames(frames, 'clustername')?.values[0] ?? '–',
+        // Links into the sibling VMware app's own Clusters Drilldown - see
+        // vmwareLinks.ts.
+        href: (frames) => {
+          const clustername = findFieldAcrossFrames(frames, 'clustername')?.values[0];
+          return clustername ? vmwareClusterUrl(String(clustername)) : undefined;
+        },
+      },
+      {
+        label: 'ESXi host',
+        render: (frames) => findFieldAcrossFrames(frames, 'esxhostname')?.values[0] ?? '–',
+        href: (frames) => {
+          const esxhostname = findFieldAcrossFrames(frames, 'esxhostname')?.values[0];
+          return esxhostname ? vmwareHostUrl(String(esxhostname)) : undefined;
+        },
+      },
     ],
   });
 
@@ -751,10 +779,14 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
     getParentPage: () => parent,
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
+    // vMotion markers across all tabs - see createNodeChangeAnnotations for
+    // why it lives on the page rather than each tab's own EmbeddedScene.
+    $data: createNodeChangeAnnotations({ node }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
     controls: [
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
+      new SceneDataLayerControls(),
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),

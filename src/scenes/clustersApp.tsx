@@ -31,6 +31,7 @@ import {
 } from '@grafana/schema';
 import { Badge, Button, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../constants';
+import { vmwareOverviewUrl } from './vmwareLinks';
 import { clusterTableQueries } from '../queries/clusterQueries';
 import {
   buildClusterHealthQuery,
@@ -42,7 +43,7 @@ import {
   substituteCluster,
 } from '../queries/clusterOverviewQueries';
 import { buildClusterTableTargets, withClusterFilter } from './queryHelpers';
-import { ClusterAlertsBadge, ClusterHealthBanner, InfoCard } from './clusterOverviewCards';
+import { ClusterAlertsBadge, ClusterHealthBanner, InfoCard, findFieldAcrossFrames } from './clusterOverviewCards';
 import {
   CLUSTER_VARIABLE_NAME,
   createNodesFilterVariable,
@@ -355,7 +356,19 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
         fieldName: 'Value',
         href: `${PLUGIN_BASE_URL}/${ROUTES.Nodes}?var-${CLUSTER_VARIABLE_NAME}=${encodeURIComponent(cluster)}`,
       },
-      { label: 'Provider', fieldName: 'provider' },
+      {
+        label: 'Provider',
+        fieldName: 'provider',
+        // "provider" is this cluster's own vCenter name - links into the
+        // sibling VMware app's own Overview page, which always shows
+        // exactly one whole vCenter (see vmwareLinks.ts, same field/
+        // meaning as vcf_vcenter on the Node Drilldown's own right info
+        // card, nodesPage.tsx).
+        href: (frames) => {
+          const provider = findFieldAcrossFrames(frames, 'provider')?.values[0];
+          return provider ? vmwareOverviewUrl(String(provider)) : undefined;
+        },
+      },
     ],
   });
 
