@@ -81,6 +81,7 @@ import { getCronjobCpuScene } from './cronjobCpuScene';
 import { getCronjobMemoryScene } from './cronjobMemoryScene';
 import { getJobCpuScene } from './jobCpuScene';
 import { getJobMemoryScene } from './jobMemoryScene';
+import { copyLinkControl } from '../../scenes/copyLink';
 
 const JOBS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Jobs}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -202,6 +203,7 @@ function getCronjobsScene(clusterRegex: string, namespaceRegex: string) {
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Cronjobs')
     .setData(tableData)
     .setOverrides((b) =>
@@ -308,6 +310,7 @@ function getJobsScene(clusterRegex: string, namespaceRegex: string) {
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Jobs')
     .setData(tableData)
     .setOverrides((b) =>
@@ -413,6 +416,34 @@ function CronjobPageTitle({ title, cluster }: { title: string; cluster: string }
 // redeclares its own small style helpers" convention, e.g.
 // applyPodOptimizationSeriesOverrides in podsPage.tsx, is about avoiding
 // cross-*file* duplication, not a rule against reuse within one file).
+// Series names for those same four panels. Without these, Grafana falls
+// back to naming each series after its own raw PromQL expression, which is
+// what the CronJob and Job Overview tabs actually shipped with - the whole
+// (multi-thousand-character) query text rendered into the legend table,
+// unlike every other drilldown's optimization panels. Wording is copied
+// verbatim from the Pod/Workload Drilldowns' own cpuLegends/memoryLegends
+// (podsPage.tsx, workloadsPage.tsx) so the four "<object> CPU"/"<object>
+// Memory" panels across this app all read the same.
+//
+// Both pages' CPU and Memory query sets share one key set
+// (limits/allocation/requests/usage), so one pair of maps covers all four
+// panels in this file.
+type OptimizationKey = 'limits' | 'allocation' | 'requests' | 'usage';
+
+const cpuOptimizationLegends: Record<OptimizationKey, string> = {
+  allocation: 'Sum of container CPU allocation',
+  limits: 'Sum of container CPU limits',
+  requests: 'Sum of container CPU requests',
+  usage: 'Sum of container CPU usage',
+};
+
+const memoryOptimizationLegends: Record<OptimizationKey, string> = {
+  allocation: 'Sum of container memory allocation',
+  limits: 'Sum of container memory limits',
+  requests: 'Sum of container memory requests',
+  usage: 'Sum of container memory usage',
+};
+
 function applyOptimizationSeriesOverrides(b: FieldConfigOverridesBuilder<any>) {
   return b
     .matchFieldsByQuery('limits')
@@ -516,11 +547,11 @@ function getCronjobOverviewScene(
   const leftCard = new InfoCard({
     $data: leftRunner,
     rows: [
-      { label: 'cluster:', render: () => cluster, href: clusterUrl },
-      { label: 'namespace:', render: () => namespace, href: namespaceUrl },
-      { label: 'cronjob:', render: () => cronjob },
+      { label: 'Cluster', render: () => cluster, href: clusterUrl },
+      { label: 'Namespace', render: () => namespace, href: namespaceUrl },
+      { label: 'CronJob', render: () => cronjob },
       {
-        label: 'status:',
+        label: 'Status',
         render: (frames) => cronjobStatusLabel(findFieldAcrossFrames(frames, 'Value')?.values[0]),
         color: (frames, theme) => cronjobStatusColor(findFieldAcrossFrames(frames, 'Value')?.values[0], theme),
       },
@@ -540,10 +571,10 @@ function getCronjobOverviewScene(
   const rightCard = new InfoCard({
     $data: rightRunner,
     rows: [
-      { label: 'schedule:', render: (frames) => findFieldAcrossFrames(frames, 'schedule')?.values[0] ?? '–' },
-      { label: 'created:', fieldName: 'Value #created', unit: 'dateTimeFromNow' },
-      { label: 'next scheduled:', fieldName: 'Value #nextSchedule', unit: 'dateTimeFromNow' },
-      { label: 'last scheduled:', fieldName: 'Value #lastSchedule', unit: 'dateTimeFromNow' },
+      { label: 'Schedule', render: (frames) => findFieldAcrossFrames(frames, 'schedule')?.values[0] ?? '–' },
+      { label: 'Created', fieldName: 'Value #created', unit: 'dateTimeFromNow' },
+      { label: 'Next run', fieldName: 'Value #nextSchedule', unit: 'dateTimeFromNow' },
+      { label: 'Last run', fieldName: 'Value #lastSchedule', unit: 'dateTimeFromNow' },
     ],
   });
 
@@ -558,6 +589,7 @@ function getCronjobOverviewScene(
     queries: (Object.keys(cronjobCpuOptimizationQueries) as CronjobCpuOptimizationKey[]).map((key) => ({
       refId: key,
       expr: substituteResource(cronjobCpuOptimizationQueries[key]),
+      legendFormat: cpuOptimizationLegends[key],
     })),
   });
   const cpuOptimizationPanel = PanelBuilders.timeseries()
@@ -575,6 +607,7 @@ function getCronjobOverviewScene(
     queries: (Object.keys(cronjobMemoryOptimizationQueries) as CronjobMemoryOptimizationKey[]).map((key) => ({
       refId: key,
       expr: substituteResource(cronjobMemoryOptimizationQueries[key]),
+      legendFormat: memoryOptimizationLegends[key],
     })),
   });
   const memoryOptimizationPanel = PanelBuilders.timeseries()
@@ -662,6 +695,7 @@ function getCronjobOverviewScene(
   });
 
   const runsTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Runs')
     .setData(runsData)
     .setOverrides((b) =>
@@ -715,8 +749,8 @@ function getCronjobOverviewScene(
           direction: 'row',
           ySizing: 'content',
           children: [
-            new SceneFlexItem({ height: 300, body: cpuOptimizationPanel }),
-            new SceneFlexItem({ height: 300, body: memoryOptimizationPanel }),
+            new SceneFlexItem({ height: 400, body: cpuOptimizationPanel }),
+            new SceneFlexItem({ height: 400, body: memoryOptimizationPanel }),
           ],
         }),
         new SceneFlexItem({
@@ -843,11 +877,11 @@ function getJobOverviewScene(
   const leftCard = new InfoCard({
     $data: ownerRunner,
     rows: [
-      { label: 'cluster:', render: () => cluster, href: clusterUrl },
-      { label: 'namespace:', render: () => namespace, href: namespaceUrl },
-      { label: 'job:', render: () => job },
+      { label: 'Cluster', render: () => cluster, href: clusterUrl },
+      { label: 'Namespace', render: () => namespace, href: namespaceUrl },
+      { label: 'Job', render: () => job },
       {
-        label: 'controlled by:',
+        label: 'Controlled by',
         // kube_job_owner drops owner_kind/owner_name entirely for a
         // standalone Job (empty-label-equals-absent-field, see gotcha #31 in
         // the All Jobs page's own build notes) - a missing field here means
@@ -883,10 +917,10 @@ function getJobOverviewScene(
   const rightCard = new InfoCard({
     $data: runRunner,
     rows: [
-      { label: 'start:', fieldName: 'Value #start', unit: 'dateTimeFromNow' },
-      { label: 'end:', fieldName: 'Value #end', unit: 'dateTimeFromNow' },
-      { label: 'success:', fieldName: 'Value #success' },
-      { label: 'fail:', fieldName: 'Value #fail' },
+      { label: 'Started', fieldName: 'Value #start', unit: 'dateTimeFromNow' },
+      { label: 'Ended', fieldName: 'Value #end', unit: 'dateTimeFromNow' },
+      { label: 'Succeeded', fieldName: 'Value #success' },
+      { label: 'Failed', fieldName: 'Value #fail' },
     ],
   });
 
@@ -912,6 +946,7 @@ function getJobOverviewScene(
     queries: (Object.keys(jobCpuOptimizationQueries) as JobCpuOptimizationKey[]).map((key) => ({
       refId: key,
       expr: substituteResource(jobCpuOptimizationQueries[key]),
+      legendFormat: cpuOptimizationLegends[key],
     })),
   });
   const cpuOptimizationPanel = PanelBuilders.timeseries()
@@ -929,6 +964,7 @@ function getJobOverviewScene(
     queries: (Object.keys(jobMemoryOptimizationQueries) as JobMemoryOptimizationKey[]).map((key) => ({
       refId: key,
       expr: substituteResource(jobMemoryOptimizationQueries[key]),
+      legendFormat: memoryOptimizationLegends[key],
     })),
   });
   const memoryOptimizationPanel = PanelBuilders.timeseries()
@@ -1008,6 +1044,7 @@ function getJobOverviewScene(
   });
 
   const podsTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(podsTableData)
     .setOverrides((b) =>
@@ -1180,6 +1217,7 @@ function getJobOverviewScene(
   });
 
   const previousRunsTable = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Previous runs')
     .setData(previousRunsData)
     .setOverrides((b) =>
@@ -1229,8 +1267,8 @@ function getJobOverviewScene(
           direction: 'row',
           ySizing: 'content',
           children: [
-            new SceneFlexItem({ height: 300, body: cpuOptimizationPanel }),
-            new SceneFlexItem({ height: 300, body: memoryOptimizationPanel }),
+            new SceneFlexItem({ height: 400, body: cpuOptimizationPanel }),
+            new SceneFlexItem({ height: 400, body: memoryOptimizationPanel }),
           ],
         }),
         new SceneFlexItem({
@@ -1337,6 +1375,7 @@ function getCronjobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; nam
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });
@@ -1397,6 +1436,7 @@ function getJobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; namespa
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });
@@ -1436,6 +1476,7 @@ export function getJobsPage() {
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
+      copyLinkControl(),
     ],
     // Deliberately excludes the filter variables - see the same note in
     // namespacesPage.tsx/alertsPage.ts.

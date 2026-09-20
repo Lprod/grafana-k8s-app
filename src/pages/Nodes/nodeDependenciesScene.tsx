@@ -82,12 +82,18 @@ function singleString(frame: DataFrame | undefined, name: string): string | unde
   return v === undefined || v === null || v === '' ? undefined : String(v);
 }
 
-function stringField(name: string, values: Array<string | null>): Field {
-  return { name, type: FieldType.string, config: {}, values };
+function stringField(name: string, values: Array<string | null>, displayName?: string): Field {
+  return { name, type: FieldType.string, config: { displayName }, values };
 }
 
-function numberField(name: string, values: Array<number | null>, unit?: string, decimals?: number): Field {
-  return { name, type: FieldType.number, config: { unit, decimals }, values };
+function numberField(
+  name: string,
+  values: Array<number | null>,
+  unit?: string,
+  decimals?: number,
+  displayName?: string
+): Field {
+  return { name, type: FieldType.number, config: { unit, decimals, displayName }, values };
 }
 
 function boolField(name: string, values: boolean[]): Field {
@@ -134,8 +140,19 @@ function usageBucket(fraction: number | undefined): UsageBucket {
   return { low: v, med: 0, high: 0 };
 }
 
-function arcField(name: string, values: number[], fixedColor: string): Field {
-  return { name, type: FieldType.number, config: { color: { mode: FieldColorModeId.Fixed, fixedColor } }, values };
+// `displayName` is what Node Graph's own Legend.tsx renders for this field
+// (`f.config.displayName || f.name`, read straight out of the running
+// Grafana image) - without it the panel's built-in, non-disableable legend
+// lists the raw internal field names (arc__cpu_low, mainstat, color, ...).
+// There is no `legend` option in the Node Graph panel schema at all, so
+// naming the fields is the only way to make that legend readable.
+function arcField(name: string, values: number[], fixedColor: string, displayName: string): Field {
+  return {
+    name,
+    type: FieldType.number,
+    config: { color: { mode: FieldColorModeId.Fixed, fixedColor }, displayName },
+    values,
+  };
 }
 
 interface GraphNodeRow {
@@ -321,7 +338,8 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
             detailNamespace: namespace || '–',
             detailWorkload: workload ? `${workload} (${workloadType})` : '–',
             detailCpuUsage: cpuFraction !== undefined ? `${Math.round(cpuFraction * 100)}% of node CPU capacity` : '–',
-            detailMemUsage: memFraction !== undefined ? `${Math.round(memFraction * 100)}% of node memory capacity` : '–',
+            detailMemUsage:
+              memFraction !== undefined ? `${Math.round(memFraction * 100)}% of node memory capacity` : '–',
             detailReady: ready ? 'Ready' : 'Not ready',
             namespace,
             workload,
@@ -403,9 +421,18 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
           refId: 'nodes',
           length: nodeRows.length,
           fields: [
-            stringField('id', nodeRows.map((r) => r.id)),
-            stringField('title', nodeRows.map((r) => r.title)),
-            stringField('subtitle', nodeRows.map((r) => r.subtitle)),
+            stringField(
+              'id',
+              nodeRows.map((r) => r.id)
+            ),
+            stringField(
+              'title',
+              nodeRows.map((r) => r.title)
+            ),
+            stringField(
+              'subtitle',
+              nodeRows.map((r) => r.subtitle)
+            ),
             // One decimal, not zero - most of this demo's real usage is
             // single-digit percent, where 0-decimal rounding would show a
             // misleading flat "0 % Mem" instead of the real (small but
@@ -414,13 +441,15 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
               'mainStat',
               nodeRows.map((r) => (r.cpuFraction !== undefined ? r.cpuFraction * 100 : null)),
               '% CPU',
-              1
+              1,
+              'CPU usage'
             ),
             numberField(
               'secondaryStat',
               nodeRows.map((r) => (r.memFraction !== undefined ? r.memFraction * 100 : null)),
               '% Mem',
-              1
+              1,
+              'Memory usage'
             ),
             // Ready/not-ready is shown via `highlighted` (a hard-coded solid
             // fill on the node's circle, not a themable color - see
@@ -431,37 +460,104 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
             // suppresses the plain `color` ring outright), and the user
             // explicitly asked for the *node* to reflect ready state, the
             // *values inside it* to reflect usage.
-            boolField('highlighted', nodeRows.map((r) => r.highlighted)),
+            boolField(
+              'highlighted',
+              nodeRows.map((r) => r.highlighted)
+            ),
             // Fallback ring color for rows with no arc data at all (the
             // vSphere chain nodes, or a pod/node with genuinely 0%/unknown
             // usage on both metrics) - ignored by the renderer whenever a
             // real arc segment exists.
-            stringField('color', nodeRows.map((r) => r.color)),
+            stringField(
+              'color',
+              nodeRows.map((r) => r.color),
+              'No usage data'
+            ),
             // Three-bucket-per-metric trick (see usageBucket's own comment
             // above) - orange/green/red per this app's usual 60%/90% split
             // (`usageThresholds`, tableCells.tsx), CPU declared before Mem so
             // the CPU segment always starts at the top of the ring.
-            arcField('arc__cpu_low', cpuBuckets.map((b) => b.low), 'orange'),
-            arcField('arc__cpu_med', cpuBuckets.map((b) => b.med), 'green'),
-            arcField('arc__cpu_high', cpuBuckets.map((b) => b.high), 'red'),
-            arcField('arc__mem_low', memBuckets.map((b) => b.low), 'orange'),
-            arcField('arc__mem_med', memBuckets.map((b) => b.med), 'green'),
-            arcField('arc__mem_high', memBuckets.map((b) => b.high), 'red'),
-            stringField('detail__Type', nodeRows.map((r) => r.detailType)),
-            stringField('detail__Ready', nodeRows.map((r) => r.detailReady)),
-            stringField('detail__Namespace', nodeRows.map((r) => r.detailNamespace)),
-            stringField('detail__Workload', nodeRows.map((r) => r.detailWorkload)),
-            stringField('detail__CPU_usage', nodeRows.map((r) => r.detailCpuUsage)),
-            stringField('detail__Memory_usage', nodeRows.map((r) => r.detailMemUsage)),
+            arcField(
+              'arc__cpu_low',
+              cpuBuckets.map((b) => b.low),
+              'orange',
+              'CPU 0-60%'
+            ),
+            arcField(
+              'arc__cpu_med',
+              cpuBuckets.map((b) => b.med),
+              'green',
+              'CPU 60-90%'
+            ),
+            arcField(
+              'arc__cpu_high',
+              cpuBuckets.map((b) => b.high),
+              'red',
+              'CPU 90-100%'
+            ),
+            arcField(
+              'arc__mem_low',
+              memBuckets.map((b) => b.low),
+              'orange',
+              'Memory 0-60%'
+            ),
+            arcField(
+              'arc__mem_med',
+              memBuckets.map((b) => b.med),
+              'green',
+              'Memory 60-90%'
+            ),
+            arcField(
+              'arc__mem_high',
+              memBuckets.map((b) => b.high),
+              'red',
+              'Memory 90-100%'
+            ),
+            stringField(
+              'detail__Type',
+              nodeRows.map((r) => r.detailType)
+            ),
+            stringField(
+              'detail__Ready',
+              nodeRows.map((r) => r.detailReady)
+            ),
+            stringField(
+              'detail__Namespace',
+              nodeRows.map((r) => r.detailNamespace)
+            ),
+            stringField(
+              'detail__Workload',
+              nodeRows.map((r) => r.detailWorkload)
+            ),
+            stringField(
+              'detail__CPU_usage',
+              nodeRows.map((r) => r.detailCpuUsage)
+            ),
+            stringField(
+              'detail__Memory_usage',
+              nodeRows.map((r) => r.detailMemUsage)
+            ),
             // Not shown by the panel itself (Node Graph only renders the
             // field names above) - carried purely so the "id" field's own
             // link overrides below can interpolate `${__data.fields.X}` per
             // row, same mechanism as every other per-row table link in this
             // app (e.g. the Overview tab's own Pods table).
-            stringField('namespace', nodeRows.map((r) => r.namespace)),
-            stringField('workload', nodeRows.map((r) => r.workload)),
-            stringField('workload_type', nodeRows.map((r) => r.workloadType)),
-            stringField('pod', nodeRows.map((r) => r.pod)),
+            stringField(
+              'namespace',
+              nodeRows.map((r) => r.namespace)
+            ),
+            stringField(
+              'workload',
+              nodeRows.map((r) => r.workload)
+            ),
+            stringField(
+              'workload_type',
+              nodeRows.map((r) => r.workloadType)
+            ),
+            stringField(
+              'pod',
+              nodeRows.map((r) => r.pod)
+            ),
           ],
         };
 
@@ -470,12 +566,30 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
           refId: 'edges',
           length: edgeRows.length,
           fields: [
-            stringField('id', edgeRows.map((r) => r.id)),
-            stringField('source', edgeRows.map((r) => r.source)),
-            stringField('target', edgeRows.map((r) => r.target)),
-            stringField('color', edgeRows.map((r) => r.color)),
-            numberField('thickness', edgeRows.map((r) => r.thickness)),
-            stringField('strokeDasharray', edgeRows.map((r) => r.strokeDasharray)),
+            stringField(
+              'id',
+              edgeRows.map((r) => r.id)
+            ),
+            stringField(
+              'source',
+              edgeRows.map((r) => r.source)
+            ),
+            stringField(
+              'target',
+              edgeRows.map((r) => r.target)
+            ),
+            stringField(
+              'color',
+              edgeRows.map((r) => r.color)
+            ),
+            numberField(
+              'thickness',
+              edgeRows.map((r) => r.thickness)
+            ),
+            stringField(
+              'strokeDasharray',
+              edgeRows.map((r) => r.strokeDasharray)
+            ),
           ],
         };
 
@@ -484,15 +598,29 @@ function buildDependencyGraphFrames(cluster: string, node: string): CustomTransf
     );
 }
 
+// Only what the panel's own (non-disableable) legend underneath genuinely
+// cannot say: `highlighted` is a boolean, never a legend entry, so the
+// solid-red "not ready" fill has no key of its own down there. The
+// orange/green/red usage tiers used to be spelled out here too - they now
+// come from the built-in legend directly, via each arc field's own
+// `displayName` (see arcField above), so repeating them here would just be
+// two legends disagreeing about wording.
 function DependenciesLegend() {
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, alignItems: 'center', padding: '4px 0', opacity: 0.7, flexWrap: 'wrap' }}>
-      <span>Solid red fill = not ready.</span>
-      <span>Ring: CPU (top) / Memory (bottom) usage -</span>
-      <span style={{ color: 'orange' }}>0-60%</span>
-      <span style={{ color: 'green' }}>60-90%</span>
-      <span style={{ color: 'red' }}>90-100%</span>
-      <span>- exact values shown inside each node.</span>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: 16,
+        alignItems: 'center',
+        padding: '4px 0',
+        opacity: 0.7,
+        flexWrap: 'wrap',
+      }}
+    >
+      <span>
+        Solid red fill = not ready. Ring: CPU (top) / Memory (bottom) usage - exact values shown inside each node.
+      </span>
     </div>
   );
 }
@@ -508,10 +636,30 @@ export function getNodeDependenciesScene(cluster: string, node: string, clusterR
       { refId: 'podsCpuUsage', expr: substitutePod(nodePodsTableQueries.cpu_usage), format: 'table', instant: true },
       { refId: 'podsMemUsage', expr: substitutePod(nodePodsTableQueries.mem_usage), format: 'table', instant: true },
       { refId: 'podsReady', expr: buildPodReadyQuery(clusterRegex), format: 'table', instant: true },
-      { refId: 'nodeCapacity', expr: substituteNode(nodeCpuOptimizationQueries.cpuCapacity), format: 'table', instant: true },
-      { refId: 'nodeCpuUsage', expr: substituteNode(nodeCpuOptimizationQueries.cpuUsage), format: 'table', instant: true },
-      { refId: 'nodeMemCapacity', expr: substituteNode(nodeMemoryOptimizationQueries.memCapacity), format: 'table', instant: true },
-      { refId: 'nodeMemUsage', expr: substituteNode(nodeMemoryOptimizationQueries.memUsage), format: 'table', instant: true },
+      {
+        refId: 'nodeCapacity',
+        expr: substituteNode(nodeCpuOptimizationQueries.cpuCapacity),
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'nodeCpuUsage',
+        expr: substituteNode(nodeCpuOptimizationQueries.cpuUsage),
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'nodeMemCapacity',
+        expr: substituteNode(nodeMemoryOptimizationQueries.memCapacity),
+        format: 'table',
+        instant: true,
+      },
+      {
+        refId: 'nodeMemUsage',
+        expr: substituteNode(nodeMemoryOptimizationQueries.memUsage),
+        format: 'table',
+        instant: true,
+      },
       { refId: 'nodeCondition', expr: buildNodeConditionQuery(clusterRegex, node), format: 'table', instant: true },
       { refId: 'nodeInfo', expr: buildNodeInfoQuery(clusterRegex, node), format: 'table', instant: true },
       { refId: 'vcfInfo', expr: buildNodeVcfInfoQuery(node), format: 'table', instant: true },
