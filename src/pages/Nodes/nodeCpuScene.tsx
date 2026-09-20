@@ -157,6 +157,7 @@ export function getNodeCpuScene(cluster: string, clusterRegex: string, node: str
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(tableData)
     .setOverrides((b) =>

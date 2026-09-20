@@ -152,6 +152,7 @@ export function getNodeMemoryScene(cluster: string, clusterRegex: string, node: 
   });
 
   const table = PanelBuilders.table()
+    .setOption('enablePagination', true)
     .setTitle('Pods')
     .setData(tableData)
     .setOverrides((b) =>

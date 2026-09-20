@@ -1,5 +1,83 @@
 # Changelog
 
+## 2.3.0
+
+Two phases of a UX review carried out against v2.0.6: a polish pass over labelling,
+theming and empty states, then a pass making the list pages hold up against a real
+cluster's row counts. UX-01 (column widths), UX-04 (content-sized panel heights) and
+UX-16 (empty-time-range hint) were reviewed and dropped from scope by decision.
+
+### Readability and labelling
+
+- **Usage-tier icons are now visible in the light theme.** The three fill-level
+  glyphs beside every CPU/Memory value (Clusters, Nodes, Namespaces, Workloads and
+  every drilldown table, plus each list page's own "Resource usage: low / med /
+  high" key) were pure-white PNGs - invisible against the light theme's white table
+  background. They are now inline SVG, drawn in the row's own tier color
+  (orange/green/red) instead of a neutral white, so the glyph matches the value
+  beside it. `src/img/usage-{low,med,high}.png` are gone.
+- **Info cards now use plain-language labels.** Every drilldown's information cards
+  showed raw metric label names - `node_container_runtime_version:`,
+  `node_os_image:`, `vcf_esx_host:`, `clustername:`, `cluster name:`, `egress ip:`,
+  `next scheduled:` and so on, lowercased and colon-suffixed. All 47 are now
+  Title-Case plain language ("Container runtime", "Operating system", "ESXi host",
+  "Cluster", "Egress IP", "Next run"). The label already sits on its own line above
+  its value, so the trailing colons were redundant.
+- **The CronJob and Job Drilldowns no longer print their PromQL into the legend.**
+  The four "optimization" panels on those two Overview tabs built their queries
+  without a `legendFormat`, so Grafana named each series after its own (multi-
+  thousand-character) query expression. They now use the same wording as the
+  Pod/Workload Drilldowns' equivalent panels. Their panel height also went 300 ->
+  400 to match every sibling optimization panel, which is what was clipping the
+  last legend row.
+- **The Node Drilldown's Dependencies graph has a readable legend.** Grafana's Node
+  Graph panel renders its own legend from the field names and offers no option to
+  turn it off, so it was listing `mainstat`, `secondarystat`, `arc__cpu_low` ...
+  `arc__mem_high` and `color`. Each of those fields now carries a `displayName`
+  ("CPU usage", "CPU 0-60%", "No usage data", ...), turning that legend into a real
+  key. The hand-written explainer line above the panel dropped the tier ranges it
+  now duplicates and kept only what the built-in legend cannot show (the solid-red
+  "not ready" fill).
+- **Counter tiles show 0 instead of "No data".** `count(<selector>)` returns no
+  series at all when nothing matches, so the Kubernetes home page's twelve issue
+  counters and six inventory tiles rendered Grafana's generic "No data" - which,
+  next to eleven siblings showing real numbers, reads as a broken tile rather than
+  "nothing wrong here".
+- **Custom table cells have hover tooltips.** The app's own cell renderers (value +
+  tier icon, the value/percent/bar meter, and the ready/desired pods bar) now carry
+  a native `title`, so a value too wide for its column is still readable. Grafana
+  already does this for panel titles and table column headers; it does not do it
+  for a custom cell renderer's own output.
+
+
+### Lists, sorting and sharing
+
+- **Every table is paginated.** All 35 table panels now set `enablePagination`.
+  With 2-9 demo rows this mostly adds a row count ("1 - 9 of 9 rows"); against a
+  real cluster it is the difference between a list page and an unbounded scroll
+  inside a fixed-height panel. It also removes most of the dead space the panels
+  used to leave below short tables, since a paginated table fills the height it is
+  given with rows.
+- **Lists lead with what needs attention.** New `sortRowsByRank` transform
+  (`tableCells.tsx`) sorts a table's rows in the data pipeline rather than via
+  Grafana's `sortBy` panel option, which can only sort a string column
+  alphabetically - the wrong order for a severity, where "critical" would land
+  under "info". Applied to:
+  - the Alerts table, by severity (critical, warning, info);
+  - the Clusters, Nodes and Namespaces lists, by firing-alert count;
+  - the Workloads list, by *missing* replicas - it has no Alerts column, so a 0/2
+    deployment sorting above a 2/3 one is the health signal that table does carry.
+
+  The sort is stable: rows with nothing wrong keep the order the join or merge
+  produced, so the all-quiet case still reads in its familiar order, and clicking
+  any column header re-sorts exactly as before.
+- **"Copy link" in every page toolbar.** Every page already kept its full state -
+  filters, datasource, time range - in the URL, but nothing surfaced that; sharing
+  a filtered view meant knowing to copy the address bar. A link button now sits at
+  the right end of all 16 page toolbars. The clipboard helper was extracted out of
+  `ocCell.tsx` into `scenes/copyLink.tsx` so the per-row `oc` copy and this share
+  one implementation.
+
 ## 2.0.6
 
 - Fixed the release pipeline itself: the `v2.0.4`/`v2.0.5` tag pushes both failed CI's plugin-validator step (`osv-scanner detected a high severity issue in package fast-uri`), so neither actually produced a GitHub release despite tagging/pushing successfully - a newly-disclosed CVE (published 2026-09-02) against `fast-uri@3.1.5`, a transitive build-time-only dependency (via `copy-webpack-plugin` → `schema-utils` → `ajv`), not a change introduced by either of those releases. Pinned it to `^3.1.7` (patched) via an `overrides` entry in `package.json`.
