@@ -16,6 +16,7 @@ import {
 import { ResourceSimulatorObject } from './ResourceSimulatorObject';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { jumpControl } from '../../scenes/objectJump';
 
 export function getResourceSimulatorScene() {
   return new EmbeddedScene({
@@ -34,6 +35,7 @@ export function getResourceSimulatorScene() {
       new SceneControlsSpacer(),
       new SceneRefreshPicker({}),
       copyLinkControl(),
+      jumpControl(),
     ],
     body: new SceneFlexLayout({
       direction: 'column',

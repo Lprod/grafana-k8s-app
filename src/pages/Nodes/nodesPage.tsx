@@ -71,6 +71,7 @@ import { SectionHeading } from '../../scenes/sectionHeading';
 import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { jumpControl } from '../../scenes/objectJump';
 import { getRawLogsTabScene } from '../../scenes/logPanels';
 import { buildNodeEventsQuery, buildNodeLogsQuery } from '../../queries/namespaceOverviewQueries';
 
@@ -779,6 +780,7 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     preserveUrlKeys: [
       'from',
@@ -814,6 +816,7 @@ export function getNodesPage() {
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     // Deliberately excludes the filter variables - see the same note in
     // namespacesPage.ts.

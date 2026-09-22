@@ -44,10 +44,10 @@ const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
 // resolved by Scenes' variable interpolation at query-run time, not here.
 const searchRegex = `\${${SEARCH_VARIABLE_NAME}:regex}`;
 
-type Category = SearchTableQueryKey;
-type Row = Record<string, string>;
+export type Category = SearchTableQueryKey;
+export type Row = Record<string, string>;
 
-const CATEGORY_ORDER: Category[] = ['clusters', 'nodes', 'namespaces', 'workloads', 'pods', 'containers'];
+export const CATEGORY_ORDER: Category[] = ['clusters', 'nodes', 'namespaces', 'workloads', 'pods', 'containers'];
 const CATEGORY_LABELS: Record<Category, string> = {
   clusters: 'Clusters',
   nodes: 'Nodes',
@@ -80,7 +80,7 @@ function linkOverride(
 // that suggestion navigates straight to (confirmed live against Grafana
 // Play: selecting a suggestion opens that object's own Drilldown page, not a
 // filtered view on this Search page).
-interface CategoryDef {
+export interface CategoryDef {
   title: string;
   indexByName: Record<string, number>;
   primaryField: string;
@@ -89,7 +89,7 @@ interface CategoryDef {
   buildOverrides: (b: FieldConfigOverridesBuilder<any>) => FieldConfigOverridesBuilder<any>;
 }
 
-const CATEGORY_DEFS: Record<Category, CategoryDef> = {
+export const CATEGORY_DEFS: Record<Category, CategoryDef> = {
   clusters: {
     title: 'Clusters',
     indexByName: { cluster: 0 },
@@ -223,7 +223,7 @@ const CATEGORY_DEFS: Record<Category, CategoryDef> = {
   },
 };
 
-function mergeAndOrganize(indexByName: Record<string, number>) {
+export function mergeAndOrganize(indexByName: Record<string, number>) {
   return [
     { id: 'merge', options: {} },
     { id: 'organize', options: { excludeByName: { Time: true, Value: true }, indexByName, renameByName: {} } },
@@ -253,7 +253,7 @@ function buildCategoryPipeline(category: Category) {
   return { transformedData, panel };
 }
 
-function framesToRows(series: DataFrame[] | undefined): Row[] {
+export function framesToRows(series: DataFrame[] | undefined): Row[] {
   if (!series) {
     return [];
   }
@@ -378,7 +378,7 @@ function getStyles(theme: GrafanaTheme2) {
 // on purpose: the category queries match with a plain `=~".*<term>.*"`
 // (no `(?i)`, see searchQueries.ts), so highlighting case-insensitively
 // would mark text the query did not actually match on.
-function highlight(text: string, term: string, className: string): React.ReactNode {
+export function highlight(text: string, term: string, className: string): React.ReactNode {
   if (!term || !text.includes(term)) {
     return text;
   }
@@ -400,12 +400,12 @@ function highlight(text: string, term: string, className: string): React.ReactNo
 // two clusters rendered as two identical "app / default" rows with no way to
 // tell which one a click would open, which is the normal case in a
 // multi-cluster setup, not an edge case.
-function suggestionContext(def: CategoryDef, row: Row): string {
+export function suggestionContext(def: CategoryDef, row: Row): string {
   const parts = [def.secondaryField ? row[def.secondaryField] : undefined, def.primaryField !== 'cluster' ? row.cluster : undefined];
   return [...new Set(parts.filter((p): p is string => Boolean(p)))].join(' · ');
 }
 
-function recentContext(object: RecentObject): string {
+export function recentContext(object: RecentObject): string {
   return object.namespace ? `${object.namespace} · ${object.cluster}` : object.kind === 'cluster' ? '' : object.cluster;
 }
 

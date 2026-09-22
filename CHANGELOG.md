@@ -1,5 +1,44 @@
 # Changelog
 
+## 3.0.0
+
+Phase 4 of the UX review ("new capabilities"): `F-04`, `F-05` and `F-11`. The
+major version marks the new way of moving around the app, not a breaking change:
+nothing was removed, and `grafanaDependency` is unchanged.
+
+- **Jump to any object from anywhere: press `/`.** An overlay opens over the
+  current page. Type part of a name and Enter opens that cluster's, node's,
+  namespace's, workload's or pod's Drilldown, keeping the current time range.
+  It works like the Search page's own suggestions: same six queries, cluster
+  context, match highlighting, arrow keys. The first hit is preselected. With
+  nothing typed it lists "Recently viewed". It doesn't open while typing in a
+  field, and not on the Search page, which is unchanged. Every other page's
+  toolbar also gets a search button next to "copy link" that opens the same
+  overlay; its tooltip names the shortcut. New `src/scenes/objectJump.tsx`,
+  with unit tests.
+  Known cosmetic cost: on the Workloads list, with four filter pickers in one
+  toolbar, Grafana 13.2 already squeezed the "All" chips to "A" at 1600px, and
+  the extra button squeezes them to an empty chip. At 1920px it all fits.
+- **CronJob run history at a glance.** The Cronjobs table (All Jobs) has a new
+  LAST RUNS column: one bar per run for each CronJob's newest 10 Jobs (green complete,
+  yellow running, red failed - the same rule and colors as the CronJob Drilldown's
+  Runs table), plus the success rate of the finished ones. Each bar links to its
+  Job Drilldown; the column sorts by success rate. It takes every Job seen in
+  the selected time range instead of only the Jobs *started* in it, because
+  kube-state-metrics keeps just the Jobs the CronJob's history limit retains (3 + 1
+  by default). With the "started in range" rule, an hourly CronJob would get one bar in the default
+  1h view. New `src/scenes/cronjobRunHistory.tsx`, with unit tests.
+- **Export any table as CSV.** Every table panel's menu has "Export CSV" next to
+  "Explore". The file contains what the table shows: renamed column headers,
+  value mappings and units. There are three differences from the screen:
+  timestamps are written as absolute dates instead of "5 minutes ago", all rows
+  are exported instead of only the current page, and the oc / Investigate
+  button column is left out. The file is semicolon-separated with a UTF-8 BOM,
+  so a German-locale Excel opens it straight into columns. New
+  `src/scenes/tableExport.ts`, with unit tests.
+- Demo data: five more past runs for the demo CronJobs, and a final status for
+  the three old `*-29160480` runs, so the strip has something to show.
+
 ## 2.4.0
 
 Third phase of the UX review, and the dev environment moved to Grafana 13.2.2.

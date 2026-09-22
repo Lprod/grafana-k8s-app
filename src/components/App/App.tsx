@@ -4,6 +4,7 @@ import { useSceneApp } from '@grafana/scenes';
 import { getClustersSceneApp } from '../../scenes/clustersApp';
 import { setAppJsonData, type AppJsonData } from '../../utils/appJsonData';
 import { useRecentObjectTracking } from '../../scenes/recentObjects';
+import { ObjectJumpOverlay } from '../../scenes/objectJump';
 
 function App(props: AppRootProps<AppJsonData>) {
   setAppJsonData(props.meta.jsonData);
@@ -11,7 +12,13 @@ function App(props: AppRootProps<AppJsonData>) {
   // Feeds the Search page's "Recently viewed" list - see recentObjects.ts.
   useRecentObjectTracking();
 
-  return <scene.Component model={scene} />;
+  return (
+    <>
+      <scene.Component model={scene} />
+      {/* "/" anywhere in the app: jump to an object - see objectJump.tsx. */}
+      <ObjectJumpOverlay />
+    </>
+  );
 }
 
 export default App;

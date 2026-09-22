@@ -92,6 +92,7 @@ import { getCronjobMemoryScene } from './cronjobMemoryScene';
 import { getJobCpuScene } from './jobCpuScene';
 import { getJobMemoryScene } from './jobMemoryScene';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { jumpControl } from '../../scenes/objectJump';
 import { getRawLogsTabScene } from '../../scenes/logPanels';
 import { buildWorkloadEventsQuery, buildWorkloadLogsQuery } from '../../queries/namespaceOverviewQueries';
 
@@ -1404,6 +1405,7 @@ function getCronjobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; nam
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
@@ -1476,6 +1478,7 @@ function getJobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; namespa
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
@@ -1516,6 +1519,7 @@ export function getJobsPage() {
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     // Deliberately excludes the filter variables - see the same note in
     // namespacesPage.tsx/alertsPage.ts.

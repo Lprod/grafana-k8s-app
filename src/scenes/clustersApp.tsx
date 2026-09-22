@@ -68,6 +68,7 @@ import { attachExploreMenus } from './panelExplore';
 import { SectionHeading } from './sectionHeading';
 import { InvestigateEntityButton } from './investigateEntityButton';
 import { copyLinkControl } from './copyLink';
+import { jumpControl } from './objectJump';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
@@ -1849,6 +1850,7 @@ function getClusterDetailPage(routeMatch: SceneRouteMatch<{ cluster: string }>, 
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });
@@ -1870,6 +1872,7 @@ const clustersPage = new SceneAppPage({
     new SceneTimePicker({}),
     new SceneRefreshPicker({ refresh: '1m' }),
     copyLinkControl(),
+    jumpControl(),
   ],
   preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   drilldowns: [

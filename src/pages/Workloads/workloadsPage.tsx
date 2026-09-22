@@ -91,6 +91,7 @@ import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { createChangeAnnotations } from '../../scenes/changeAnnotations';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { jumpControl } from '../../scenes/objectJump';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -972,6 +973,7 @@ function getWorkloadDetailPage(
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
     // Pod Drilldown - nested one level deeper than this page's own tabs
@@ -1015,6 +1017,7 @@ export function getWorkloadsPage() {
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     // Deliberately excludes the filter variables - see the same note in
     // the pre-existing stub this file replaces.

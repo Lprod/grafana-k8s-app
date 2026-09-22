@@ -78,6 +78,7 @@ import { SectionHeading } from '../../scenes/sectionHeading';
 import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { jumpControl } from '../../scenes/objectJump';
 
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -851,6 +852,7 @@ function getNamespaceDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; n
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
@@ -875,6 +877,7 @@ export function getNamespacesPage() {
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
+      jumpControl(),
     ],
     // Deliberately excludes the filter variables - see the same note in
     // the pre-existing stub this file replaces.
