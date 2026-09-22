@@ -32,21 +32,36 @@ Die IDs `UX-01`…`UX-19` (Befunde) und `F-01`…`F-12` (Feature-Ideen) sind sta
 |---|---|---|---|
 | F-01 | Startseite als Handlungsliste statt als Zählerwand | Groß · Hoch | Abgelehnt |
 | F-02 | Alert-Kontext: seit wann, was, und warum | Mittel · Hoch | Offen |
-| F-03 | Trend-Sparklines in den Listenzellen | Mittel · Hoch | Offen |
-| F-04 | Objekt-Sprung per Tastatur, überall | Mittel · Hoch | Offen |
-| F-05 | Lauf-Historie als Streifen pro CronJob | Klein · Mittel | Offen |
+| F-03 | Trend-Sparklines in den Listenzellen | Mittel · Hoch | Zurückgestellt |
+| F-04 | Objekt-Sprung per Tastatur, überall | Mittel · Hoch | Umgesetzt · v3.0.0 |
+| F-05 | Lauf-Historie als Streifen pro CronJob | Klein · Mittel | Umgesetzt · v3.0.0 |
 | F-06 | Gespeicherte Ansichten | Mittel · Mittel | Offen |
-| F-07 | Dependencies auf Namespace- und Workload-Ebene | Groß · Mittel | Offen |
+| F-07 | Dependencies auf Namespace- und Workload-Ebene | Groß · Mittel | Zurückgestellt |
 | F-08 | Zwei Objekte nebeneinander vergleichen | Groß · Mittel | Offen |
-| F-09 | Zeitvergleich für die ganze Seite | Klein · Mittel | Offen |
+| F-09 | Zeitvergleich für die ganze Seite | Klein · Mittel | Gestrichen |
 | F-10 | Kapazitäts-Prognose im Resource Simulator | Mittel · Mittel | Offen |
-| F-11 | Tabellen exportieren | Klein · Niedrig | Offen |
+| F-11 | Tabellen exportieren | Klein · Niedrig | Umgesetzt · v3.0.0 |
 | F-12 | Erstkontakt absichern | Klein · Niedrig | Offen |
+
+## Phasen
+
+Aus dem Original-Artifact (dort als Umsetzungsplan in vier Phasen, hier nur die Zuordnung):
+
+| Phase | Titel | Inhalt | Stand |
+|---|---|---|---|
+| 1 | Politur ohne Risiko | UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-15 | v2.3.0 |
+| 2 | Tabellen, die auch mit echten Clustern funktionieren | UX-01, UX-02, UX-03, UX-04, UX-14, UX-16 | v2.3.0 |
+| 3 | Lücken schließen | UX-11, UX-12, UX-13, UX-17, UX-18, UX-19 | v2.4.0 |
+| 4 | Neue Fähigkeiten | F-02, F-01, F-03, F-04, F-05 + F-09 + F-11 (ein Paket), F-07 | v3.0.0: F-04, F-05, F-11 · offen: F-02 |
+
+Ohne Phase: F-06, F-08, F-10, F-12.
+
+Phase 4, Reihenfolge nach Nutzerentscheidung vom 2026-09-22: zuerst das Paket F-05/F-11 (F-09 gestrichen), dann F-04. F-03 und F-07 zurückgestellt. F-02 wartet, bis der Nutzer die Queries gegen den echten Thanos prüfen kann (im Urlaub, kein Zugriff auf Prod-Daten).
 
 ## Was noch offen ist
 
 - **Aus den Befunden:** die offenen Reste von UX-09 (Tooltips auf Grafanas Link-Zellen, „View detail"-Umbruch) und UX-15 (Leerzustand für Tabellen per Overlay statt `setNoValue`); bei UX-19 die zwei redundanten Quota-Tabellen im Simulator.
-- **Feature-Ideen F-02 bis F-12** — keine davon angefangen, keine entschieden.
+- **Feature-Ideen** F-02, F-06, F-08, F-10, F-12 — nicht angefangen (F-03, F-07 zurückgestellt). F-02 ist als nächstes vorgesehen, sobald Prod-Daten zum Testen da sind.
 
 ## Befunde
 
@@ -260,17 +275,23 @@ Die Alerts-Tabelle zeigt Cluster, Severity, Name, Node, Namespace, Pod, Workload
 
 „95 %“ ist etwas anderes, wenn es seit zwei Stunden steigt, als wenn es seit zwei Tagen konstant ist. Die kombinierten Meter-Zellen (`requestUsageCell`) haben bereits Platz und Struktur dafür. War schon einmal vorgeschlagen und nie gebaut.
 
+> **Entscheidung:** Nutzer (2026-09-22): „F-03 lassen wir auch erstmal weg." Gründe: Query-Last (eine Range-Query pro Tabelle zusätzlich zu den Instant-Queries) und die Sorge, dass die Listen überladen wirken. Gedacht war es nur für die Spalten CPU Usage und Mem Usage auf Clusters/Nodes/Namespaces/Workloads.
+
 ### F-04 Objekt-Sprung per Tastatur, überall
 
 **Aufwand · Wirkung:** Mittel · Hoch · **Status:** Offen
 
 Die Search-Seite kann bereits alles Nötige. Als Overlay auf jeder Seite (eigener Shortcut, nicht Grafanas ctrl+k) wird daraus der schnellste Weg zwischen zwei Objekten — heute führt jeder Wechsel über Navigation, Liste, Filter, Klick.
 
+> **Umsetzung:** `/` auf jeder Seite der App (außer auf der Search-Seite selbst und nicht, wenn der Fokus in einem Eingabefeld liegt) öffnet ein Overlay mit Suchfeld (`src/scenes/objectJump.tsx`, einmal in `App.tsx` eingehängt). Nutzervorgabe: **Die Search-Seite bleibt unverändert.** Das Overlay nutzt ihre Bausteine (Kategorien, Queries, Cluster-Kontext, Highlighting), `searchPage.tsx` exportiert dafür nur einige Helfer. Der erste Treffer ist vorausgewählt, Enter öffnet den Drilldown und übernimmt den Zeitraum. Ohne Eingabe erscheint „Recently viewed", ohne das Objekt, auf dem man gerade steht. Die Queries laufen gegen die Thanos-Datasource der aktuellen Seite (aus der URL, sonst der Default). Technik: pro Suchbegriff werden die sechs Query-Pipelines neu gebaut und von Hand aktiviert, weil die Komponente außerhalb des Szenenbaums sitzt. Zusätzlich ein Lupen-Button in jeder Toolbar neben „Link kopieren“ (außer auf der Search-Seite), mit Tooltip „Jump to an object (/)“. Bekannter Nebeneffekt, vom Nutzer akzeptiert: Auf der Workloads-Liste mit vier Filtern werden die „All“-Chips bei 1600 px von „A“ auf leer gestaucht (das Stauchen selbst ist ein älteres Problem von Grafana 13.2). Bei 1920 px passt alles. Eine Mindestbreite für die Chips wäre ein eigener Fix.
+
 ### F-05 Lauf-Historie als Streifen pro CronJob
 
-**Aufwand · Wirkung:** Klein · Mittel · **Status:** Offen
+**Aufwand · Wirkung:** Klein · Mittel · **Status:** Umgesetzt · v3.0.0
 
 Ein kompakter Balkenstreifen der letzten N Läufe (grün/rot/gelb) plus Erfolgsquote direkt in der Cronjobs-Tabelle. Die Daten liegen in der „Runs“-Query des Drilldowns bereits vor; heute muss man pro CronJob einmal hineinklicken.
+
+> **Umsetzung:** Spalte LAST RUNS in der Cronjobs-Tabelle (All Jobs): die neuesten 10 Jobs pro CronJob als Balken plus Erfolgsquote über die abgeschlossenen. Jeder Balken verlinkt auf seinen Job Drilldown, die Spalte sortiert nach der Quote. Die Statusregel und die Farben sind dieselben wie in der Runs-Tabelle. **Nicht** die Runs-Query des Drilldowns, sondern vier eigene `run_*`-Queries (`cronjobRunHistoryQueries`). Der Grund: Die Runs-Query nimmt nur Jobs, die im Zeitraum *gestartet* sind. kube-state-metrics behält aber nur die Jobs innerhalb des History-Limits (3 + 1), und so hätte ein stündlicher CronJob in der 1h-Ansicht einen einzigen Balken. `foldRunHistoryFrames` (`cronjobRunHistory.tsx`) faltet die Job-Zeilen vor dem `merge` zu einem Frame pro CronJob.
 
 ### F-06 Gespeicherte Ansichten
 
@@ -284,6 +305,8 @@ Filterkombination plus Zeitraum unter einem Namen sichern und in der Navigation 
 
 Der Node-Graph im Node-Drilldown ist das Alleinstellungsmerkmal dieser App gegenüber jedem Standard-Dashboard. Dieselbe Darstellung eine Ebene höher (Workload → Pod → Node → ESXi) beantwortet die Frage „wen reißt dieser Host mit?“, die sonst niemand beantwortet.
 
+> **Entscheidung:** Nutzer (2026-09-22): „F-07 lassen wir hier erstmal komplett weg." Nicht abgelehnt, nur aus Phase 4 herausgenommen. Die vSphere-Ebene wäre ohnehin nur gegen echte Daten prüfbar.
+
 ### F-08 Zwei Objekte nebeneinander vergleichen
 
 **Aufwand · Wirkung:** Groß · Mittel · **Status:** Offen
@@ -292,9 +315,11 @@ Zwei Nodes oder zwei Workloads in einer geteilten Ansicht. „Warum ist `app` au
 
 ### F-09 Zeitvergleich für die ganze Seite
 
-**Aufwand · Wirkung:** Klein · Mittel · **Status:** Offen
+**Aufwand · Wirkung:** Klein · Mittel · **Status:** Gestrichen
 
 Das Compare-Badge sitzt heute an jedem einzelnen Panel. Ein Schalter in der Seitenkopfzeile, der alle Panels gleichzeitig gegen „gestern“ oder „letzte Woche“ legt, macht aus einer Einzelfunktion einen Arbeitsmodus.
+
+> **Entscheidung:** Nutzer (2026-09-22): „Zeitvergleich für die ganze Seite lassen wir weg."
 
 ### F-10 Kapazitäts-Prognose im Resource Simulator
 
@@ -304,9 +329,11 @@ Die Seite rechnet heute Szenarien gegen den Ist-Stand. Eine Fortschreibung des b
 
 ### F-11 Tabellen exportieren
 
-**Aufwand · Wirkung:** Klein · Niedrig · **Status:** Offen
+**Aufwand · Wirkung:** Klein · Niedrig · **Status:** Umgesetzt · v3.0.0
 
 CSV-Download pro Tabelle. Kommt erfahrungsgemäß immer dann auf, wenn jemand eine Auswertung in ein Ticket oder eine Präsentation heben muss.
+
+> **Umsetzung:** „Export CSV" im Panel-Menü jeder Tabelle. Das Menü kommt von `attachExploreMenus`, der Export selbst liegt in `tableExport.ts`. Exportiert wird, was die Tabelle zeigt: umbenannte Spalten, Value-Mappings, Units. Abweichungen vom Bildschirm: absolute Zeitstempel statt „vor 5 Minuten", alle Zeilen statt nur der aktuellen Seite, die Button-Spalte (`action`) fehlt, und Pods sowie PODS/COMPLETION erscheinen als „x / y". Trennzeichen `;` plus UTF-8-BOM, damit ein deutsches Excel die Datei direkt in Spalten öffnet. Nicht erfasst: Tabellen, die erst zur Laufzeit entstehen (`SceneByFrameRepeater`), weil `attachExploreMenus` nur den statischen Szenenbaum durchläuft. Die Nutzersortierung per Spaltenklick wird nicht übernommen.
 
 ### F-12 Erstkontakt absichern
 
