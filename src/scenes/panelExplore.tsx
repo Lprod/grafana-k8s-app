@@ -1,5 +1,6 @@
 import { SceneObject, VizPanel, VizPanelMenu, getExploreURL, sceneGraph } from '@grafana/scenes';
 import { locationService } from '@grafana/runtime';
+import { exportPanelCsv } from './tableExport';
 
 function isVizPanel(obj: SceneObject): obj is VizPanel {
   return obj instanceof VizPanel;
@@ -32,6 +33,9 @@ function addExploreMenuItem(panel: VizPanel) {
             }
           },
         },
+        ...(panel.state.pluginId === 'table'
+          ? [{ text: 'Export CSV', iconClassName: 'download-alt' as const, onClick: () => exportPanelCsv(panel) }]
+          : []),
       ],
     }),
   });
@@ -39,9 +43,10 @@ function addExploreMenuItem(panel: VizPanel) {
 
 // `$behaviors` entry - attach to every EmbeddedScene's own `body` so its
 // panels get a "..." menu (previously absent entirely - none of this app's
-// panels had one) with a single "Explore" item, mirroring Grafana's own
+// panels had one) with an "Explore" item, mirroring Grafana's own
 // compass icon, that opens Explore prefilled with that exact panel's
-// queries. `sceneGraph.findAllObjects` walks the *static* scene tree set at
+// queries - plus "Export CSV" on table panels (tableExport.ts).
+// `sceneGraph.findAllObjects` walks the *static* scene tree set at
 // construction time (SceneFlexLayout/SceneFlexItem/VizPanel are all plain
 // state, not lazily created), so running this once on the EmbeddedScene's
 // own activation reliably finds every VizPanel already declared in its
