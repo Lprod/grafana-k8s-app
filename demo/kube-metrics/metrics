@@ -746,6 +746,62 @@ kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",j
 kube_job_spec_completions{cluster="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29791256"} 1
 kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791296"} 1
 
+# Cronjobs table "LAST RUNS" strip (demo data, F-05) - a few more past runs
+# of the same CronJobs so the strip has more than two or three bars. No
+# k8s_cluster_name label, so Cluster Health (which reads job rows by that
+# label) is unaffected. Same fixed-timestamp staleness as the block above.
+# HELP kube_job_owner Information about the Job's owner (demo data).
+# TYPE kube_job_owner gauge
+kube_job_owner{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791081",owner_kind="CronJob",owner_name="infra-check"} 1
+kube_job_owner{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791141",owner_kind="CronJob",owner_name="infra-check"} 1
+kube_job_owner{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791201",owner_kind="CronJob",owner_name="infra-check"} 1
+kube_job_owner{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791266",owner_kind="CronJob",owner_name="user-check"} 1
+kube_job_owner{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791281",owner_kind="CronJob",owner_name="user-check"} 1
+
+# HELP kube_job_status_start_time StartTime represents time when the job was acknowledged by the Job Manager (demo data).
+# TYPE kube_job_status_start_time gauge
+kube_job_status_start_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791081"} 1787464865
+kube_job_status_start_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791141"} 1787468465
+kube_job_status_start_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791201"} 1787472065
+kube_job_status_start_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791266"} 1787475965
+kube_job_status_start_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791281"} 1787476865
+
+# HELP kube_job_status_completion_time CompletionTime represents time when the job was completed (demo data).
+# TYPE kube_job_status_completion_time gauge
+kube_job_status_completion_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791081"} 1787464925
+kube_job_status_completion_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791141"} 1787468525
+kube_job_status_completion_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791201"} 1787472125
+kube_job_status_completion_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791266"} 1787476025
+kube_job_status_completion_time{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791281"} 1787476925
+
+# HELP kube_job_status_succeeded The number of pods which reached Phase Succeeded (demo data).
+# TYPE kube_job_status_succeeded gauge
+kube_job_status_succeeded{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791081"} 1
+kube_job_status_succeeded{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791201"} 1
+kube_job_status_succeeded{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791266"} 1
+kube_job_status_succeeded{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791281"} 1
+# The pre-existing *-29160480 runs from the Cluster Health block had no
+# final status, so they read as "running" in the strip; the non-failed ones
+# are marked succeeded here (Cluster Health only reads their failed/active rows).
+kube_job_status_succeeded{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29160480"} 1
+kube_job_status_succeeded{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29160480"} 1
+kube_job_status_succeeded{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="user-check-29160480"} 1
+
+# HELP kube_job_status_failed The number of pods which reached Phase Failed (demo data).
+# TYPE kube_job_status_failed gauge
+kube_job_status_failed{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791141",reason="BackoffLimitExceeded"} 1
+
+# HELP kube_job_spec_completions The number of pods which are still required to finish (demo data).
+# TYPE kube_job_spec_completions gauge
+kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791081"} 1
+kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791141"} 1
+kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="infra-check-29791201"} 1
+kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791266"} 1
+kube_job_spec_completions{cluster="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29791281"} 1
+kube_job_spec_completions{cluster="demo-cluster-aws",k8s_cluster_name="demo-cluster-aws",namespace="cluster-tests",job_name="user-check-29160480"} 1
+kube_job_spec_completions{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="infra-check-29160480"} 1
+kube_job_spec_completions{cluster="demo-cluster-gce",k8s_cluster_name="demo-cluster-gce",namespace="cluster-tests",job_name="user-check-29160480"} 1
+
 # HELP kube_namespace_status_phase The phase a namespace is currently in (demo data).
 # TYPE kube_namespace_status_phase gauge
 kube_namespace_status_phase{cluster="demo-cluster-aws",namespace="default",phase="Active"} 1

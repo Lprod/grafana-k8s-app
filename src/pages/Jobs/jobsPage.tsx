@@ -26,7 +26,15 @@ import {
   VariableValueControl,
 } from '@grafana/scenes';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
-import { CronjobTableQueryKey, cronjobTableQueries, jobTableQueries, substituteJobsClusterNamespace } from '../../queries/jobsQueries';
+import {
+  CronjobRunHistoryQueryKey,
+  CronjobTableQueryKey,
+  cronjobRunHistoryQueries,
+  cronjobTableQueries,
+  jobTableQueries,
+  substituteJobsClusterNamespace,
+} from '../../queries/jobsQueries';
+import { RUN_HISTORY_FIELD, RUN_RATE_FIELD, foldRunHistory, runHistoryCell } from '../../scenes/cronjobRunHistory';
 import {
   buildCronjobCreatedQuery,
   buildCronjobInfoQuery,
@@ -159,12 +167,20 @@ function getCronjobsScene(clusterRegex: string, namespaceRegex: string) {
 
   const tableRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: (Object.keys(cronjobTableQueries) as CronjobTableQueryKey[]).map((key) => ({
-      refId: key,
-      expr: substitute(cronjobTableQueries[key]),
-      format: 'table',
-      instant: true,
-    })),
+    queries: [
+      ...(Object.keys(cronjobTableQueries) as CronjobTableQueryKey[]).map((key) => ({
+        refId: key,
+        expr: substitute(cronjobTableQueries[key]),
+        format: 'table',
+        instant: true,
+      })),
+      ...(Object.keys(cronjobRunHistoryQueries) as CronjobRunHistoryQueryKey[]).map((key) => ({
+        refId: key,
+        expr: substitute(cronjobRunHistoryQueries[key]),
+        format: 'table',
+        instant: true,
+      })),
+    ],
   });
 
   // "exists" is the only query that also groups by `schedule` - the other
@@ -173,29 +189,35 @@ function getCronjobsScene(clusterRegex: string, namespaceRegex: string) {
   // `merge` vs `joinByField` for a composite, non-single-field identity).
   // "Value #exists" itself carries no meaningful value (kube_cronjob_info is
   // just a presence signal) - dropped below along with join_name.
+  // The run_* queries (F-05, LAST RUNS) are folded into one row per CronJob
+  // before the merge - see cronjobRunHistory.tsx.
   const tableData = new SceneDataTransformer({
     $data: tableRunner,
     transformations: [
+      foldRunHistory(),
       { id: 'merge', options: {} },
+      attachFieldValues(RUN_RATE_FIELD, RUN_HISTORY_FIELD, 'runHistory'),
       {
         id: 'organize',
         options: {
-          excludeByName: { Time: true, join_name: true, 'Value #exists': true },
+          excludeByName: { Time: true, join_name: true, 'Value #exists': true, [RUN_HISTORY_FIELD]: true },
           indexByName: {
             cronjob: 0,
             cluster: 1,
             namespace: 2,
             schedule: 3,
-            'Value #last_success': 4,
-            'Value #last_schedule': 5,
-            'Value #next_schedule': 6,
-            'Value #status': 7,
+            [RUN_RATE_FIELD]: 4,
+            'Value #last_success': 5,
+            'Value #last_schedule': 6,
+            'Value #next_schedule': 7,
+            'Value #status': 8,
           },
           renameByName: {
             cronjob: 'CRONJOB (CONTROLLER)',
             cluster: 'CLUSTER',
             namespace: 'NAMESPACE',
             schedule: 'SCHEDULE',
+            [RUN_RATE_FIELD]: 'LAST RUNS',
             'Value #last_success': 'LAST SUCCEEDED',
             'Value #last_schedule': 'LAST SCHEDULE',
             'Value #next_schedule': 'NEXT SCHEDULE',
@@ -228,6 +250,10 @@ function getCronjobsScene(clusterRegex: string, namespaceRegex: string) {
         .overrideLinks([{ title: 'View namespace', url: `${NAMESPACES_URL}/\${__data.fields.cluster}/\${__value.text}\${__url.params}` }])
         .matchFieldsWithName('SCHEDULE')
         .overrideCustomFieldConfig('align', 'left')
+        .matchFieldsWithName('LAST RUNS')
+        .overrideUnit('percentunit')
+        .overrideCustomFieldConfig('align', 'left')
+        .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: runHistoryCell(JOBS_URL) } as any)
         .matchFieldsWithName('LAST SUCCEEDED')
         .overrideUnit('dateTimeFromNow')
         .matchFieldsWithName('LAST SCHEDULE')
@@ -242,7 +268,13 @@ function getCronjobsScene(clusterRegex: string, namespaceRegex: string) {
 
   return new EmbeddedScene({
     $behaviors: [attachExploreMenus],
-    body: new SceneFlexLayout({ direction: 'column', children: [new SceneFlexItem({ body: table })] }),
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexItem({ ySizing: 'content', body: new SceneReactObject({ reactNode: <RunsStatusLegend label="Last runs:" /> }) }),
+        new SceneFlexItem({ body: table }),
+      ],
+    }),
   });
 }
 
@@ -504,10 +536,11 @@ function runsPodsCompletionCell() {
   };
 }
 
-// Explains the Runs/Previous-runs tables' PODS/COMPLETION coloring - same
+// Explains the Runs/Previous-runs tables' PODS/COMPLETION coloring, and the
+// Cronjobs table's LAST RUNS bars (same three states, same colors) - same
 // right-aligned layout as JobStatusLegend above, with "running" as yellow
 // instead of orange per these tables' own explicit color choice.
-function RunsStatusLegend() {
+function RunsStatusLegend({ label = 'Job status:' }: { label?: string }) {
   const theme = useTheme2();
   const items: Array<{ label: string; colorName: string }> = [
     { label: 'complete', colorName: 'green' },
@@ -516,7 +549,7 @@ function RunsStatusLegend() {
   ];
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, alignItems: 'center', padding: '4px 0' }}>
-      <span style={{ opacity: 0.7 }}>Job status:</span>
+      <span style={{ opacity: 0.7 }}>{label}</span>
       {items.map((item) => (
         <span key={item.label} style={{ color: theme.visualization.getColorByName(item.colorName) }}>
           {item.label}

@@ -22,6 +22,31 @@ export const cronjobTableQueries = {
 
 export type CronjobTableQueryKey = keyof typeof cronjobTableQueries;
 
+// "LAST RUNS" column of the Cronjobs table (F-05) - one row per Job a
+// CronJob owns, folded into a per-CronJob strip client-side
+// (cronjobRunHistory.tsx). Not part of the given reference queries.
+// Deliberately NOT filtered to "started within $__range" like the CronJob
+// Drilldown's own Runs table: kube-state-metrics only keeps the Jobs a
+// CronJob's successful/failedJobsHistoryLimit retains (3 + 1 by default), so
+// an hourly CronJob would show a single bar in the default 1h view. Every Job
+// seen at any point in the range is taken instead, and the strip keeps the
+// newest RUN_HISTORY_LIMIT of them. The `and on (...) kube_job_owner` keeps
+// the three status queries to CronJob-owned Jobs only.
+const cronjobOwnedJobs = `max by (cluster, namespace, job_name) (last_over_time(kube_job_owner{owner_kind="CronJob", owner_name!="", cluster=~".+", namespace=~".+"}[$__range]))`;
+
+export const cronjobRunHistoryQueries = {
+  run_start: `max by (cluster, namespace, owner_name, job_name) (
+      max by (cluster, namespace, owner_name, job_name) (last_over_time(kube_job_owner{owner_kind="CronJob", owner_name!="", cluster=~".+", namespace=~".+"}[$__range]))
+      * on (cluster, namespace, job_name) group_left()
+      max by (cluster, namespace, job_name) (last_over_time(kube_job_status_start_time{cluster=~".+", namespace=~".+"}[$__range]))
+    ) * 1000`,
+  run_succeeded: `max by (cluster, namespace, job_name) (last_over_time(kube_job_status_succeeded{cluster=~".+", namespace=~".+"}[$__range])) and on (cluster, namespace, job_name) ${cronjobOwnedJobs}`,
+  run_failed: `max by (cluster, namespace, job_name) (last_over_time(kube_job_status_failed{cluster=~".+", namespace=~".+"}[$__range])) and on (cluster, namespace, job_name) ${cronjobOwnedJobs}`,
+  run_completions: `max by (cluster, namespace, job_name) (last_over_time(kube_job_spec_completions{cluster=~".+", namespace=~".+"}[$__range])) and on (cluster, namespace, job_name) ${cronjobOwnedJobs}`,
+};
+
+export type CronjobRunHistoryQueryKey = keyof typeof cronjobRunHistoryQueries;
+
 export const jobTableQueries = {
   start: `max by (cluster, namespace, job_name, join_name) (last_over_time((label_join(kube_job_status_start_time{cluster=~".+", namespace=~".+"}, "join_name", "-", "cluster", "namespace", "job_name") > (time() - $__range))[$__range:]) * 1000)`,
   end_time: `last_over_time(((
