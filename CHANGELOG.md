@@ -1,5 +1,50 @@
 # Changelog
 
+## 2.4.0
+
+Third phase of the UX review, and the dev environment moved to Grafana 13.2.2.
+
+- **Search tells same-named objects apart.** Suggestions now show the cluster next
+  to the immediate parent ("default · demo-cluster-gce"), so the same Deployment
+  name in two clusters no longer renders as two identical rows with no way to know
+  which one a click would open.
+- **Search is keyboard-driven and shows what matched.** Arrow keys move through the
+  suggestions across all categories, Enter opens the highlighted one (and, with
+  nothing highlighted, still shows all results as tables), Esc closes; a hint line
+  at the bottom of the dropdown says so. The matched part of each name is
+  highlighted - case-sensitively, because the queries match case-sensitively.
+- **"Recently viewed" on the empty Search page.** Every drilldown a user lands on -
+  however they got there - is remembered in their own browser and listed with its
+  kind, namespace and cluster, most recent first (up to 8). New
+  `src/scenes/recentObjects.ts`, with unit tests for the URL parsing.
+- **Logs and Events tabs on the Node, CronJob and Job Drilldowns** - the last six
+  "coming soon" tabs in the app. Node scopes by `k8s.node.name` (events: also the
+  events about the Node object itself); CronJob and Job match on the
+  `orchestrator.resource.name` prefix the Workload Drilldown already uses, which
+  catches the CronJob's Jobs and all of their pods. CronJob and Job Drilldowns gain
+  the logs datasource picker these tabs need. Shared `getRawLogsTabScene` in
+  `logPanels.tsx` instead of a fourth copy of the same tab.
+- **The Resource Simulator opens on a namespace it can model.** Its namespace picker
+  is now ordered by Deployment + StatefulSet count, busiest first, instead of
+  alphabetically - which had opened it on an empty namespace and its "No workload
+  rows" state. Empty namespaces stay selectable, at the end.
+- **Fixed:** a long quota-card label ("PersistentVolumeClaims") pushed its status
+  badge out of the card and over the next card's title. The label now wraps inside
+  its own card.
+- **Node banner no longer contradicts itself.** "Node is healthy" in green next to
+  "1 firing alert" in orange now reads "Node conditions OK" - which is what the
+  banner actually checks (`kube_node_status_condition`); alerts stay on the button.
+
+### Development
+
+- The dev server (`npm run server`) now runs **Grafana 13.2.2**, pinned in the root
+  `docker-compose.yaml` (the documented override; `.config/` is left as scaffolded).
+  13.2 runs React 19 and shares that instance with every plugin; this one checks
+  clean with `@grafana/react-detect` and was clicked through on 13.2.2 without React
+  warnings. `@grafana/*` packages are still 13.1.0.
+- Demo Elasticsearch data now carries `k8s.node.name` and events about the Node
+  objects themselves, so the new Node Logs/Events tabs have something to show.
+
 ## 2.3.0
 
 Two phases of a UX review carried out against v2.0.6: a polish pass over labelling,
