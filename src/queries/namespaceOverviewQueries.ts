@@ -411,3 +411,24 @@ export function buildPodLogsQuery(cluster: string, namespace: string, pod: strin
 export function buildPodEventsQuery(namespace: string, pod: string, onlyWarnError: boolean): string {
   return `logmgmt.kind:openshift AND logmgmt.category:event AND orchestrator.namespace:(${escapeLucene(namespace)}) AND orchestrator.resource.name:(${escapeLucene(pod)})${buildLevelRestrictionClause('event.type', namespaceEventTypeDefs, onlyWarnError)}`;
 }
+
+// Raw log-line queries for the Node Drilldown's own Logs/Events tabs - same
+// shape as buildPodLogsQuery/buildPodEventsQuery above, scoped by
+// k8s.node.name instead of a pod or workload name. Log collectors stamp
+// every container log line with the node it was read on, so this is every
+// log line from every pod scheduled on this node.
+export function buildNodeLogsQuery(cluster: string, node: string, onlyWarnError: boolean): string {
+  return `logmgmt.kind:openshift AND NOT logmgmt.category:event AND k8s.cluster.name:(${escapeLucene(cluster)}) AND k8s.node.name:(${escapeLucene(node)})${buildLevelRestrictionClause('log.level', namespaceLogLevelDefs, onlyWarnError)}`;
+}
+
+// Events: no cluster filter, same as every other event query in this file.
+// Node names are unique across clusters in practice (the Nodes list page
+// already relies on that for its join). Two ways an event belongs to a node:
+// it carries the node it happened on (k8s.node.name - pod events), or it is
+// *about* the Node object itself (NodeReady, NodeNotReady, Rebooted, ...),
+// whose orchestrator.resource.name is the node name - the same field the
+// Pod/Workload event queries match a pod or workload on.
+export function buildNodeEventsQuery(node: string, onlyWarnError: boolean): string {
+  const n = escapeLucene(node);
+  return `logmgmt.kind:openshift AND logmgmt.category:event AND (k8s.node.name:(${n}) OR orchestrator.resource.name:(${n}))${buildLevelRestrictionClause('event.type', namespaceEventTypeDefs, onlyWarnError)}`;
+}

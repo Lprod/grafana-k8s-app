@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { SceneQueryRunner, PanelBuilders } from '@grafana/scenes';
+import { EmbeddedScene, PanelBuilders, SceneFlexItem, SceneFlexLayout, SceneQueryRunner, SceneReactObject } from '@grafana/scenes';
+import { LOGS_DATASOURCE_VARIABLE_NAME } from '../variables/datasourceVariables';
+import { attachExploreMenus } from './panelExplore';
 import { LogsSortOrder } from '@grafana/schema';
 import { InlineSwitch } from '@grafana/ui';
 
@@ -33,4 +35,31 @@ export function buildLogPanel(title: string, runner: SceneQueryRunner) {
     .setOption('showTime', true)
     .setOption('wrapLogMessage', true)
     .build();
+}
+
+// A whole dedicated Logs or Events tab: one raw-log-line Log panel against
+// the page's logs datasource variable, with the "Only warn/error" toggle
+// above it. The Namespace/Workload/Pod Drilldowns each still build this same
+// shape by hand (getPodLogsScene etc.); the Node/CronJob/Job Drilldowns'
+// tabs - the last ones that were "coming soon" placeholders - use this
+// instead of copying it a fourth, fifth and sixth time.
+export function getRawLogsTabScene(title: 'Logs' | 'Events', buildQuery: (onlyWarnError: boolean) => string) {
+  const runner = new SceneQueryRunner({
+    datasource: { uid: `\${${LOGS_DATASOURCE_VARIABLE_NAME}}` },
+    queries: [{ refId: 'logs', query: buildQuery(false), metrics: [{ id: '1', type: 'logs' }], bucketAggs: [] }] as any,
+  });
+
+  return new EmbeddedScene({
+    $behaviors: [attachExploreMenus],
+    body: new SceneFlexLayout({
+      direction: 'column',
+      children: [
+        new SceneFlexItem({
+          ySizing: 'content',
+          body: new SceneReactObject({ reactNode: <LogsTabLevelToggle runner={runner} buildQuery={buildQuery} /> }),
+        }),
+        new SceneFlexItem({ body: buildLogPanel(title, runner) }),
+      ],
+    }),
+  });
 }

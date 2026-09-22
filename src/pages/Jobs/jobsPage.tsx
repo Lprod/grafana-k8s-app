@@ -2,7 +2,7 @@ import React from 'react';
 import { map } from 'rxjs/operators';
 import { FieldColorModeId, GrafanaTheme2, MappingType, SpecialValueMatch, ValueMapping, PanelData, DataFrame } from '@grafana/data';
 import { LegendDisplayMode, TableCellDisplayMode } from '@grafana/schema';
-import { Alert, Badge, CustomCellRendererProps, useTheme2 } from '@grafana/ui';
+import { Badge, CustomCellRendererProps, useTheme2 } from '@grafana/ui';
 import {
   CustomTransformOperator,
   EmbeddedScene,
@@ -71,9 +71,11 @@ import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import {
   CLUSTER_VARIABLE_NAME,
   NAMESPACE_VARIABLE_NAME,
+  LOGS_DATASOURCE_VARIABLE_NAME,
   THANOS_VARIABLE_NAME,
   createClusterFilterVariable,
   createNamespaceFilterVariable,
+  createLogsDatasourceVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
@@ -82,6 +84,8 @@ import { getCronjobMemoryScene } from './cronjobMemoryScene';
 import { getJobCpuScene } from './jobCpuScene';
 import { getJobMemoryScene } from './jobMemoryScene';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { getRawLogsTabScene } from '../../scenes/logPanels';
+import { buildWorkloadEventsQuery, buildWorkloadLogsQuery } from '../../queries/namespaceOverviewQueries';
 
 const JOBS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Jobs}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -1299,29 +1303,6 @@ function getJobOverviewScene(
   });
 }
 
-// Same shape as every other drilldown's own placeholder scaffold (e.g.
-// getNodePlaceholderScene in nodesPage.tsx) for the tabs not built out yet.
-function getJobsDrilldownPlaceholderScene(title: string) {
-  return new EmbeddedScene({
-    $behaviors: [attachExploreMenus],
-    body: new SceneFlexLayout({
-      direction: 'column',
-      children: [
-        new SceneFlexItem({
-          ySizing: 'content',
-          body: new SceneReactObject({
-            reactNode: (
-              <Alert severity="info" title={`${title} - coming soon`}>
-                This tab is scaffolded but not built out yet.
-              </Alert>
-            ),
-          }),
-        }),
-      ],
-    }),
-  });
-}
-
 interface CronjobTabDef {
   slug: string;
   title: string;
@@ -1346,8 +1327,21 @@ function getCronjobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; nam
     },
     { slug: 'cpu', title: 'CPU', getScene: () => getCronjobCpuScene(cluster, namespace, clusterRegex, namespaceRegex) },
     { slug: 'memory', title: 'Memory', getScene: () => getCronjobMemoryScene(cluster, namespace, clusterRegex, namespaceRegex) },
-    { slug: 'logs', title: 'Logs', getScene: () => getJobsDrilldownPlaceholderScene('Logs') },
-    { slug: 'events', title: 'Events', getScene: () => getJobsDrilldownPlaceholderScene('Events') },
+    // Same orchestrator.resource.name *prefix* match the Workload Drilldown
+    // uses (buildWorkloadLogsQuery/buildWorkloadEventsQuery): "<cronjob>*" catches
+    // the CronJob object's own events, every Job it spawned (<cronjob>-<n>) and
+    // every one of their pods (<cronjob>-<n>-<suffix>). Like the Workload Drilldown's, it would also catch a sibling whose
+    // name merely starts with this one's.
+    {
+      slug: 'logs',
+      title: 'Logs',
+      getScene: () => getRawLogsTabScene('Logs', (onlyWarnError) => buildWorkloadLogsQuery(cluster, namespace, cronjob, onlyWarnError)),
+    },
+    {
+      slug: 'events',
+      title: 'Events',
+      getScene: () => getRawLogsTabScene('Events', (onlyWarnError) => buildWorkloadEventsQuery(namespace, cronjob, onlyWarnError)),
+    },
   ];
 
   const tabs = tabDefs.map(
@@ -1369,15 +1363,16 @@ function getCronjobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; nam
     getParentPage: () => parent,
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
-    $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable()] }),
+    $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
     controls: [
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
+      new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
     ],
-    preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
+    preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
 }
 
@@ -1397,8 +1392,6 @@ function getJobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; namespa
   const jobRegex = escapeRegex(job);
   const baseUrl = `${JOBS_URL}/job/${encodeURIComponent(cluster)}/${encodeURIComponent(namespace)}/${encodeURIComponent(job)}`;
 
-  // CPU/Memory/Logs/Events are scaffolded but not built out yet - same
-  // incremental-tab-by-tab build pattern as the CronJob Drilldown.
   const tabDefs: JobTabDef[] = [
     {
       slug: 'overview',
@@ -1407,8 +1400,20 @@ function getJobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; namespa
     },
     { slug: 'cpu', title: 'CPU', getScene: () => getJobCpuScene(cluster, namespace, job, clusterRegex, namespaceRegex) },
     { slug: 'memory', title: 'Memory', getScene: () => getJobMemoryScene(cluster, namespace, job, clusterRegex, namespaceRegex) },
-    { slug: 'logs', title: 'Logs', getScene: () => getJobsDrilldownPlaceholderScene('Logs') },
-    { slug: 'events', title: 'Events', getScene: () => getJobsDrilldownPlaceholderScene('Events') },
+    // Same orchestrator.resource.name *prefix* match the Workload Drilldown
+    // uses (buildWorkloadLogsQuery/buildWorkloadEventsQuery): "<job>*" catches
+    // the Job object's own events and every pod it ran (<job>-<suffix>). Like the Workload Drilldown's, it would also catch a sibling whose
+    // name merely starts with this one's.
+    {
+      slug: 'logs',
+      title: 'Logs',
+      getScene: () => getRawLogsTabScene('Logs', (onlyWarnError) => buildWorkloadLogsQuery(cluster, namespace, job, onlyWarnError)),
+    },
+    {
+      slug: 'events',
+      title: 'Events',
+      getScene: () => getRawLogsTabScene('Events', (onlyWarnError) => buildWorkloadEventsQuery(namespace, job, onlyWarnError)),
+    },
   ];
 
   const tabs = tabDefs.map(
@@ -1430,15 +1435,16 @@ function getJobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; namespa
     getParentPage: () => parent,
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
-    $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable()] }),
+    $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
     controls: [
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
+      new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
     ],
-    preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
+    preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
 }
 

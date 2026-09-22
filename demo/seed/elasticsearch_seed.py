@@ -54,9 +54,41 @@ event_reasons = [
 # kube_pod_owner:relabel in demo/kube-metrics/metrics) so a workload's logs/
 # events line up with its own metrics.
 workload_pod_names = {
-    "demo-cluster-aws": ["app-aws", "node-agent-0-aws", "cache-0-aws", "db-migrate-1-aws", "debug-shell-aws"],
+    # infra-check-29791301-pod is the CronJob/Job Drilldowns' own demo pod
+    # (the one currently-"running" Job run in demo/kube-metrics/metrics), so
+    # their Logs/Events tabs - which match on the cronjob/job name as an
+    # orchestrator.resource.name prefix, same as the Workload Drilldown -
+    # have something to show.
+    "demo-cluster-aws": ["app-aws", "node-agent-0-aws", "cache-0-aws", "db-migrate-1-aws", "debug-shell-aws", "infra-check-29791301-pod"],
     "demo-cluster-gce": ["app-gce", "node-agent-0-gce", "cache-0-gce", "db-migrate-1-gce", "debug-shell-gce"],
 }
+
+# Which node each pod above runs on - the same assignment kube_pod_info
+# carries in demo/kube-metrics/metrics, so a node's logs line up with the
+# pods its own Overview tab lists. Log collectors stamp every container log
+# line with the node it was read on (k8s.node.name), which is what the Node
+# Drilldown's Logs/Events tabs filter by.
+pod_node = {
+    "app-aws": "demo-cluster-aws-node-1",
+    "node-agent-0-aws": "demo-cluster-aws-node-1",
+    "infra-check-29791301-pod": "demo-cluster-aws-node-1",
+    "cache-0-aws": "demo-cluster-aws-node-2",
+    "db-migrate-1-aws": "demo-cluster-aws-node-2",
+    "debug-shell-aws": "demo-cluster-aws-node-3",
+    "app-gce": "demo-cluster-gce-node-1",
+    "node-agent-0-gce": "demo-cluster-gce-node-1",
+    "debug-shell-gce": "demo-cluster-gce-node-1",
+    "cache-0-gce": "demo-cluster-gce-node-2",
+    "db-migrate-1-gce": "demo-cluster-gce-node-2",
+}
+
+# Events about the Node objects themselves (involvedObject kind=Node): their
+# orchestrator.resource.name *is* the node name.
+node_names = {
+    "demo-cluster-aws": ["demo-cluster-aws-node-1", "demo-cluster-aws-node-2", "demo-cluster-aws-node-3"],
+    "demo-cluster-gce": ["demo-cluster-gce-node-1", "demo-cluster-gce-node-2"],
+}
+node_event_reasons = ["NodeHasSufficientMemory", "NodeHasNoDiskPressure", "NodeReady", "NodeNotReady", "Rebooted"]
 
 print(f"Waiting for Elasticsearch at {ES_URL}...")
 while True:
@@ -81,6 +113,7 @@ demo_logs_mapping_properties = {
         "properties": {
             "cluster": {"properties": {"name": {"type": "keyword"}}},
             "namespace": {"properties": {"name": {"type": "keyword"}}},
+            "node": {"properties": {"name": {"type": "keyword"}}},
         }
     },
     "log": {"properties": {"level": {"type": "keyword"}}},
@@ -138,6 +171,7 @@ for i in range(300):
         "log": {"level": random.choice(log_levels)},
         "message": random.choice(messages),
     }
+    doc["k8s"]["node"] = {"name": pod_node[doc["orchestrator"]["resource"]["name"]]}
     lines.append(json.dumps({"index": {"_index": "demo-logs-000001"}}))
     lines.append(json.dumps(doc))
 
@@ -152,6 +186,23 @@ for i in range(150):
         "orchestrator": {"namespace": ns, "resource": {"name": random.choice(workload_pod_names[cl])}},
         "event": {"type": random.choice(event_types), "reason": random.choice(event_reasons)},
         "message": random.choice(event_reasons),
+    }
+    doc["k8s"]["node"] = {"name": pod_node[doc["orchestrator"]["resource"]["name"]]}
+    lines.append(json.dumps({"index": {"_index": "demo-logs-000001"}}))
+    lines.append(json.dumps(doc))
+
+for i in range(40):
+    ts = now - timedelta(seconds=i * 75)
+    cl = random.choice(clusters)
+    node = random.choice(node_names[cl])
+    reason = random.choice(node_event_reasons)
+    doc = {
+        "@timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "logmgmt": {"kind": "openshift", "category": "event"},
+        "k8s": {"cluster": {"name": cl}, "node": {"name": node}},
+        "orchestrator": {"resource": {"name": node}},
+        "event": {"type": "Warning" if reason in ("NodeNotReady", "Rebooted") else "Normal", "reason": reason},
+        "message": reason,
     }
     lines.append(json.dumps({"index": {"_index": "demo-logs-000001"}}))
     lines.append(json.dumps(doc))

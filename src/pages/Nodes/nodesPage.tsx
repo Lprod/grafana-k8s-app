@@ -21,7 +21,7 @@ import {
 } from '@grafana/scenes';
 import { FieldColorModeId } from '@grafana/data';
 import { LegendDisplayMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
-import { Alert, Badge, useTheme2 } from '@grafana/ui';
+import { Badge, useTheme2 } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
 import { buildNodesListTargets, substituteClusterAndNode } from '../../queries/nodeQueries';
 import { getNodeCpuScene } from './nodeCpuScene';
@@ -71,6 +71,8 @@ import { SectionHeading } from '../../scenes/sectionHeading';
 import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { getRawLogsTabScene } from '../../scenes/logPanels';
+import { buildNodeEventsQuery, buildNodeLogsQuery } from '../../queries/namespaceOverviewQueries';
 
 const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
@@ -699,29 +701,6 @@ function getNodeOverviewScene(cluster: string, node: string, clusterRegex: strin
   });
 }
 
-// Same shape as the other drilldowns' own placeholder scaffold (e.g.
-// getPodPlaceholderScene in podsPage.tsx) for the tabs not built out yet.
-function getNodePlaceholderScene(title: string) {
-  return new EmbeddedScene({
-    $behaviors: [attachExploreMenus],
-    body: new SceneFlexLayout({
-      direction: 'column',
-      children: [
-        new SceneFlexItem({
-          ySizing: 'content',
-          body: new SceneReactObject({
-            reactNode: (
-              <Alert severity="info" title={`${title} - coming soon`}>
-                This tab is scaffolded but not built out yet.
-              </Alert>
-            ),
-          }),
-        }),
-      ],
-    }),
-  });
-}
-
 interface NodeTabDef {
   slug: string;
   title: string;
@@ -756,8 +735,17 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
     // demo Elasticsearch data has no node-identifying field to filter by -
     // left as placeholders per explicit user decision rather than guessing
     // at an ES query shape with nothing to verify it against.
-    { slug: 'logs', title: 'Logs', getScene: () => getNodePlaceholderScene('Logs') },
-    { slug: 'events', title: 'Events', getScene: () => getNodePlaceholderScene('Events') },
+    // Scoped by k8s.node.name - see buildNodeLogsQuery/buildNodeEventsQuery.
+    {
+      slug: 'logs',
+      title: 'Logs',
+      getScene: () => getRawLogsTabScene('Logs', (onlyWarnError) => buildNodeLogsQuery(cluster, node, onlyWarnError)),
+    },
+    {
+      slug: 'events',
+      title: 'Events',
+      getScene: () => getRawLogsTabScene('Events', (onlyWarnError) => buildNodeEventsQuery(node, onlyWarnError)),
+    },
   ];
 
   const tabs = tabDefs.map(
