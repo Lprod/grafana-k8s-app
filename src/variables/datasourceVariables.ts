@@ -163,6 +163,47 @@ export function createNamespaceFilterVariable(options: { isMulti?: boolean; clus
   return syncValueFromUrlOnActivation(variable, NAMESPACE_VARIABLE_NAME);
 }
 
+// Resource Simulator's single-select namespace picker. Same variable name as
+// createNamespaceFilterVariable above (so `$namespace` and `var-namespace`
+// keep working unchanged), but ordered *busiest first* instead of
+// alphabetically.
+//
+// A single-select QueryVariable with no URL value simply lands on its first
+// option, and `label_values` returns namespaces alphabetically - so the page
+// opened on `cluster-tests`, a namespace with no Deployments or StatefulSets,
+// i.e. the Simulator's own "No workload rows" empty state was the first thing
+// anyone saw. This counts exactly what the Simulator seeds its rows from
+// (Deployments and StatefulSets, see resourceSimulator.ts) per namespace and
+// sorts by that count, so it opens on the namespace with the most to model.
+// Namespaces with none are *kept* - as `0 * count(...)`, last - since adding
+// a planned workload to an empty namespace is one of the things this page is
+// for. QueryVariable's default `sort` is disabled, so the query's own order
+// is what the dropdown shows.
+//
+// Single-line on purpose: a multi-line query_result() is sent as the literal
+// text to match[] - see createWorkloadFilterVariable below.
+export function createSimulatorNamespaceVariable(options: { clusterRegex?: string } = {}) {
+  const clusterRegex = options.clusterRegex ?? `\${${CLUSTER_VARIABLE_NAME}:regex}`;
+  const byWorkloadCount =
+    `sort_desc(count by (namespace) (kube_deployment_spec_replicas{cluster=~"${clusterRegex}", deployment!=""} ` +
+    `or kube_statefulset_replicas{cluster=~"${clusterRegex}", statefulset!=""}) ` +
+    `or 0 * count by (namespace) (kube_namespace_status_phase{cluster=~"${clusterRegex}"}))`;
+  const variable = new QueryVariable({
+    name: NAMESPACE_VARIABLE_NAME,
+    label: 'Namespace',
+    datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
+    query: {
+      refId: 'simulatorNamespaceVariableQuery',
+      query: `query_result(${byWorkloadCount})`,
+    },
+    regex: '/namespace="([^"]+)"/',
+    isMulti: false,
+    includeAll: false,
+    value: '',
+  });
+  return syncValueFromUrlOnActivation(variable, NAMESPACE_VARIABLE_NAME);
+}
+
 // Unlike the other filter variables, the cluster detail page doesn't have a
 // scene-level "cluster" variable to reference (it's scoped to one cluster by
 // the drilldown route) - so the cluster is inlined directly into the query.

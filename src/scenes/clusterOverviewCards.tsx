@@ -418,7 +418,15 @@ function NodeHealthBannerRenderer({ model }: SceneComponentProps<NodeHealthBanne
     .find((c): c is string => c === 'MemoryPressure' || c === 'DiskPressure' || c === 'PIDPressure');
 
   const severity: 'success' | 'warning' | 'error' = notReady ? 'error' : pressureCondition ? 'warning' : 'success';
-  const message = notReady ? 'Node is not ready' : pressureCondition ? `Node has ${pressureCondition} pressure` : 'Node is healthy';
+  // Deliberately "conditions OK", not "healthy": this banner only reads
+  // kube_node_status_condition, while the button right next to it counts
+  // firing alerts - so a node with a firing alert used to read "Node is
+  // healthy" in green beside "1 firing alert" in orange, two contradicting
+  // claims in one row. Naming what the green actually vouches for keeps both
+  // true at once. (Folding alerts into the severity, as NamespaceHealthBanner
+  // does, was the alternative - the user chose to keep this banner
+  // condition-only.)
+  const message = notReady ? 'Node is not ready' : pressureCondition ? `Node has ${pressureCondition} pressure` : 'Node conditions OK';
   const iconName = severity === 'error' ? 'exclamation-circle' : severity === 'warning' ? 'exclamation-triangle' : 'check';
   const color = theme.colors[severity];
 

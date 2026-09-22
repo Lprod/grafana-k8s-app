@@ -2017,12 +2017,21 @@ export function getStyles() {
       display: 'flex',
       gap: 8,
       justifyContent: 'space-between',
+      // The status badge never gives up width - see summaryLabel.
+      '& > *:last-child': { flexShrink: 0 },
     }),
     summaryLabel: css({
       display: 'block',
       fontSize: 12,
       opacity: 0.75,
       paddingRight: 6,
+      // A flex child defaults to `min-width: auto`, so a long single-word
+      // label ("PersistentVolumeClaims") could not shrink below its own
+      // width and pushed the badge beside it out past the card's edge, on
+      // top of the next card's title. Letting the label wrap - anywhere, since
+      // that one is a single word - keeps the full text and the badge inside.
+      minWidth: 0,
+      overflowWrap: 'anywhere',
     }),
     summaryValue: css({
       display: 'block',

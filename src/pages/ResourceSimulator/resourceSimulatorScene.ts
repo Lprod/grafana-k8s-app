@@ -10,7 +10,7 @@ import {
 } from '@grafana/scenes';
 import {
   createClusterFilterVariable,
-  createNamespaceFilterVariable,
+  createSimulatorNamespaceVariable,
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { ResourceSimulatorObject } from './ResourceSimulatorObject';
@@ -25,7 +25,8 @@ export function getResourceSimulatorScene() {
       variables: [
         createThanosDatasourceVariable(),
         createClusterFilterVariable({ isMulti: false }),
-        createNamespaceFilterVariable({ isMulti: false }),
+        // Busiest namespace first, so the page opens on one it can model.
+        createSimulatorNamespaceVariable(),
       ],
     }),
     controls: [
