@@ -3,3 +3,19 @@ services:
     extends:
       file: .config/docker-compose-base.yaml
       service: grafana
+    # Pins the dev server to the newest Grafana release instead of the
+    # scaffold's own default in .config/docker-compose-base.yaml (13.1.0),
+    # which that folder's "managed by create-plugin, don't edit" rule keeps us
+    # from changing there. Overriding build args here in the root file is the
+    # documented way to do it:
+    # https://grafana.com/developers/plugin-tools/set-up/set-up-docker
+    # GRAFANA_VERSION still wins when set, so CI's per-version e2e matrix is
+    # unaffected.
+    #
+    # 13.2.x runs React 19 and shares that one React instance with every
+    # loaded plugin - this plugin was checked with @grafana/react-detect
+    # before moving here ("No React 19 breaking changes detected"), and has to
+    # stay React-18-compatible too, since grafanaDependency is >=12.3.0.
+    build:
+      args:
+        grafana_version: ${GRAFANA_VERSION:-13.2.2}
