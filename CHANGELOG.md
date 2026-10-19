@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.0.1
+
+- **Fixed "duplicate series" errors in tables when a namespace exists in
+  several clusters.** The CPU and memory columns of the Workloads table, the
+  Namespace Drilldown's Workloads table and the Workload Drilldown's memory
+  panel and Pods table joined each pod to its workload by namespace and pod
+  name only, not by cluster. A pod with the same name in the same namespace of
+  two clusters (typical for StatefulSet pods such as `k8s-vector-0`) made
+  Prometheus reject the whole query with "found duplicate series for the match
+  group ... many-to-many matching not allowed". These joins now also match on
+  `cluster`, and the workload lookup is deduplicated so that extra labels can't
+  cause the same error. Namespace storage, the workload alerts badge and the
+  Alerts page got the same deduplication.
+
 ## 3.0.0
 
 Phase 4 of the UX review ("new capabilities"): `F-04`, `F-05` and `F-11`. The
