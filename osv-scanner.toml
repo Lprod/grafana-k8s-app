@@ -1,0 +1,12 @@
+# Temporary exception for GHSA-vfj7-8cjw-p6xm / CVE-2026-93687 (braces).
+# Every braces release up to and including the latest (3.0.3) is listed as
+# affected and no patched version exists; the maintainer disputes the CVE
+# (https://github.com/micromatch/braces/issues/85). braces is a build/test-only
+# dependency (via micromatch) and is not part of the shipped plugin bundle.
+# Remove this entry once a patched braces is published or the advisory is
+# withdrawn, and reassess before the expiry date.
+# Approved by the repo owner on 2026-10-19 to unblock v3.0.2.
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-12-01T00:00:00Z
+reason = "braces <= 3.0.3 has no patched release; build-time-only dependency, not in the plugin bundle."
