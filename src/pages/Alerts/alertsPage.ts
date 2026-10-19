@@ -157,7 +157,7 @@ function getAlertsScene() {
   const alertsFilters = `alertstate="firing", ${commonFilters}, alertname=~"${alertnameRegex}"`;
   const podAlerts = `ALERTS{${alertsFilters}, pod!=""}`;
   const nonPodAlerts = `ALERTS{${alertsFilters}, pod=""}`;
-  const podOwner = `namespace_workload_pod:kube_pod_owner:relabel{cluster=~"${clusterRegex}"}`;
+  const podOwner = `group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"${clusterRegex}"})`;
   const ownedPodAlerts = `(${podAlerts} * on (cluster, namespace, pod) group_left (workload, workload_type) ${podOwner})`;
   const unownedPodAlerts = `label_replace(label_replace(${podAlerts} unless on (cluster, namespace, pod) (${podOwner}), "workload", "$1", "pod", "(.+)"), "workload_type", "pod", "", "")`;
 

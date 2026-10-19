@@ -33,7 +33,7 @@ export function buildWorkloadAlertsSeverityQuery(
   return `count by (severity) (
     ALERTS{alertstate="firing", cluster="${clusterRegex}", namespace="${namespaceRegex}", alertname!~"ArgoCDSyncAlert"}
     * on (cluster, namespace, pod) group_left (workload, workload_type)
-    namespace_workload_pod:kube_pod_owner:relabel{cluster="${clusterRegex}", namespace="${namespaceRegex}", workload="${workload}", workload_type="${workloadType}"}
+    group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="${clusterRegex})", namespace="${namespaceRegex}", workload="${workload}", workload_type="${workloadType}"}
   )`;
 }
 
@@ -141,8 +141,8 @@ export const workloadMemoryOptimizationQueries = {
   requests: `sum(max by (cluster, namespace, node, pod, container) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}))`,
   usage: `sum(
     container_memory_working_set_bytes{cluster="$cluster", namespace="$namespace", container!="", image!=""}
-  * on(namespace,pod)
-    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace", pod=~"$pod"}
+  * on (cluster, namespace, pod)
+    group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace", pod=~"$pod"})
 )`,
 };
 
@@ -189,8 +189,8 @@ export const workloadPodsTableQueries = {
   cpuRequests: `sum by (cluster, namespace, pod) (last_over_time((max by (cluster, namespace, pod, container) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}))[$__range:]))`,
   memUsage: `sum(
     container_memory_working_set_bytes{cluster="$cluster", namespace="$namespace", container!="", image!=""}
-  * on(namespace,pod)
-    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace", pod=~"$pod"}
+  * on (cluster, namespace, pod)
+    group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace", pod=~"$pod"})
 ) by (pod)`,
   memRequests: `sum by (cluster, namespace, pod) (last_over_time((max by (cluster, namespace, pod, container) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}))[$__range:]))`,
   memLimits: `sum by (cluster, namespace, pod) (last_over_time((max by (cluster, namespace, pod, container) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{container!="", cluster="$cluster", namespace="$namespace", pod=~"$pod"}))[$__range:]))`,

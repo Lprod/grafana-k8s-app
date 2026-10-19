@@ -87,7 +87,7 @@ export const namespacePvcVolumeBytesByWorkloadQuery = `sum by (cluster, namespac
             )
           )
           * on (cluster, namespace, pod) group_left(workload, workload_type)
-          namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace"}
+          group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace"})
         )
         /
         sum by (cluster, namespace, workload, workload_type) (
@@ -101,7 +101,7 @@ export const namespacePvcVolumeBytesByWorkloadQuery = `sum by (cluster, namespac
             )
           )
           * on (cluster, namespace, pod) group_left(workload, workload_type)
-          namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace"}
+          group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace"})
         )`;
 
 export const namespacePvcVolumeInodesQueries = {
@@ -150,7 +150,7 @@ export const namespacePvcVolumeInodesByWorkloadQuery = `sum by (cluster, namespa
             )
           )
           * on (cluster, namespace, pod) group_left(workload, workload_type)
-          namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace"}
+          group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace"})
         )
         /
         sum by (cluster, namespace, workload, workload_type) (
@@ -164,7 +164,7 @@ export const namespacePvcVolumeInodesByWorkloadQuery = `sum by (cluster, namespa
             )
           )
           * on (cluster, namespace, pod) group_left(workload, workload_type)
-          namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace"}
+          group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="$cluster", namespace="$namespace"})
         )`;
 
 export const namespacePvcStatusQuery = `count by (cluster, namespace, phase) (

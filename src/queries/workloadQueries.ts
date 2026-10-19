@@ -147,58 +147,58 @@ export const workloadTableQueries = {
   )`,
   cpu_usage: `sum(
       node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster=~"$cluster", namespace=~"$namespace"}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)`,
   cpu_requests: `sum(
       kube_pod_container_resource_requests{job="kube-state-metrics", cluster=~"$cluster", namespace=~"$namespace", resource="cpu"}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)`,
   cpu_requests_percent: `sum(
       node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{cluster=~"$cluster", namespace=~"$namespace"}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)
   /sum(
       kube_pod_container_resource_requests{job="kube-state-metrics", cluster=~"$cluster", namespace=~"$namespace", resource="cpu"}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)`,
   mem_usage: `sum(
       container_memory_working_set_bytes{cluster=~"$cluster", namespace=~"$namespace", container!="", image!=""}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)`,
   mem_requests: `sum(
       kube_pod_container_resource_requests{job="kube-state-metrics", cluster=~"$cluster", namespace=~"$namespace", resource="memory"}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)`,
   mem_requests_percent: `sum(
       container_memory_working_set_bytes{cluster=~"$cluster", namespace=~"$namespace", container!="", image!=""}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)
   /sum(
       kube_pod_container_resource_requests{job="kube-state-metrics", cluster=~"$cluster", namespace=~"$namespace", resource="memory"}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)`,
   mem_limits: `sum(
       kube_pod_container_resource_limits{job="kube-state-metrics", cluster=~"$cluster", namespace=~"$namespace", resource="memory"}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)`,
   mem_limits_percent: `sum(
       container_memory_working_set_bytes{cluster=~"$cluster", namespace=~"$namespace", container!="", image!=""}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)
   /sum(
       kube_pod_container_resource_limits{job="kube-state-metrics", cluster=~"$cluster", namespace=~"$namespace", resource="memory"}
-    * on(namespace, pod)
-      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"}
+    * on (cluster, namespace, pod)
+      group_left (workload, workload_type) group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster=~"$cluster", namespace=~"$namespace"})
   ) by (cluster, namespace, workload, workload_type)`,
 };
 
