@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.2
+
+No functional changes; this release ships the 3.0.1 fix, whose release build
+failed.
+
+- **Release build unblocked.** The plugin validator's vulnerability scan
+  rejected three newly published advisories in build/test-only dependencies
+  (none of them part of the plugin bundle). `basic-ftp` and `source-map-js` are
+  now pinned to patched versions. `braces` has no patched release (the
+  maintainer disputes the advisory), so `GHSA-vfj7-8cjw-p6xm` is ignored in a
+  new `osv-scanner.toml` until 2026-12-01.
+
 ## 3.0.1
 
 - **Fixed "duplicate series" errors in tables when a namespace exists in
