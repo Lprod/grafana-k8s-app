@@ -1,5 +1,67 @@
 # Changelog
 
+## 3.0.3
+
+Fixes from a review of the whole app against the running demo stack.
+
+- **Workload Drilldown: the health banner counts alerts again.** Since 3.0.1
+  the banner's alerts query had a closing parenthesis inside a label matcher
+  and Prometheus rejected it. The banner therefore showed "No firing alerts"
+  on every workload, whatever was firing. A new unit test checks the brackets
+  of every query in `src/queries`.
+- **Health banners no longer show "healthy" when they don't know.** While
+  their query was still running, and when it failed, the Cluster, Node,
+  Namespace, Workload and Pod banners showed a green "… is healthy" and "No
+  firing alerts". They now show "Checking … health…" while loading and
+  "… health unknown - the health query failed" on an error.
+- **Workload and Pod banners say why they are red.** A workload with unready
+  pods now reads "Workload is not healthy - 0 of 2 pods ready". The alerts
+  button next to it only counts real alerts; it used to show "1 firing alert"
+  for unready pods when no alert was firing. While the banner is red for such
+  a reason, a zero count is shown in neutral grey instead of a green tick.
+- **Job tables only list jobs that started in the selected time range.** The
+  Jobs tab, the CronJob Drilldown's "Runs" and the Job Drilldown's "Previous
+  runs" also listed every older job kube-state-metrics still knew, as rows
+  with an empty START and END. Those rows are gone; with no job in the range
+  the table says "No jobs started in the selected time range."
+- **Name columns keep a minimum width.** Node, pod, workload, job, cronjob,
+  alert, cluster and namespace columns no longer shrink until every row reads
+  the same truncated prefix. Tables scroll sideways a little sooner instead.
+- **Cluster Drilldown: the health banner links to the cluster-tests
+  dashboard.** A "Cluster tests" button next to the banner text opens
+  `/d/aehmig9tia5fkb/cluster-tests` for this cluster, with the page's Thanos
+  data source and time range.
+- **Toolbars wrap instead of overflowing.** On the Alerts page and on the
+  Workload, Pod and Node Drilldowns the time picker, refresh, copy-link and
+  jump buttons were pushed off-screen behind a horizontal scrollbar at 1600px
+  with the navigation docked. On the Workloads list the "All" chips of the
+  pickers were squeezed to nothing. The pickers now move onto a second line,
+  and the time controls stay together on the right. This also holds with the
+  Assistant sidebar open.
+- **Kubernetes home page: the Cluster and Namespace pickers now filter the
+  whole page.** Only the six top tiles and the images table followed the
+  Cluster picker, and nothing followed the Namespace picker. The twelve issue
+  tiles, the issue table, the Efficiency tab and the Alerts tab always showed
+  every cluster. Node-level tiles still ignore the Namespace picker, because
+  nodes have no namespace.
+- **Kubernetes home page: "View detail" scrolls to the issue table.** The
+  table is below the fold, so the link looked like it did nothing.
+- **Kubernetes home page: no more empty-state sentence inside table rows.** A
+  row with an empty cell showed, for example, "No pods are stuck in Pending."
+  in that cell. The sentence now only appears when the table has no rows. The
+  issue table also lost its "Time" column.
+- **Efficiency tab: units and readable bars.** The waste panels show cores and
+  MiB/GiB instead of a bare number, and their bars start at zero (a steady
+  value used to draw an empty bar). The five tables name their value column
+  ("CPU request", "Requested but unused", …) and give it a unit.
+- **Search: the search term survives a reload, a shared link and the Back
+  button.** The page ignored `var-search` in the URL and cleared it shortly
+  after loading. The thin lines above the first result table are gone too.
+- **Jobs table: "–" instead of "NaN"** in DURATION for a job that has no end
+  time.
+- **Logs/Events bar charts: readable time axis.** The rotated labels no longer
+  overprint each other.
+
 ## 3.0.2
 
 No functional changes; this release ships the 3.0.1 fix, whose release build

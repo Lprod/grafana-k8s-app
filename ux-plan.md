@@ -8,7 +8,7 @@ Die IDs `UX-01`…`UX-19` (Befunde) und `F-01`…`F-12` (Feature-Ideen) sind sta
 
 | ID | Befund | Schwere | Status |
 |---|---|---|---|
-| UX-01 | Tabellen laufen rechts aus dem Bild — ohne jeden Hinweis | Hoch | Gestrichen |
+| UX-01 | Tabellen laufen rechts aus dem Bild — ohne jeden Hinweis | Hoch | Teilweise · v3.0.3 (nur Namensspalten) |
 | UX-02 | Keine einzige Tabelle ist paginiert | Hoch | Umgesetzt · v2.3.0 |
 | UX-03 | Keine Sortierung nach Dringlichkeit | Mittel | Umgesetzt · v2.3.0 |
 | UX-04 | Panels in fester Höhe — bei vier Zeilen bleibt der halbe Bildschirm leer | Mittel | Gestrichen |
@@ -22,7 +22,7 @@ Die IDs `UX-01`…`UX-19` (Befunde) und `F-01`…`F-12` (Feature-Ideen) sind sta
 | UX-12 | Kein Treffer-Highlighting, keine Tastaturbedienung | Mittel | Umgesetzt · v2.4.0 |
 | UX-13 | Der leere Zustand der Suche ist ein Satz auf leerer Fläche | Mittel | Umgesetzt · v2.4.0 (reduziert) |
 | UX-14 | Kein „diese Ansicht teilen“ | Niedrig | Umgesetzt · v2.3.0 |
-| UX-15 | Drei von rund 35 Panels haben einen echten Leerzustand | Mittel | Teilweise · v2.3.0 |
+| UX-15 | Drei von rund 35 Panels haben einen echten Leerzustand | Mittel | Teilweise · v2.3.0, v3.0.3 |
 | UX-16 | Kein Hinweis, wenn im gewählten Zeitraum keine Daten liegen | Mittel | Gestrichen |
 | UX-17 | „Node is healthy“ direkt neben „1 firing alert“ | Niedrig | Umgesetzt · v2.4.0 |
 | UX-18 | Sechs Tabs sind noch „coming soon“ | Mittel | Umgesetzt · v2.4.0 |
@@ -74,6 +74,8 @@ Im gesamten Quellcode setzen genau zwei Stellen eine Spaltenbreite (`ocCell.tsx:
 *Vorgeschlagener Fix (Plan):* Pro Spaltentyp `minWidth`/`width` setzen: Identitätsspalten (Cluster/Namespace/Workload/Node) großzügig, Meter-Zellen fix. Zusätzlich: Cluster- bzw. Namespace-Spalte ausblenden, sobald der zugehörige Filter auf genau einen Wert steht — das gibt ohne Informationsverlust zwei Spalten Breite zurück.
 
 > **Umsetzung:** Vom Nutzer aus Phase 2 gestrichen. Billiger Teilersatz, falls das Thema wiederkommt: `frozenColumns.left` (existiert in Grafana 13.x) auf der Identitätsspalte.
+>
+> **v3.0.3:** Auf Nutzerwunsch doch die schmale Variante: Mindestbreite nur für die Namensspalten (Node, Pod, Workload, Job, CronJob, Alertname, Cluster, Namespace) in allen Tabellen (`src/scenes/identityColumns.ts`). Auslöser: auf Nodes stand in jeder Zeile derselbe abgeschnittene Präfix. Alle übrigen Spalten teilen sich die Breite weiter gleichmäßig.
 
 ### UX-02 — Keine einzige Tabelle ist paginiert
 
@@ -212,6 +214,8 @@ Filter und Zeitraum stehen sauber in der URL — genutzt wird das aber nirgends.
 *Vorgeschlagener Fix (Plan):* Für Zählkacheln `noValue: '0'` statt „No data“; für Tabellen je einen konkreten Satz, wie es die Efficiency-Tabellen bereits vormachen („All containers have resource requests set.“).
 
 > **Umsetzung:** Nur die Zählkacheln: `0` statt „No data". **Tabellen-Leerzustände zurückgenommen**: `setNoValue` auf einem Table-Panel greift pro *leerer Zelle*, nicht nur bei leerer Tabelle. Ein echter Tabellen-Leerzustand bräuchte eine Overlay-Komponente — offen.
+>
+> **v3.0.3:** Ohne Overlay gelöst: `emptyTableMessage` (`src/scenes/tableEmptyState.ts`) setzt den Leertext nur, solange die Tabelle null Zeilen hat. Im Einsatz auf der Startseite (Issue-Tabelle, Efficiency-Tabellen) und den drei Job-Tabellen; die übrigen Tabellen zeigen weiter „No data".
 
 ### UX-16 — Kein Hinweis, wenn im gewählten Zeitraum keine Daten liegen
 
