@@ -33,7 +33,7 @@ export function buildWorkloadAlertsSeverityQuery(
   return `count by (severity) (
     ALERTS{alertstate="firing", cluster="${clusterRegex}", namespace="${namespaceRegex}", alertname!~"ArgoCDSyncAlert"}
     * on (cluster, namespace, pod) group_left (workload, workload_type)
-    group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="${clusterRegex})", namespace="${namespaceRegex}", workload="${workload}", workload_type="${workloadType}"}
+    group by (cluster, namespace, workload, workload_type, pod) (namespace_workload_pod:kube_pod_owner:relabel{cluster="${clusterRegex}", namespace="${namespaceRegex}", workload="${workload}", workload_type="${workloadType}"})
   )`;
 }
 
