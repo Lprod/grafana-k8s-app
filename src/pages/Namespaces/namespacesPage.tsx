@@ -78,6 +78,7 @@ import { SectionHeading } from '../../scenes/sectionHeading';
 import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { pageToolbar } from '../../scenes/pageToolbar';
 import { jumpControl } from '../../scenes/objectJump';
 
 const NAMESPACES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Namespaces}`;
@@ -653,6 +654,10 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
     .setData(logsData)
     .setOption('stacking', StackingMode.Normal)
     .setOption('xTickLabelRotation', -45)
+    // One label per ~80px, not one per bar: at a 1-minute bucket a 1h range
+    // is 60 bars, and 60 rotated timestamps overprint each other into an
+    // unreadable band under the chart.
+    .setOption('xTickLabelSpacing', 80)
     .setOption('showValue', VisibilityMode.Never)
     .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
     .setOverrides((b) => applyLevelColorOverrides(b, namespaceLogLevelDefs))
@@ -674,6 +679,7 @@ function getNamespaceOverviewScene(cluster: string, namespace: string, clusterRe
     .setData(eventsData)
     .setOption('stacking', StackingMode.Normal)
     .setOption('xTickLabelRotation', -45)
+    .setOption('xTickLabelSpacing', 80)
     .setOption('showValue', VisibilityMode.Never)
     .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
     .setOverrides((b) => applyLevelColorOverrides(b, namespaceEventTypeDefs))
@@ -845,7 +851,7 @@ function getNamespaceDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; n
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
       new SceneControlsSpacer(),
@@ -853,7 +859,7 @@ function getNamespaceDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; n
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
 }
@@ -869,7 +875,7 @@ export function getNamespacesPage() {
     $variables: new SceneVariableSet({
       variables: [createThanosDatasourceVariable(), createClusterFilterVariable(), createNamespaceFilterVariable()],
     }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: CLUSTER_VARIABLE_NAME }),
       new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
@@ -878,7 +884,7 @@ export function getNamespacesPage() {
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     // Deliberately excludes the filter variables - see the same note in
     // the pre-existing stub this file replaces.
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],

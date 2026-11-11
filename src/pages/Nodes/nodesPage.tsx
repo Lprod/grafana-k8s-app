@@ -71,6 +71,7 @@ import { SectionHeading } from '../../scenes/sectionHeading';
 import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { pageToolbar } from '../../scenes/pageToolbar';
 import { jumpControl } from '../../scenes/objectJump';
 import { getRawLogsTabScene } from '../../scenes/logPanels';
 import { buildNodeEventsQuery, buildNodeLogsQuery } from '../../queries/namespaceOverviewQueries';
@@ -772,7 +773,7 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
     // why it lives on the page rather than each tab's own EmbeddedScene.
     $data: createNodeChangeAnnotations({ node }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
       new SceneDataLayerControls(),
@@ -781,7 +782,7 @@ function getNodeDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; node: 
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     preserveUrlKeys: [
       'from',
       'to',
@@ -808,7 +809,7 @@ export function getNodesPage() {
         createNodesFilterVariable(`\${${CLUSTER_VARIABLE_NAME}:regex}`),
       ],
     }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: CLUSTER_VARIABLE_NAME }),
       new VariableValueControl({ variableName: NODES_VARIABLE_NAME }),
@@ -817,7 +818,7 @@ export function getNodesPage() {
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     // Deliberately excludes the filter variables - see the same note in
     // namespacesPage.ts.
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],

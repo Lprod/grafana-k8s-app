@@ -91,6 +91,7 @@ import { addActionField, applyOcActionColumn } from '../../scenes/ocCell';
 import { createChangeAnnotations } from '../../scenes/changeAnnotations';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { pageToolbar } from '../../scenes/pageToolbar';
 import { jumpControl } from '../../scenes/objectJump';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
@@ -759,6 +760,10 @@ function getWorkloadOverviewScene(
     .setData(logsData)
     .setOption('stacking', StackingMode.Normal)
     .setOption('xTickLabelRotation', -45)
+    // One label per ~80px, not one per bar: at a 1-minute bucket a 1h range
+    // is 60 bars, and 60 rotated timestamps overprint each other into an
+    // unreadable band under the chart.
+    .setOption('xTickLabelSpacing', 80)
     .setOption('showValue', VisibilityMode.Never)
     .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
     .setOverrides((b) => applyLevelColorOverrides(b, namespaceLogLevelDefs))
@@ -771,6 +776,7 @@ function getWorkloadOverviewScene(
     .setData(eventsData)
     .setOption('stacking', StackingMode.Normal)
     .setOption('xTickLabelRotation', -45)
+    .setOption('xTickLabelSpacing', 80)
     .setOption('showValue', VisibilityMode.Never)
     .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
     .setOverrides((b) => applyLevelColorOverrides(b, namespaceEventTypeDefs))
@@ -965,7 +971,7 @@ function getWorkloadDetailPage(
     // than on each tab's own EmbeddedScene.
     $data: createChangeAnnotations({ cluster, namespace, workload, workloadType }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
       new SceneDataLayerControls(),
@@ -974,7 +980,7 @@ function getWorkloadDetailPage(
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
     // Pod Drilldown - nested one level deeper than this page's own tabs
     // (reached from the Pods table above), not a separate top-level nav
@@ -1008,7 +1014,7 @@ export function getWorkloadsPage() {
         createWorkloadFilterVariable(),
       ],
     }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: CLUSTER_VARIABLE_NAME }),
       new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
@@ -1018,7 +1024,7 @@ export function getWorkloadsPage() {
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     // Deliberately excludes the filter variables - see the same note in
     // the pre-existing stub this file replaces.
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],

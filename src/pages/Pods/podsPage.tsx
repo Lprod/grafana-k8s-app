@@ -72,6 +72,7 @@ import { SectionHeading } from '../../scenes/sectionHeading';
 import { createChangeAnnotations } from '../../scenes/changeAnnotations';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { pageToolbar } from '../../scenes/pageToolbar';
 import { jumpControl } from '../../scenes/objectJump';
 
 const WORKLOADS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Workloads}`;
@@ -462,6 +463,10 @@ function getPodOverviewScene(
     .setData(logsData)
     .setOption('stacking', StackingMode.Normal)
     .setOption('xTickLabelRotation', -45)
+    // One label per ~80px, not one per bar: at a 1-minute bucket a 1h range
+    // is 60 bars, and 60 rotated timestamps overprint each other into an
+    // unreadable band under the chart.
+    .setOption('xTickLabelSpacing', 80)
     .setOption('showValue', VisibilityMode.Never)
     .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
     .setOverrides((b) => applyLevelColorOverrides(b, namespaceLogLevelDefs))
@@ -477,6 +482,7 @@ function getPodOverviewScene(
     .setData(eventsData)
     .setOption('stacking', StackingMode.Normal)
     .setOption('xTickLabelRotation', -45)
+    .setOption('xTickLabelSpacing', 80)
     .setOption('showValue', VisibilityMode.Never)
     .setColor({ mode: FieldColorModeId.Fixed, fixedColor: NAMESPACE_LEVEL_OTHER_COLOR })
     .setOverrides((b) => applyLevelColorOverrides(b, namespaceEventTypeDefs))
@@ -659,7 +665,7 @@ export function getPodDetailPage(
     // Workload Drilldown one level up already carries that one).
     $data: createChangeAnnotations({ cluster, namespace, pod }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
       new SceneDataLayerControls(),
@@ -668,7 +674,7 @@ export function getPodDetailPage(
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
 }

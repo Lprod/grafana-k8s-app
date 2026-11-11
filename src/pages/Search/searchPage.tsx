@@ -14,6 +14,7 @@ import {
   SceneVariableSet,
   TextBoxVariable,
   VariableValueControl,
+  VizPanel,
   PanelBuilders,
   FieldConfigOverridesBuilder,
 } from '@grafana/scenes';
@@ -30,6 +31,7 @@ import {
 } from '../../variables/datasourceVariables';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { pageToolbar } from '../../scenes/pageToolbar';
 import { RECENT_KIND_BADGE, RecentObject, loadRecentObjects } from '../../scenes/recentObjects';
 
 const SEARCH_URL = `${PLUGIN_BASE_URL}/${ROUTES.Search}`;
@@ -417,9 +419,21 @@ function SearchControls({
   resultsLayout: SceneFlexLayout;
 }) {
   const styles = useStyles2(getStyles);
-  const [searchText, setSearchText] = useState('');
+  // Starts from the URL's own `var-search`, not from an empty box: Scenes
+  // already keeps the typed term there, but this component used to ignore it
+  // on mount and then overwrite it with "" 400ms later (the debounce below).
+  // So a copied link to a search opened as an empty page, and so did the
+  // browser's Back button after opening a result - the most common way back
+  // to a result list. Read from the URL rather than from the variable's own
+  // state on purpose: the variable object outlives a visit, so reading it
+  // would also resurrect the previous term when Search is opened fresh from
+  // the navigation, where an empty box is what's expected.
+  const [initialSearchText] = useState(() => new URLSearchParams(window.location.search).get(`var-${SEARCH_VARIABLE_NAME}`) ?? '');
+  const [searchText, setSearchText] = useState(initialSearchText);
   const [selected, setSelected] = useState<Set<Category>>(new Set());
-  const [committed, setCommitted] = useState(false);
+  // A restored term opens straight on its result tables (the stable,
+  // shareable view) - the suggestion dropdown comes back with the first edit.
+  const [committed, setCommitted] = useState(initialSearchText.trim() !== '');
   const [dismissed, setDismissed] = useState(false);
   // Keyboard-highlighted suggestion (UX-12), as an index into the flat
   // `suggestions` list below; -1 = none, in which case Enter keeps its
@@ -526,6 +540,13 @@ function SearchControls({
       if (item instanceof SceneFlexItem) {
         const visible = committed && (rowsByCategory[category]?.length ?? 0) > 0;
         item.setState({ height: visible ? '400px' : '0px', minHeight: 0 });
+        // A panel collapsed to 0px still draws its own frame - top and bottom
+        // border, i.e. a 2px rule per hidden category stacked above the first
+        // real table. "transparent" drops border and background, so a
+        // collapsed panel leaves nothing behind.
+        if (item.state.body instanceof VizPanel) {
+          item.state.body.setState({ displayMode: visible ? 'default' : 'transparent' });
+        }
       }
     }
   }, [committed, rowsByCategory, resultsLayout]);
@@ -713,13 +734,13 @@ export function getSearchPage() {
     getScene: () => getSearchScene(searchVariable),
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), searchVariable] }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
-    ],
+    ]),
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });
 }

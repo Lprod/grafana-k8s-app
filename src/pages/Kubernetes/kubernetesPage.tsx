@@ -20,6 +20,7 @@ import {
   createThanosDatasourceVariable,
 } from '../../variables/datasourceVariables';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { pageToolbar } from '../../scenes/pageToolbar';
 import { jumpControl } from '../../scenes/objectJump';
 
 const KUBERNETES_ICON = 'public/plugins/debeka-k8s-app/img/kubernetes.png';
@@ -66,7 +67,7 @@ export function getKubernetesHomePage() {
     $variables: new SceneVariableSet({
       variables: [createThanosDatasourceVariable(), createClusterFilterVariable(), createNamespaceFilterVariable()],
     }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: CLUSTER_VARIABLE_NAME }),
       new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
@@ -75,7 +76,7 @@ export function getKubernetesHomePage() {
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });
 }

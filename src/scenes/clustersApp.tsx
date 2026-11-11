@@ -68,6 +68,7 @@ import { attachExploreMenus } from './panelExplore';
 import { SectionHeading } from './sectionHeading';
 import { InvestigateEntityButton } from './investigateEntityButton';
 import { copyLinkControl } from './copyLink';
+import { pageToolbar } from './pageToolbar';
 import { jumpControl } from './objectJump';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/clusters`;
@@ -402,7 +403,7 @@ function getClusterOverviewScene(cluster: string, clusterRegex: string) {
     queries: [{ refId: 'health', expr: buildClusterHealthQuery(clusterRegex), instant: true }],
   });
 
-  const healthBanner = new ClusterHealthBanner({ $data: healthRunner });
+  const healthBanner = new ClusterHealthBanner({ $data: healthRunner, cluster });
 
   const alertsBadgeRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
@@ -1844,14 +1845,14 @@ function getClusterDetailPage(routeMatch: SceneRouteMatch<{ cluster: string }>, 
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable()] }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new SceneControlsSpacer(),
       new SceneTimePicker({}),
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   });
 }
@@ -1866,14 +1867,14 @@ const clustersPage = new SceneAppPage({
   $variables: new SceneVariableSet({
     variables: [createThanosDatasourceVariable(), createClusterFilterVariable()],
   }),
-  controls: [
+  controls: pageToolbar([
     new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
     new SceneControlsSpacer(),
     new SceneTimePicker({}),
     new SceneRefreshPicker({ refresh: '1m' }),
     copyLinkControl(),
     jumpControl(),
-  ],
+  ]),
   preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
   drilldowns: [
     {

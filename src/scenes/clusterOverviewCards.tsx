@@ -1,9 +1,11 @@
 import React from 'react';
-import { DataFrame, getValueFormat, GrafanaTheme2 } from '@grafana/data';
+import { DataFrame, getValueFormat, GrafanaTheme2, LoadingState, locationUtil, PanelData } from '@grafana/data';
 import { SceneComponentProps, SceneObjectBase, SceneObjectState, sceneGraph } from '@grafana/scenes';
-import { Alert, Icon, useStyles2, useTheme2 } from '@grafana/ui';
+import { Icon, LinkButton, Spinner, useStyles2, useTheme2 } from '@grafana/ui';
 import { css } from '@emotion/css';
 import { formatDisplay } from './tableCells';
+import { CLUSTER_TESTS_DASHBOARD_PATH } from '../constants';
+import { THANOS_VARIABLE_NAME } from '../variables/datasourceVariables';
 
 // Custom, non-panel building blocks for the cluster Overview tab, styled to
 // match the "Cluster information" cards and health banner in Grafana's own
@@ -139,34 +141,120 @@ function InfoCardRenderer({ model }: SceneComponentProps<InfoCard>) {
   );
 }
 
+// What a health banner can honestly claim about its own data.
+//
+// Every banner below derives "healthy" from the *absence* of something - no
+// firing alerts, no bad node condition. With no data at all that reads the
+// same as a clean bill of health, so each of them used to show a green
+// "... is healthy" / "No firing alerts" both while its query was still in
+// flight and - worse - when the query had failed outright (datasource down,
+// timeout, a rejected PromQL). On a page people open *because* something is
+// wrong, a green banner that only means "I could not find out" is the one
+// mistake it must not make.
+//
+// "loading" only while there is nothing to show yet: SceneQueryRunner keeps
+// the previous frames during a refresh, so an already-rendered verdict stays
+// up instead of flickering every refresh interval.
+type HealthDataState = 'loading' | 'error' | 'ready';
+
+function healthDataState(data: PanelData | undefined): HealthDataState {
+  if (data?.state === LoadingState.Error) {
+    return 'error';
+  }
+  if (!data || ((data.state === LoadingState.Loading || data.state === LoadingState.NotStarted) && data.series.length === 0)) {
+    return 'loading';
+  }
+  return 'ready';
+}
+
+function HealthBannerNotice({ state, subject }: { state: 'loading' | 'error'; subject: string }) {
+  const theme = useTheme2();
+  const styles = useStyles2(healthBannerStyles);
+  if (state === 'loading') {
+    return (
+      <div className={styles.wrapper} style={{ background: theme.colors.background.secondary, borderColor: theme.colors.border.weak }} role="status">
+        <Spinner inline />
+        <span className={styles.text}>Checking {subject.toLowerCase()} health…</span>
+      </div>
+    );
+  }
+  const color = theme.colors.warning;
+  return (
+    <div className={styles.wrapper} style={{ background: color.transparent, borderColor: color.border }} role="alert">
+      <Icon name="question-circle" size="xl" style={{ color: color.text }} />
+      <span className={styles.text}>{subject} health unknown - the health query failed</span>
+    </div>
+  );
+}
+
 // Cluster Health banner: 0 = healthy, 1 = degraded (no user impact),
 // 2 = degraded (user impact). Rendered as a full-width Alert banner (like
 // Grafana's own "Kubernetes Monitoring is not functioning fully" notice)
 // instead of a stat panel.
-interface ClusterHealthBannerState extends SceneObjectState {}
+interface ClusterHealthBannerState extends SceneObjectState {
+  cluster: string;
+}
 
 export class ClusterHealthBanner extends SceneObjectBase<ClusterHealthBannerState> {
   static Component = ClusterHealthBannerRenderer;
 }
 
 function ClusterHealthBannerRenderer({ model }: SceneComponentProps<ClusterHealthBanner>) {
+  const { cluster } = model.useState();
   const { data } = sceneGraph.getData(model).useState();
+  const { from, to } = sceneGraph.getTimeRange(model).useState();
+  const theme = useTheme2();
+  const styles = useStyles2(healthBannerStyles);
   const value = data?.series?.[0]?.fields.find((f) => f.type === 'number')?.values[0];
+  const dataState = healthDataState(data);
 
-  if (value === undefined || value === null) {
-    return (
-      <Alert severity="info" title="Cluster health unknown">
-        No health check data available for this cluster yet.
-      </Alert>
-    );
+  if (dataState !== 'ready') {
+    return <HealthBannerNotice state={dataState} subject="Cluster" />;
   }
-  if (value === 0) {
-    return <Alert severity="success" title="Cluster is healthy" />;
-  }
-  if (value === 1) {
-    return <Alert severity="warning" title="Cluster is degraded (no user impact)" />;
-  }
-  return <Alert severity="error" title="Cluster is degraded (user impact)" />;
+
+  // "Degraded" on its own says that a health check failed, not which one or
+  // why - the banner was a dead end. The checks have a dashboard of their
+  // own; this hands over the cluster, the page's Thanos data source and the
+  // time range, so it opens on the same situation. Shown in every state: it
+  // is also the place to look when the banner has no data at all.
+  const params = new URLSearchParams({
+    'var-cluster': cluster,
+    'var-datasource': sceneGraph.interpolate(model, `\${${THANOS_VARIABLE_NAME}}`),
+    from,
+    to,
+  });
+  const testsUrl = locationUtil.assureBaseUrl(`${CLUSTER_TESTS_DASHBOARD_PATH}?${params.toString()}`);
+
+  const known = value !== undefined && value !== null;
+  const severity: BannerSeverity = !known ? 'info' : value === 0 ? 'success' : value === 1 ? 'warning' : 'error';
+  const message = !known
+    ? 'Cluster health unknown - no health check data for this cluster yet'
+    : value === 0
+      ? 'Cluster is healthy'
+      : value === 1
+        ? 'Cluster is degraded (no user impact)'
+        : 'Cluster is degraded (user impact)';
+  const iconName =
+    severity === 'error' ? 'exclamation-circle' : severity === 'warning' ? 'exclamation-triangle' : severity === 'info' ? 'info-circle' : 'check';
+  const color = theme.colors[severity];
+
+  return (
+    <div className={styles.wrapper} style={{ background: color.transparent, borderColor: color.border }} role={severity === 'success' ? 'status' : 'alert'}>
+      <Icon name={iconName} size="xl" style={{ color: color.text }} />
+      <span className={styles.text}>{message}</span>
+      <LinkButton
+        href={testsUrl}
+        target="_blank"
+        rel="noreferrer"
+        variant="secondary"
+        size="sm"
+        icon="external-link-alt"
+        tooltip="Open the cluster-tests dashboard for this cluster - the health checks behind this banner"
+      >
+        Cluster tests
+      </LinkButton>
+    </div>
+  );
 }
 
 // Compact, clickable pill used as an alerts action button - shared by
@@ -220,26 +308,56 @@ function AlertsActionButton({
   hasCritical,
   hasWarning,
   alertsUrl,
+  muted = false,
 }: {
   total: number;
   hasCritical: boolean;
   hasWarning: boolean;
   alertsUrl: string;
+  // For a banner that is *not* healthy for a reason other than alerts (a
+  // workload with unready pods): "no firing alerts" is then still true, but
+  // a green tick next to "Workload is not healthy" reads as the page
+  // contradicting itself. Muted, the zero count is stated neutrally - grey,
+  // no tick - as the plain fact it is. Counts above zero are never muted.
+  muted?: boolean;
 }) {
   const styles = useStyles2(alertsBadgeStyles);
   const theme = useTheme2();
+  const neutral = muted && total === 0;
   const colorName = total === 0 ? 'green' : hasCritical ? 'red' : hasWarning ? 'orange' : 'blue';
-  const color = theme.visualization.getColorByName(colorName);
+  const color = neutral ? theme.colors.text.secondary : theme.visualization.getColorByName(colorName);
   const label = total === 0 ? 'No firing alerts' : `${total} firing alert${total === 1 ? '' : 's'}`;
 
   return (
     <button
       className={styles.badge}
-      style={{ color, borderColor: color, background: `${color}1A` }}
+      style={
+        neutral
+          ? { color, borderColor: theme.colors.border.medium, background: 'transparent', fontWeight: 400 }
+          : { color, borderColor: color, background: `${color}1A` }
+      }
       onClick={() => window.location.assign(alertsUrl)}
     >
-      <Icon name={total === 0 ? 'check-circle' : 'exclamation-triangle'} />
+      <Icon name={neutral ? 'bell-slash' : total === 0 ? 'check-circle' : 'exclamation-triangle'} />
       {label}
+    </button>
+  );
+}
+
+// The same pill while its count is not known (yet) - see healthDataState.
+// Still a link: the Alerts page is exactly where to look when this page
+// cannot tell.
+function AlertsUnknownButton({ state, alertsUrl }: { state: 'loading' | 'error'; alertsUrl: string }) {
+  const styles = useStyles2(alertsBadgeStyles);
+  const theme = useTheme2();
+  return (
+    <button
+      className={styles.badge}
+      style={{ color: theme.colors.text.secondary, borderColor: theme.colors.border.medium, background: theme.colors.background.secondary }}
+      onClick={() => window.location.assign(alertsUrl)}
+    >
+      {state === 'loading' ? <Spinner inline /> : <Icon name="question-circle" />}
+      {state === 'loading' ? 'Checking alerts…' : 'Alert count unknown'}
     </button>
   );
 }
@@ -284,32 +402,41 @@ type BannerSeverity = keyof typeof SEVERITY_RANK;
 // Not all pods ready is a warning; zero ready (including a genuine 0/0,
 // scaled to zero) is treated the same as a critical alert - a fully-down
 // workload shouldn't read as merely "warning".
-function podReadinessSeverity(frames: DataFrame[]): BannerSeverity | null {
+//
+// Returns the reason alongside the severity ("0 of 2 pods ready") so the
+// banner can say *why* it is red instead of leaving that to be inferred.
+interface PodFinding {
+  severity: BannerSeverity;
+  reason: string;
+}
+
+function podReadinessFinding(frames: DataFrame[]): PodFinding | null {
   const readyValue = frames.find((f) => f.refId === 'ready')?.fields.find((f) => f.type === 'number')?.values[0];
   const desiredValue = frames.find((f) => f.refId === 'desired')?.fields.find((f) => f.type === 'number')?.values[0];
   if (typeof readyValue !== 'number' || typeof desiredValue !== 'number') {
     return null;
   }
+  const reason = `${readyValue} of ${desiredValue} pod${desiredValue === 1 ? '' : 's'} ready`;
   if (readyValue === 0) {
-    return 'error';
+    return { severity: 'error', reason };
   }
-  return readyValue < desiredValue ? 'warning' : null;
+  return readyValue < desiredValue ? { severity: 'warning', reason } : null;
 }
 
 // Reads the Pod Drilldown's own 'phase' refId (see buildPodStatusQuery) off
-// this banner's $data, if present - same idea as podReadinessSeverity above,
+// this banner's $data, if present - same idea as podReadinessFinding above,
 // just for a single pod, which has no ready/desired replica count of its
 // own to compare. Mirrors podStatusColor's own phase tiers (podsPage.tsx):
 // Running/Succeeded is healthy, Pending is a warning (the pod exists but
 // isn't up yet), Failed/Unknown is critical (the pod isn't running at all).
-function podPhaseSeverity(frames: DataFrame[]): BannerSeverity | null {
+function podPhaseFinding(frames: DataFrame[]): PodFinding | null {
   const phase = frames.find((f) => f.refId === 'phase')?.fields.find((f) => f.name === 'phase')?.values[0] as string | undefined;
   switch (phase) {
     case 'Pending':
-      return 'warning';
+      return { severity: 'warning', reason: `phase ${phase}` };
     case 'Failed':
     case 'Unknown':
-      return 'error';
+      return { severity: 'error', reason: `phase ${phase}` };
     default:
       return null;
   }
@@ -334,11 +461,15 @@ function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceH
   const theme = useTheme2();
   const styles = useStyles2(healthBannerStyles);
   const frames = data?.series ?? [];
+  const dataState = healthDataState(data);
+  if (dataState !== 'ready') {
+    return <HealthBannerNotice state={dataState} subject={subject} />;
+  }
   // alertsSeverityCounts sums the first numeric field off every frame it's
   // given - correct when this banner's $data only ever held the 'alerts'
   // query, but the Workload/Pod Drilldown's own healthRunner now also
   // shares this $data with 'ready'/'desired' (or 'phase') refIds for
-  // podReadinessSeverity/podPhaseSeverity below. Passing the unfiltered
+  // podReadinessFinding/podPhaseFinding below. Passing the unfiltered
   // frames here would add those pod-readiness numbers straight into the
   // alert count/severity - same refId-scoping NodeHealthBanner's own
   // alertFrames already does.
@@ -348,17 +479,16 @@ function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceH
   // Workload usage sets 'ready'/'desired' refIds, Pod usage sets a 'phase'
   // one, Namespace usage sets neither - mutually exclusive per page, so
   // whichever one actually finds data wins (the other is always null).
-  const podsSeverity = podReadinessSeverity(frames) ?? podPhaseSeverity(frames);
-  const severity = podsSeverity && SEVERITY_RANK[podsSeverity] > SEVERITY_RANK[alertSeverity] ? podsSeverity : alertSeverity;
+  const podFinding = podReadinessFinding(frames) ?? podPhaseFinding(frames);
+  const severity = podFinding && SEVERITY_RANK[podFinding.severity] > SEVERITY_RANK[alertSeverity] ? podFinding.severity : alertSeverity;
 
-  // A workload with unready pods but zero real alerts still needs to read
-  // as "not healthy" and show a non-zero count on the action button - same
-  // combined severity driving both, so they can't disagree with each other.
-  const effectiveTotal = Math.max(total, podsSeverity ? 1 : 0);
-  const effectiveHasCritical = hasCritical || podsSeverity === 'error';
-  const effectiveHasWarning = hasWarning || podsSeverity === 'warning';
-
-  const message = severity === 'success' ? `${subject} is healthy` : `${subject} is not healthy`;
+  // Unready pods make the banner itself red and say so in words. They used to
+  // be folded into the alerts button instead - a workload with 0 of 2 pods
+  // ready and no alert at all showed "1 firing alert", a count of something
+  // that did not exist, on a button that opens an Alerts page with nothing
+  // on it. The button now only ever counts real alerts.
+  const message =
+    severity === 'success' ? `${subject} is healthy` : `${subject} is not healthy${podFinding ? ` - ${podFinding.reason}` : ''}`;
   const iconName =
     severity === 'error' ? 'exclamation-circle' : severity === 'warning' ? 'exclamation-triangle' : severity === 'info' ? 'info-circle' : 'check';
   const color = theme.colors[severity];
@@ -367,7 +497,7 @@ function NamespaceHealthBannerRenderer({ model }: SceneComponentProps<NamespaceH
     <div className={styles.wrapper} style={{ background: color.transparent, borderColor: color.border }} role={severity === 'success' ? 'status' : 'alert'}>
       <Icon name={iconName} size="xl" style={{ color: color.text }} />
       <span className={styles.text}>{message}</span>
-      <AlertsActionButton total={effectiveTotal} hasCritical={effectiveHasCritical} hasWarning={effectiveHasWarning} alertsUrl={alertsUrl} />
+      <AlertsActionButton total={total} hasCritical={hasCritical} hasWarning={hasWarning} alertsUrl={alertsUrl} muted={severity !== 'success'} />
     </div>
   );
 }
@@ -398,6 +528,10 @@ function NodeHealthBannerRenderer({ model }: SceneComponentProps<NodeHealthBanne
   const theme = useTheme2();
   const styles = useStyles2(healthBannerStyles);
   const frames = data?.series ?? [];
+  const dataState = healthDataState(data);
+  if (dataState !== 'ready') {
+    return <HealthBannerNotice state={dataState} subject="Node" />;
+  }
   const conditionFrames = frames.filter((f) => f.refId === 'conditions');
   const alertFrames = frames.filter((f) => f.refId === 'alerts');
   const { total, hasCritical, hasWarning } = alertsSeverityCounts(alertFrames);
@@ -451,6 +585,10 @@ function ClusterAlertsBadgeRenderer({ model }: SceneComponentProps<ClusterAlerts
   const { alertsUrl } = model.useState();
   const { data } = sceneGraph.getData(model).useState();
   const { total, hasCritical, hasWarning } = alertsSeverityCounts(data?.series ?? []);
+  const dataState = healthDataState(data);
 
+  if (dataState !== 'ready') {
+    return <AlertsUnknownButton state={dataState} alertsUrl={alertsUrl} />;
+  }
   return <AlertsActionButton total={total} hasCritical={hasCritical} hasWarning={hasWarning} alertsUrl={alertsUrl} />;
 }

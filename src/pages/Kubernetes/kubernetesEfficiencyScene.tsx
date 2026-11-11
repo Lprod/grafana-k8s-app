@@ -9,7 +9,8 @@ import {
 } from '@grafana/scenes';
 import { BigValueColorMode, BigValueGraphMode, ThresholdsMode, VizOrientation } from '@grafana/schema';
 import React from 'react';
-import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { CLUSTER_VARIABLE_NAME, NAMESPACE_VARIABLE_NAME, THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { applyHomeFilters } from '../../queries/kubernetesOverviewQueries';
 import { SectionHeading } from '../../scenes/sectionHeading';
 import {
   kubernetesEfficiencyTableQueries,
@@ -19,6 +20,7 @@ import {
 } from '../../queries/kubernetesEfficiencyQueries';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 import { applyEntityDrilldownLinks } from '../../scenes/drilldownLinks';
+import { emptyTableMessage } from '../../scenes/tableEmptyState';
 
 // Same green/orange-background convention as Grafana's own reference for
 // this tab (distinct from the Overview tab's red/green - that one still
@@ -32,10 +34,15 @@ const efficiencyStatThresholds = {
   ],
 };
 
+// Every query on this tab goes through this - see applyHomeFilters.
+function substituteFilters(expr: string): string {
+  return applyHomeFilters(expr, `\${${CLUSTER_VARIABLE_NAME}:regex}`, `\${${NAMESPACE_VARIABLE_NAME}:regex}`);
+}
+
 function buildEfficiencyStatPanel(title: string, expr: string) {
   const runner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'value', expr, instant: true }],
+    queries: [{ refId: 'value', expr: substituteFilters(expr), instant: true }],
   });
   return PanelBuilders.stat()
     .setTitle(title)
@@ -47,14 +54,21 @@ function buildEfficiencyStatPanel(title: string, expr: string) {
     .build();
 }
 
-function buildWasteByNamespacePanel(title: string, expr: string) {
+// `unit`: the CPU query yields cores, the memory one is already divided down
+// to GiB - both used to render as a bare "0.670".
+// `setMin(0)`: without it the bar gauge scales each bar between the series'
+// own minimum and maximum over the time range, so a namespace whose waste is
+// steady (min == max) drew an *empty* bar next to its number, and bars were
+// not comparable with each other. From zero, bar length is the waste.
+function buildWasteByNamespacePanel(title: string, expr: string, unit: string) {
   const runner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'waste', expr, legendFormat: '{{cluster}} / {{namespace}}' }],
+    queries: [{ refId: 'waste', expr: substituteFilters(expr), legendFormat: '{{cluster}} / {{namespace}}' }],
   });
   return PanelBuilders.bargauge()
     .setTitle(title)
-    .setUnit('short')
+    .setUnit(unit)
+    .setMin(0)
     .setOption('orientation', VizOrientation.Horizontal)
     .setData(runner)
     .build();
@@ -63,11 +77,11 @@ function buildWasteByNamespacePanel(title: string, expr: string) {
 function buildEfficiencyTable(def: (typeof kubernetesEfficiencyTableQueries)[number]) {
   const runner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'table', expr: def.expr, format: 'table', instant: true }],
+    queries: [{ refId: 'table', expr: substituteFilters(def.expr), format: 'table', instant: true }],
   });
   const data = new SceneDataTransformer({
     $data: runner,
-    transformations: [{ id: 'organize', options: { excludeByName: { Time: true } } }],
+    transformations: [{ id: 'organize', options: { excludeByName: { Time: true }, renameByName: { Value: def.valueTitle } } }],
   });
   // Every one of these 5 tables returns cluster/namespace/pod/container plus
   // workload/workload_type (each query already joins the pod's own ownership
@@ -77,8 +91,9 @@ function buildEfficiencyTable(def: (typeof kubernetesEfficiencyTableQueries)[num
     .setOption('enablePagination', true)
     .setTitle(def.title)
     .setData(data)
-    .setNoValue(def.noValueText)
-    .setOverrides(applyEntityDrilldownLinks)
+    .setBehaviors([emptyTableMessage(def.noValueText)])
+    // By the field's real name: renameByName above only sets a display name.
+    .setOverrides((b) => applyEntityDrilldownLinks(b).matchFieldsWithName('Value').overrideUnit(def.valueUnit))
     .build();
 }
 
@@ -112,11 +127,11 @@ export function getKubernetesEfficiencyScene() {
           children: [
             new SceneFlexItem({
               height: 300,
-              body: buildWasteByNamespacePanel('CPU waste by namespace (top 10)', kubernetesEfficiencyWasteByNamespaceQueries.cpu),
+              body: buildWasteByNamespacePanel('CPU waste by namespace (top 10)', kubernetesEfficiencyWasteByNamespaceQueries.cpu, 'cores'),
             }),
             new SceneFlexItem({
               height: 300,
-              body: buildWasteByNamespacePanel('Memory waste by namespace (top 10)', kubernetesEfficiencyWasteByNamespaceQueries.memory),
+              body: buildWasteByNamespacePanel('Memory waste by namespace (top 10)', kubernetesEfficiencyWasteByNamespaceQueries.memory, 'gbytes'),
             }),
           ],
         }),

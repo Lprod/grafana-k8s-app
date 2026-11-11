@@ -319,6 +319,46 @@ export function sortRowsByRank(
     );
 }
 
+// Keeps only the rows that have a value in `fieldName`; with none left, the
+// frame is handed on without fields so the panel shows its empty state
+// instead of a header row over nothing.
+//
+// For the job tables: their START query only returns jobs that started
+// inside the selected time range, while the queries merged next to it
+// (success/completion/owner) return every job kube-state-metrics still
+// knows. The merge therefore listed every older job as well - as a row with
+// an empty START and END. This drops those rows, which is what the range
+// filter in the START query was meant to do in the first place.
+//
+// Not Grafana's own `filterByValue`: when *no* job started in the range the
+// START field does not exist at all, and filterByValue skips a filter whose
+// field is missing - leaving exactly the all-blank table this is here to
+// prevent. Must run before attachFieldValues (it does not touch the per-row
+// arrays that one stores in `config.custom`).
+export function keepRowsWithValue(fieldName: string): CustomTransformOperator {
+  return () => (source) =>
+    source.pipe(
+      map((frames) =>
+        frames.map((frame) => {
+          const field = frame.fields.find((f) => f.name === fieldName);
+          const keep: number[] = [];
+          field?.values.forEach((value, index) => {
+            if (value !== null && value !== undefined && !Number.isNaN(value)) {
+              keep.push(index);
+            }
+          });
+          if (keep.length === frame.length) {
+            return frame;
+          }
+          if (keep.length === 0) {
+            return { ...frame, fields: [], length: 0 };
+          }
+          return { ...frame, length: keep.length, fields: frame.fields.map((f) => ({ ...f, values: keep.map((i) => f.values[i]) })) };
+        })
+      )
+    );
+}
+
 export const DESIRED_PODS_KEY = 'desiredPodsValues';
 
 export function attachDesiredPodsField(readyFieldName: string, desiredFieldName: string): CustomTransformOperator {

@@ -1,6 +1,7 @@
 import { SceneObject, VizPanel, VizPanelMenu, getExploreURL, sceneGraph } from '@grafana/scenes';
 import { locationService } from '@grafana/runtime';
 import { exportPanelCsv } from './tableExport';
+import { addIdentityColumnWidths } from './identityColumns';
 
 function isVizPanel(obj: SceneObject): obj is VizPanel {
   return obj instanceof VizPanel;
@@ -14,6 +15,10 @@ function isVizPanel(obj: SceneObject): obj is VizPanel {
 function addExploreMenuItem(panel: VizPanel) {
   if (panel.state.menu) {
     return;
+  }
+  // Same "once per panel, on first activation" hook - see identityColumns.ts.
+  if (panel.state.pluginId === 'table') {
+    addIdentityColumnWidths(panel);
   }
   panel.setState({
     menu: new VizPanelMenu({

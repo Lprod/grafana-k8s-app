@@ -71,7 +71,8 @@ import {
   JobPodsTableQueryKey,
   JobPreviousRunsTableQueryKey,
 } from '../../queries/jobOverviewQueries';
-import { attachFieldValues } from '../../scenes/tableCells';
+import { attachFieldValues, keepRowsWithValue } from '../../scenes/tableCells';
+import { emptyTableMessage } from '../../scenes/tableEmptyState';
 import { InfoCard, findFieldAcrossFrames } from '../../scenes/clusterOverviewCards';
 import { SectionHeading } from '../../scenes/sectionHeading';
 import { InvestigateEntityButton } from '../../scenes/investigateEntityButton';
@@ -92,6 +93,7 @@ import { getCronjobMemoryScene } from './cronjobMemoryScene';
 import { getJobCpuScene } from './jobCpuScene';
 import { getJobMemoryScene } from './jobMemoryScene';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { pageToolbar } from '../../scenes/pageToolbar';
 import { jumpControl } from '../../scenes/objectJump';
 import { getRawLogsTabScene } from '../../scenes/logPanels';
 import { buildWorkloadEventsQuery, buildWorkloadLogsQuery } from '../../queries/namespaceOverviewQueries';
@@ -301,6 +303,8 @@ function getJobsScene(clusterRegex: string, namespaceRegex: string) {
     $data: tableRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // Only jobs that started in the selected time range - see keepRowsWithValue.
+      keepRowsWithValue('Value #start'),
       {
         id: 'calculateField',
         options: {
@@ -349,6 +353,7 @@ function getJobsScene(clusterRegex: string, namespaceRegex: string) {
   const table = PanelBuilders.table()
     .setOption('enablePagination', true)
     .setTitle('Jobs')
+    .setBehaviors([emptyTableMessage('No jobs started in the selected time range.')])
     .setData(tableData)
     .setOverrides((b) =>
       b
@@ -376,6 +381,10 @@ function getJobsScene(clusterRegex: string, namespaceRegex: string) {
         .overrideUnit('dateTimeFromNow')
         .matchFieldsWithName('DURATION')
         .overrideUnit('dtdurationms')
+        // A job with no END yet (still running) has no duration either - the
+        // subtraction yields NaN, which the table printed literally. Same
+        // dash the Runs tables below already use (durationMappings).
+        .overrideMappings(durationMappings)
         .matchFieldsWithName('PODS/COMPLETION')
         .overrideCustomFieldConfig('cellOptions', { type: TableCellDisplayMode.Custom, cellComponent: jobPodsCompletionCell() } as any)
     )
@@ -680,6 +689,8 @@ function getCronjobOverviewScene(
     $data: runsRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // Only jobs that started in the selected time range - see keepRowsWithValue.
+      keepRowsWithValue('Value #start'),
       {
         id: 'calculateField',
         options: {
@@ -735,6 +746,7 @@ function getCronjobOverviewScene(
   const runsTable = PanelBuilders.table()
     .setOption('enablePagination', true)
     .setTitle('Runs')
+    .setBehaviors([emptyTableMessage('No jobs started in the selected time range.')])
     .setData(runsData)
     .setOverrides((b) =>
       b
@@ -1201,6 +1213,8 @@ function getJobOverviewScene(
     $data: previousRunsRunner,
     transformations: [
       { id: 'merge', options: {} },
+      // Only jobs that started in the selected time range - see keepRowsWithValue.
+      keepRowsWithValue('Value #start'),
       {
         id: 'calculateField',
         options: {
@@ -1257,6 +1271,7 @@ function getJobOverviewScene(
   const previousRunsTable = PanelBuilders.table()
     .setOption('enablePagination', true)
     .setTitle('Previous runs')
+    .setBehaviors([emptyTableMessage('No jobs started in the selected time range.')])
     .setData(previousRunsData)
     .setOverrides((b) =>
       b
@@ -1398,7 +1413,7 @@ function getCronjobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; nam
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
       new SceneControlsSpacer(),
@@ -1406,7 +1421,7 @@ function getCronjobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; nam
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
 }
@@ -1471,7 +1486,7 @@ function getJobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; namespa
     tabs,
     $timeRange: new SceneTimeRange({ from: 'now-1h', to: 'now', timeZone: 'browser' }),
     $variables: new SceneVariableSet({ variables: [createThanosDatasourceVariable(), createLogsDatasourceVariable()] }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: LOGS_DATASOURCE_VARIABLE_NAME }),
       new SceneControlsSpacer(),
@@ -1479,7 +1494,7 @@ function getJobDetailPage(routeMatch: SceneRouteMatch<{ cluster: string; namespa
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`, `var-${LOGS_DATASOURCE_VARIABLE_NAME}`],
   });
 }
@@ -1511,7 +1526,7 @@ export function getJobsPage() {
     $variables: new SceneVariableSet({
       variables: [createThanosDatasourceVariable(), createClusterFilterVariable(), createNamespaceFilterVariable()],
     }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: CLUSTER_VARIABLE_NAME }),
       new VariableValueControl({ variableName: NAMESPACE_VARIABLE_NAME }),
@@ -1520,7 +1535,7 @@ export function getJobsPage() {
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     // Deliberately excludes the filter variables - see the same note in
     // namespacesPage.tsx/alertsPage.ts.
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],

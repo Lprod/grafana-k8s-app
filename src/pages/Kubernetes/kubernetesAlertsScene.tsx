@@ -1,13 +1,16 @@
 import { EmbeddedScene, PanelBuilders, SceneFlexItem, SceneFlexLayout, SceneQueryRunner } from '@grafana/scenes';
 import { LegendDisplayMode } from '@grafana/schema';
-import { THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { CLUSTER_VARIABLE_NAME, NAMESPACE_VARIABLE_NAME, THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 import { PanelTimeRangeCompare } from '../../scenes/panelTimeRangeCompare';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 
-// Given verbatim - see kubernetesOverviewQueries.ts's header comment for
-// this repo's literal-translation convention for queries pasted from
-// Grafana's own Kubernetes Monitoring app.
-const firingAlertsByClusterQuery = `count by(cluster) (ALERTS{alertstate="firing", cluster=~".*"})`;
+// As given, except that it follows the page's own Cluster/Namespace pickers
+// instead of a fixed `cluster=~".*"` - same reason as applyHomeFilters
+// (kubernetesOverviewQueries.ts): this tab showed every cluster's alerts
+// whatever the pickers above it said. Both pickers' "All" value is ".*",
+// which also matches an alert with no namespace label at all, so an
+// unfiltered page still counts every firing alert.
+const firingAlertsByClusterQuery = `count by(cluster) (ALERTS{alertstate="firing", cluster=~"\${${CLUSTER_VARIABLE_NAME}:regex}", namespace=~"\${${NAMESPACE_VARIABLE_NAME}:regex}"})`;
 
 export function getKubernetesAlertsScene() {
   const runner = new SceneQueryRunner({

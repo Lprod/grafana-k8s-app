@@ -1,10 +1,35 @@
 // PromQL queries for the Kubernetes home page's Overview tab
 // (src/pages/Kubernetes/kubernetesOverviewScene.tsx), pasted verbatim from
-// Grafana's own Kubernetes Monitoring app (play.grafana.org). Several of the
-// 12 issue queries below hardcode `cluster=~".+"`/`namespace=~".+"` instead
-// of using `$cluster`/`$namespace` like the top stat queries do - kept as
-// given rather than "fixed" to use this page's filter variables, following
-// this repo's established literal-translation convention (see summary.md).
+// Grafana's own Kubernetes Monitoring app (play.grafana.org). The query
+// *text* below is still as given - several of the 12 issue queries hardcode
+// `cluster=~".+"`/`namespace=~".+"`, and the top stat queries only know
+// `$cluster` - but none of it reaches Prometheus in that form any more:
+// applyHomeFilters() below rewrites exactly those matchers to the page's own
+// Cluster/Namespace pickers.
+
+// Wires a home-page query to the page's Cluster and Namespace pickers.
+//
+// The page has always shown both pickers, but as pasted only the six top
+// tiles and the images table reacted to Cluster, and nothing at all reacted
+// to Namespace: selecting one cluster left all twelve issue tiles, the issue
+// detail table, the whole Efficiency tab and the Alerts tab counting every
+// cluster, with nothing on screen saying so. A filter that silently does
+// nothing is worse than no filter - the numbers look scoped and are not.
+//
+// Same technique as substituteJobsClusterNamespace (jobsQueries.ts): a
+// literal replacement of exactly these matcher spellings, so anything else
+// in a query (`pod=~".+"`, `owner_name!=""`, the Clusters tile's deliberate
+// `cluster=~".*"`) is left alone. Both pickers' "All" value is ".*", which
+// matches the same series ".+" did for these metrics (every one of them
+// carries the label), so an unfiltered page returns what it always has.
+// Node-level queries carry no namespace matcher and so, correctly, do not
+// react to the Namespace picker.
+export function applyHomeFilters(expr: string, clusterRegex: string, namespaceRegex: string): string {
+  return expr
+    .replaceAll('cluster=~".+"', `cluster=~"${clusterRegex}"`)
+    .replaceAll('cluster=~"$cluster"', `cluster=~"${clusterRegex}"`)
+    .replaceAll('namespace=~".+"', `namespace=~"${namespaceRegex}"`);
+}
 
 export const kubernetesTopStatQueries = {
   clusters: `count(group by (cluster) (kube_pod_info{cluster=~".*", namespace=~".+"}))`,

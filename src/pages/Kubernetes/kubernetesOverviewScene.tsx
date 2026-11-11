@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   EmbeddedScene,
   PanelBuilders,
@@ -10,16 +10,16 @@ import {
   SceneObjectState,
   SceneQueryRunner,
   SceneReactObject,
-  VizPanel,
 } from '@grafana/scenes';
 import { BarGaugeDisplayMode, BigValueColorMode, BigValueGraphMode, TableCellDisplayMode, ThresholdsMode } from '@grafana/schema';
 import { FieldColorModeId } from '@grafana/data';
 import { Combobox, ComboboxOption, Icon } from '@grafana/ui';
 import { PLUGIN_BASE_URL, ROUTES } from '../../constants';
-import { CLUSTER_VARIABLE_NAME, THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
+import { CLUSTER_VARIABLE_NAME, NAMESPACE_VARIABLE_NAME, THANOS_VARIABLE_NAME } from '../../variables/datasourceVariables';
 import { SectionHeading } from '../../scenes/sectionHeading';
 import { PanelLinkTitleItem } from '../../scenes/panelLinks';
 import {
+  applyHomeFilters,
   deployedContainerImagesQuery,
   IssueQueryDef,
   kubernetesAvailabilityQueries,
@@ -31,6 +31,7 @@ import {
 } from '../../queries/kubernetesOverviewQueries';
 import { attachExploreMenus } from '../../scenes/panelExplore';
 import { applyEntityDrilldownLinks } from '../../scenes/drilldownLinks';
+import { emptyTableMessage } from '../../scenes/tableEmptyState';
 
 const CLUSTERS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Clusters}`;
 const NODES_URL = `${PLUGIN_BASE_URL}/${ROUTES.Nodes}`;
@@ -57,14 +58,15 @@ const issueCountThresholds = {
   ],
 };
 
-function substituteCluster(expr: string): string {
-  return expr.replaceAll('$cluster', `\${${CLUSTER_VARIABLE_NAME}:regex}`);
+// Every query on this tab goes through this - see applyHomeFilters.
+function substituteFilters(expr: string): string {
+  return applyHomeFilters(expr, `\${${CLUSTER_VARIABLE_NAME}:regex}`, `\${${NAMESPACE_VARIABLE_NAME}:regex}`);
 }
 
 function buildTopStatPanel(title: string, expr: string, linkUrl?: string) {
   const runner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'value', expr: substituteCluster(expr), instant: true }],
+    queries: [{ refId: 'value', expr: substituteFilters(expr), instant: true }],
   });
   const builder = PanelBuilders.stat()
     .setTitle(title)
@@ -93,39 +95,37 @@ function buildTopStatPanel(title: string, expr: string, linkUrl?: string) {
 // `queryRunner` is deliberately NOT a SceneObjectState field: any state
 // value that's itself a SceneObject gets auto-parented (SceneObjectBase's
 // `_setParent` walks all state values, not just `$`-prefixed ones), and
-// this same runner is also `$data` on the actual detail-table VizPanel -
-// two owners for one SceneObject trips Scenes' "already has a parent"
-// warning and silently reparents it. Keeping it a plain instance field
-// sidesteps that; its real (and only) scene-graph parent is the VizPanel.
+// this same runner already sits under the actual detail-table VizPanel (as
+// the `$data` of that panel's own transformer) - two owners for one
+// SceneObject trips Scenes' "already has a parent" warning and silently
+// reparents it. Keeping it a plain instance field sidesteps that; its real
+// (and only) place in the scene graph is under the VizPanel.
 interface DetailViewSelectionState extends SceneObjectState {
   selectedKey: KubernetesIssueKey;
+  // Bumped by a tile's "View detail" link (not by the dropdown) - see the
+  // renderer's scroll effect.
+  scrollRequest: number;
 }
 
 class DetailViewSelection extends SceneObjectBase<DetailViewSelectionState> {
   static Component = DetailViewSelectionRenderer;
   private queryRunner: SceneQueryRunner;
-  private detailTable: VizPanel;
 
-  constructor(state: DetailViewSelectionState, queryRunner: SceneQueryRunner, detailTable: VizPanel) {
+  constructor(state: DetailViewSelectionState, queryRunner: SceneQueryRunner) {
     super(state);
     this.queryRunner = queryRunner;
-    this.detailTable = detailTable;
   }
 
-  select(key: KubernetesIssueKey) {
+  select(key: KubernetesIssueKey, options: { scrollIntoView?: boolean } = {}) {
     const def = kubernetesIssueQueries[key];
-    this.queryRunner.setState({ queries: [{ refId: 'detail', expr: def.expr, format: 'table', instant: true }] });
+    this.queryRunner.setState({ queries: [{ refId: 'detail', expr: substituteFilters(def.expr), format: 'table', instant: true }] });
     this.queryRunner.runQueries();
-    // Swaps the whole-panel empty-result message to match the newly
-    // selected issue (e.g. "No containers have been OOMKilled.") instead of
-    // leaving whichever issue's text was set when the table was first built.
-    this.detailTable.setState({
-      fieldConfig: {
-        ...this.detailTable.state.fieldConfig,
-        defaults: { ...this.detailTable.state.fieldConfig.defaults, noValue: def.noValueText },
-      },
+    // The table's empty-result sentence follows `selectedKey` by itself -
+    // see emptyTableMessage where the table is built.
+    this.setState({
+      selectedKey: key,
+      scrollRequest: this.state.scrollRequest + (options.scrollIntoView ? 1 : 0),
     });
-    this.setState({ selectedKey: key });
   }
 }
 
@@ -134,9 +134,19 @@ const detailViewOptions: Array<ComboboxOption<KubernetesIssueKey>> = (Object.key
 );
 
 function DetailViewSelectionRenderer({ model }: SceneComponentProps<DetailViewSelection>) {
-  const { selectedKey } = model.useState();
+  const { selectedKey, scrollRequest } = model.useState();
+  const ref = useRef<HTMLDivElement>(null);
+  // The detail table sits below three rows of tiles - on a normal screen it
+  // is under the fold, so clicking a tile's "View detail" swapped a table
+  // nobody could see and looked like a dead button. Bring it into view. Only
+  // for the tile links: picking from this dropdown means you are already here.
+  useEffect(() => {
+    if (scrollRequest > 0) {
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [scrollRequest]);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div ref={ref} style={{ display: 'flex', alignItems: 'center', gap: 8, scrollMarginTop: 96 }}>
       <span>Detail view</span>
       <div style={{ minWidth: 280 }}>
         <Combobox<KubernetesIssueKey>
@@ -193,7 +203,7 @@ function ViewDetailLinkRenderer({ model }: SceneComponentProps<ViewDetailLink>) 
 function buildIssueCountStatPanel(def: IssueQueryDef, detailView: DetailViewSelection, issueKey: KubernetesIssueKey) {
   const runner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'count', expr: `count(${def.expr})` }],
+    queries: [{ refId: 'count', expr: `count(${substituteFilters(def.expr)})` }],
   });
   return (
     PanelBuilders.stat()
@@ -209,7 +219,7 @@ function buildIssueCountStatPanel(def: IssueQueryDef, detailView: DetailViewSele
       // than "nothing wrong here", especially next to eleven siblings showing
       // real numbers. An explicit "0" says what's actually true.
       .setNoValue('0')
-      .setHeaderActions(new ViewDetailLink({ onSelect: () => detailView.select(issueKey) }))
+      .setHeaderActions(new ViewDetailLink({ onSelect: () => detailView.select(issueKey, { scrollIntoView: true }) }))
       .build()
   );
 }
@@ -240,26 +250,33 @@ export function getKubernetesOverviewScene() {
   const initialKey: KubernetesIssueKey = 'zero_replica_deployments';
   const detailQueryRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'detail', expr: kubernetesIssueQueries[initialKey].expr, format: 'table', instant: true }],
+    queries: [{ refId: 'detail', expr: substituteFilters(kubernetesIssueQueries[initialKey].expr), format: 'table', instant: true }],
   });
   // The 12 swapped-in issue queries carry different label sets (some
   // cluster+node, some cluster+namespace+pod, one cluster+namespace+
   // deployment), which is exactly the case applyEntityDrilldownLinks is
   // built for - it only touches whichever of those columns the currently
   // selected query actually returns.
+  // "Time" is just the instant the query ran - the same value in every row.
+  const detailData = new SceneDataTransformer({
+    $data: detailQueryRunner,
+    transformations: [{ id: 'organize', options: { excludeByName: { Time: true } } }],
+  });
+  const detailView = new DetailViewSelection({ selectedKey: initialKey, scrollRequest: 0 }, detailQueryRunner);
+
   const detailTable = PanelBuilders.table()
     .setOption('enablePagination', true)
     .setTitle('Issue details')
-    .setData(detailQueryRunner)
-    .setNoValue(kubernetesIssueQueries[initialKey].noValueText)
+    .setData(detailData)
+    // The reassuring sentence for whichever issue is selected right now
+    // ("No containers have been OOMKilled.") - only while the table is empty.
+    .setBehaviors([emptyTableMessage(() => kubernetesIssueQueries[detailView.state.selectedKey].noValueText)])
     .setOverrides(applyEntityDrilldownLinks)
     .build();
 
-  const detailView = new DetailViewSelection({ selectedKey: initialKey }, detailQueryRunner, detailTable);
-
   const imagesRunner = new SceneQueryRunner({
     datasource: { uid: `\${${THANOS_VARIABLE_NAME}}` },
-    queries: [{ refId: 'images', expr: substituteCluster(deployedContainerImagesQuery), format: 'table', instant: true }],
+    queries: [{ refId: 'images', expr: substituteFilters(deployedContainerImagesQuery), format: 'table', instant: true }],
   });
   const imagesData = new SceneDataTransformer({
     $data: imagesRunner,

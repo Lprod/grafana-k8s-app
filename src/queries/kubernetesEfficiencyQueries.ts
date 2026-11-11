@@ -2,9 +2,9 @@
 // (src/pages/Kubernetes/kubernetesEfficiencyScene.tsx), pasted verbatim from
 // Grafana's own Kubernetes Monitoring app (play.grafana.org). None of these
 // reference `$cluster`/`$namespace` - they filter with `.+` throughout, same
-// as most of the Overview tab's issue queries - kept as given rather than
-// wired to this page's filter variables (see kubernetesOverviewQueries.ts's
-// header comment for why).
+// as most of the Overview tab's issue queries. The scene passes every one of
+// them through applyHomeFilters (kubernetesOverviewQueries.ts), which turns
+// those matchers into the page's own Cluster/Namespace pickers.
 
 export const kubernetesEfficiencyTopStatQueries = {
   no_resource_requests: `count((max by (cluster, namespace, pod, container) (kube_pod_container_status_restarts_total{cluster=~".+", namespace=~".+"})) unless on (cluster, namespace, pod, container)(max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_requests{container!="POD", container!="", cluster=~".+", namespace=~".+"})))) or vector(0)`,
@@ -24,6 +24,12 @@ interface EfficiencyTableDef {
   title: string;
   expr: string;
   noValueText: string;
+  // What the query's bare "Value" column actually holds, and in which unit -
+  // it differs per table (a restart counter, a request, a request-minus-usage
+  // gap), and the last one is already divided down to GiB by the query.
+  // Without these all five tables showed an unlabelled "Value" of e.g. 0.5.
+  valueTitle: string;
+  valueUnit: string;
 }
 
 export const kubernetesEfficiencyTableQueries: EfficiencyTableDef[] = [
@@ -31,25 +37,35 @@ export const kubernetesEfficiencyTableQueries: EfficiencyTableDef[] = [
     title: 'Containers without resource requests - top 50',
     expr: `(topk(50, (max by (cluster, namespace, pod, container) (kube_pod_container_status_restarts_total{cluster=~".+", namespace=~".+"})) unless on (cluster, namespace, pod, container)(max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_requests{container!="POD", container!="", cluster=~".+", namespace=~".+"}))))) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}`,
     noValueText: 'All containers have resource requests set.',
+    valueTitle: 'Restarts',
+    valueUnit: 'short',
   },
   {
     title: 'Containers without memory limits - top 50',
     expr: `(topk(50, (max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_requests{container!="POD", container!="", cluster=~".+", namespace=~".+", resource=~"memory"}))) unless on (cluster, namespace, pod, container, asserts_env)(max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_limits{container!="POD", container!="", cluster=~".+", namespace=~".+", resource=~"memory"}))))) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}`,
     noValueText: 'All containers have memory limits set.',
+    valueTitle: 'Memory request',
+    valueUnit: 'bytes',
   },
   {
     title: 'Containers without CPU limits - top 50',
     expr: `(topk(50, (max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_requests{container!="POD", container!="", cluster=~".+", namespace=~".+", resource=~"cpu"}))) unless on (cluster, namespace, pod, container, asserts_env)(max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_limits{container!="POD", container!="", cluster=~".+", namespace=~".+", resource=~"cpu"}))))) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}`,
     noValueText: 'All containers have CPU limits set.',
+    valueTitle: 'CPU request',
+    valueUnit: 'cores',
   },
   {
     title: 'CPU over-requested containers - top 50 (request far exceeds usage)',
     expr: `sort_desc(((topk(50, (max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_requests{container!="POD", container!="", cluster=~".+", namespace=~".+", resource=~"cpu"})) - max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, namespace, node, pod, container) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{container!="POD", container!="", cluster=~".+", namespace=~".+"} or node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{container!="POD", container!="", cluster=~".+", namespace=~".+"}))) > 0.01)) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}) or ((topk(50, (max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_requests{container!="POD", container!="", cluster=~".+", namespace=~".+", resource=~"cpu"})) - max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, namespace, node, pod, container) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{container!="POD", container!="", cluster=~".+", namespace=~".+"} or node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{container!="POD", container!="", cluster=~".+", namespace=~".+"}))) > 0.01)) unless on (cluster, namespace, pod)(namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"})))`,
     noValueText: 'No containers with significant CPU over-requests detected.',
+    valueTitle: 'Requested but unused',
+    valueUnit: 'cores',
   },
   {
     title: 'Memory over-requested containers - top 50 (request far exceeds usage)',
     expr: `sort_desc(((topk(50, (max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_requests{container!="POD", container!="", cluster=~".+", namespace=~".+", resource=~"memory"})) - max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, image) (node_namespace_pod_container:container_memory_working_set_bytes{container!="POD", container!="", cluster=~".+", namespace=~".+"}))) / (1024 * 1024 * 1024) > 0.01)) * on (cluster, namespace, pod) group_left (workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"}) or ((topk(50, (max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, resource) (kube_pod_container_resource_requests{container!="POD", container!="", cluster=~".+", namespace=~".+", resource=~"memory"})) - max by (cluster, namespace, pod, container, asserts_env) (max by (cluster, node, namespace, pod, container, image) (node_namespace_pod_container:container_memory_working_set_bytes{container!="POD", container!="", cluster=~".+", namespace=~".+"}))) / (1024 * 1024 * 1024) > 0.01)) unless on (cluster, namespace, pod)(namespace_workload_pod:kube_pod_owner:relabel{cluster=~".+"})))`,
     noValueText: 'No containers with significant memory over-requests detected.',
+    valueTitle: 'Requested but unused',
+    valueUnit: 'gbytes',
   },
 ];

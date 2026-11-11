@@ -38,6 +38,7 @@ import { attachExploreMenus } from '../../scenes/panelExplore';
 import { applyEntityDrilldownLinks } from '../../scenes/drilldownLinks';
 import { sortRowsByRank } from '../../scenes/tableCells';
 import { copyLinkControl } from '../../scenes/copyLink';
+import { pageToolbar } from '../../scenes/pageToolbar';
 import { jumpControl } from '../../scenes/objectJump';
 
 const ALERTS_URL = `${PLUGIN_BASE_URL}/${ROUTES.Alerts}`;
@@ -309,7 +310,7 @@ export function getAlertsPage() {
         createAlertnameFilterVariable(),
       ],
     }),
-    controls: [
+    controls: pageToolbar([
       new VariableValueControl({ variableName: THANOS_VARIABLE_NAME }),
       new VariableValueControl({ variableName: CLUSTER_VARIABLE_NAME }),
       new VariableValueControl({ variableName: NODES_VARIABLE_NAME }),
@@ -322,7 +323,7 @@ export function getAlertsPage() {
       new SceneRefreshPicker({ refresh: '1m' }),
       copyLinkControl(),
       jumpControl(),
-    ],
+    ]),
     // Deliberately excludes the filter variables - see the same note in
     // namespacesPage.ts.
     preserveUrlKeys: ['from', 'to', 'timezone', 'refresh', `var-${THANOS_VARIABLE_NAME}`],
