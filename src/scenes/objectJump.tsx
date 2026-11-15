@@ -20,6 +20,7 @@ import {
 } from '../pages/Search/searchPage';
 import { SEARCH_VARIABLE_NAME, THANOS_VARIABLE_NAME, createSearchTextVariable } from '../variables/datasourceVariables';
 import { getDatasourceDefaults } from '../utils/appJsonData';
+import { rememberedThanosDatasource } from '../variables/thanosDatasourceScope';
 import { RECENT_KIND_BADGE, RecentObject, loadRecentObjects, parseRecentObject } from './recentObjects';
 
 // Jump-to-object overlay (F-04): press "/" anywhere in the app, type part of
@@ -58,9 +59,9 @@ export function isJumpShortcut(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaK
   return e.key === JUMP_SHORTCUT && !e.ctrlKey && !e.metaKey && !e.altKey && !isEditableTarget(e.target);
 }
 
-// The page's own Thanos datasource choice, if it has one in the URL. Scenes
-// may suffix the key ("var-datasource-6", see datasourceVariables.ts), so
-// match on the prefix.
+// The page's own Thanos datasource choice, if it has one in the URL. Links
+// from before v3.0.4 may carry a suffixed key ("var-datasource-6", see
+// thanosDatasourceScope.ts), so match on the prefix.
 export function datasourceFromSearch(search: string): string | undefined {
   const params = new URLSearchParams(search);
   const pattern = new RegExp(`^var-${THANOS_VARIABLE_NAME}(-\\d+)?$`);
@@ -122,7 +123,7 @@ function JumpDialog({ onClose }: { onClose: () => void }) {
     const search = locationService.getLocation().search;
     const params = new URLSearchParams(search);
     return {
-      datasourceUid: datasourceFromSearch(search) ?? getDatasourceDefaults().prometheusUid,
+      datasourceUid: datasourceFromSearch(search) ?? rememberedThanosDatasource() ?? getDatasourceDefaults().prometheusUid,
       from: params.get('from') ?? 'now-1h',
       to: params.get('to') ?? 'now',
       carry: timeParams(search),

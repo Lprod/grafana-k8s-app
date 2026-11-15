@@ -1,5 +1,6 @@
 import { DataSourceVariable, QueryVariable, TextBoxVariable } from '@grafana/scenes';
 import { getDatasourceDefaults } from '../utils/appJsonData';
+import { scopeThanosDatasourceVariable } from './thanosDatasourceScope';
 import { substituteClusterAndNamespace, workloadTableQueries } from '../queries/workloadQueries';
 
 // Thanos is exposed to Grafana as a Prometheus-compatible datasource, so we
@@ -54,13 +55,17 @@ function syncValueFromUrlOnActivation(variable: QueryVariable, variableName: str
   return variable;
 }
 
+// See thanosDatasourceScope.ts for why the plain variable lost the user's
+// Prod/Test choice on the way to another page.
 export function createThanosDatasourceVariable() {
-  return new DataSourceVariable({
-    name: THANOS_VARIABLE_NAME,
-    label: 'Data source',
-    pluginId: 'prometheus',
-    value: getDatasourceDefaults().prometheusUid,
-  });
+  return scopeThanosDatasourceVariable(
+    new DataSourceVariable({
+      name: THANOS_VARIABLE_NAME,
+      label: 'Data source',
+      pluginId: 'prometheus',
+      value: getDatasourceDefaults().prometheusUid,
+    })
+  );
 }
 
 export function createElasticDatasourceVariable() {

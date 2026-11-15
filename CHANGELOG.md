@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.0.4
+
+- **The chosen Thanos datasource (Prod/Test) now follows you to every page.**
+  On every list page except the home page the picker wrote its choice under a
+  numbered URL key (`var-datasource-3` on Clusters, `-5` on Namespaces, ...),
+  because each top-level page has its own "datasource" variable and Scenes
+  numbers same-named ones. Clicking a row then opened the drilldown on the
+  default datasource. Only the page you are on now syncs the variable, so the
+  URL always says `var-datasource`. Links that never carried the datasource
+  (left nav, "View nodes"/"View alerts", cluster title links, alert banners,
+  Search, the `/` jump, "Recently viewed") now land on the datasource last
+  chosen in the browser tab instead of the default. A link that names a
+  datasource still opens that one.
+
 ## 3.0.3
 
 Fixes from a review of the whole app against the running demo stack.
